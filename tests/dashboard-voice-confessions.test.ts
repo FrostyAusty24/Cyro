@@ -4,6 +4,12 @@ import type { AccessService } from '../src/control/access.js';
 import { DashboardServer } from '../src/dashboard/server.js';
 import { SessionStore } from '../src/dashboard/auth.js';
 import { Logger } from '../src/logger.js';
+import { EventEmitter } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { VoiceService } from '../src/voice/service.js';
+import { VoiceStore } from '../src/voice/store.js';
 
 const origin = 'https://cyro.example';
 const guildId = '123456789012345678';
@@ -13,7 +19,7 @@ const sections = ['voice', 'confessions'] as const;
 const running: DashboardServer[] = [];
 afterEach(async () => { await Promise.all(running.splice(0).map(server => server.stop())); });
 
-async function fixture(options: { requestTimeoutMs?: number; useAccess?: boolean; omitFeatures?: boolean } = {}) {
+async function fixture(options: { requestTimeoutMs?: number; useAccess?: boolean; omitFeatures?: boolean; voice?: VoiceService } = {}) {
   const sessions = new SessionStore();
   const sid = sessions.create({ id: userId, username: 'owner', avatar: null }, 'unused-access', 3600);
   let allowed = true;
@@ -41,7 +47,7 @@ async function fixture(options: { requestTimeoutMs?: number; useAccess?: boolean
     config: { discordClientId: '1', discordToken: '', dataDir: '.', logLevel: 'error', autoDeployCommands: false, pollIntervalSeconds: 60, dashboardUrl: origin },
     logger: new Logger('error'), community: module, moderation: module, sessions, streams: { list: async () => [] } as never,
     ...(options.useAccess === false ? {} : { access: access as unknown as AccessService }),
-    ...(options.omitFeatures ? {} : features), requestTimeoutMs: options.requestTimeoutMs, publicDir: 'public' });
+    ...(options.omitFeatures ? {} : { ...features, ...(options.voice ? { voice: options.voice } : {}) }), requestTimeoutMs: options.requestTimeoutMs, publicDir: 'public' });
   running.push(server); const port = await server.start(0, '127.0.0.1');
   const base = `http://127.0.0.1:${port}`;
   const headers = { Cookie: `dashboard_session=${sid}`, Origin: origin, 'X-CSRF-Token': sessions.peek(sid)!.csrfToken, 'Content-Type': 'application/json' };
@@ -89,6 +95,37 @@ it('protects feature saves with session, origin, CSRF, and current dashboard acc
   for (const section of sections) {
     expect((await fetch(`${f.base}/api/guilds/${guildId}/${section}`, { method: 'PATCH', headers: f.headers, body: JSON.stringify(f.configs[section]) })).status).toBe(403);
     expect(f.features[section].updateConfig).toHaveBeenCalledOnce();
+  }
+});
+
+it('exposes twelve voices and durably saves the twelfth default through the authorized dashboard', async () => {
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'cyro-dashboard-voices-'));
+  const client = Object.assign(new EventEmitter(), { guilds: { cache: new Map() } });
+  const voice = new VoiceService(client as never, folder, new Logger('error'), {} as AccessService);
+  try {
+    await voice.init();
+    const f = await fixture({ voice });
+    const url = `${f.base}/api/guilds/${guildId}/voice`;
+    const response = await fetch(url, { headers: f.headers });
+    expect(response.status).toBe(200);
+    const snapshot = await response.json();
+    expect(snapshot.voices.map((item: { id: string }) => item.id)).toEqual(Array.from({ length: 12 }, (_, i) => `voice${i + 1}`));
+    expect(snapshot.voices.filter((item: { gender: string }) => item.gender === 'male')).toHaveLength(6);
+    expect(snapshot.voices.filter((item: { gender: string }) => item.gender === 'female')).toHaveLength(6);
+    const updated = { ...snapshot.config, defaultVoice: 'voice12' };
+    const saved = await fetch(url, { method: 'PATCH', headers: f.headers, body: JSON.stringify(updated) });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ config: updated });
+    expect(await (await fetch(url, { headers: f.headers })).json()).toMatchObject({ config: updated });
+    const restart = new VoiceStore(folder); await restart.init();
+    expect(restart.get(guildId).config.defaultVoice).toBe('voice12');
+    expect(restart.get(otherGuildId).config.defaultVoice).toBe('voice1');
+    f.revoke();
+    expect((await fetch(url, { method: 'PATCH', headers: f.headers, body: JSON.stringify({ ...updated, defaultVoice: 'voice10' }) })).status).toBe(403);
+    expect(voice.getConfig(guildId).defaultVoice).toBe('voice12');
+  } finally {
+    voice.stop(); await voice.flush();
+    await rm(folder, { recursive: true, force: true });
   }
 });
 

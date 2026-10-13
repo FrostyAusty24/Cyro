@@ -2,11 +2,12 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { splitSpeechText } from './neural-text.js';
+import { TTS_VOICES } from './catalog.js';
 
 interface SpeechAudio { audio: Float32Array; sampling_rate: number }
 interface SpeechEngine { generate(text: string, options: { voice: string; speed: number }): Promise<SpeechAudio> }
 interface SpeechModel { dispose(): Promise<void> }
-const voices = new Set(['bm_daniel', 'am_michael', 'af_heart', 'af_bella']);
+const voices: ReadonlySet<string> = new Set(TTS_VOICES.map(voice => voice.engineVoice));
 const sampleRate = 24_000;
 const maxSamples = 90 * sampleRate;
 

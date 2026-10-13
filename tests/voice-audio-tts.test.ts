@@ -6,7 +6,7 @@ import OpusScript from 'opusscript';
 
 afterAll(async () => { await shutdownSpeech(); });
 
-it.skipIf(!ttsAvailable())('renders four distinct offline neural voices to WAV', async () => {
+it.skipIf(!ttsAvailable())('renders twelve distinct offline neural voices to WAV', async () => {
   const wavs: Buffer[] = [];
   for (const voice of TTS_VOICES) {
     const wav = await synthesizeSpeech('Welcome to Cyro.', voice.id);
@@ -14,13 +14,13 @@ it.skipIf(!ttsAvailable())('renders four distinct offline neural voices to WAV',
     expect(wav.subarray(8, 12).toString()).toBe('WAVE');
     wavs.push(wav);
   }
-  expect(TTS_VOICES.map(v => v.id)).toEqual(['voice1', 'voice2', 'voice3', 'voice4']);
-  expect(new Set(wavs.map(w => w.toString('base64'))).size).toBe(4);
-}, 30_000);
+  expect(wavs).toHaveLength(12);
+  expect(new Set(wavs.map(w => w.toString('base64'))).size).toBe(12);
+}, 60_000);
 
 it('rejects oversized text and unsupported voices before synthesis', async () => {
   await expect(synthesizeSpeech('x'.repeat(401))).rejects.toThrow(/1–400/);
-  await expect(synthesizeSpeech('Hello', '../../evil')).rejects.toThrow(/four available/);
+  await expect(synthesizeSpeech('Hello', '../../evil')).rejects.toThrow(/available TTS voices/);
 });
 
 it.skipIf(!ttsAvailable())('produces audible speech for every voice through the actual Discord Opus encoder', async () => {
@@ -43,4 +43,4 @@ it.skipIf(!ttsAvailable())('produces audible speech for every voice through the 
       expect(Math.sqrt(energy / samples), voice.id).toBeGreaterThan(100);
     } finally { decoder.delete(); resource.playStream.destroy(); resource.volume?.destroy(); source.cleanup(); }
   }
-}, 30_000);
+}, 90_000);

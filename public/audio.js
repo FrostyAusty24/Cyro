@@ -42,8 +42,13 @@ async function renderVoice(main) {
     save.disabled = busy || refreshing || !dirty();
   }
   const voiceOptions = snapshot.voices || [];
+  const voiceOption = voice => el('option', { value: voice.id, selected: config.defaultVoice === voice.id }, voice.name);
   const voiceInput = el('select', { required: true, onChange: event => session.change('defaultVoice', event.target.value) },
-    voiceOptions.map(voice => el('option', { value: voice.id, selected: config.defaultVoice === voice.id }, voice.name)),
+    ['male', 'female'].map(gender => {
+      const voices = voiceOptions.filter(voice => voice.gender === gender);
+      return voices.length ? el('optgroup', { label: gender === 'male' ? 'Male voices' : 'Female voices' }, voices.map(voiceOption)) : null;
+    }),
+    voiceOptions.filter(voice => !['male', 'female'].includes(voice.gender)).map(voiceOption),
     !voiceOptions.some(voice => voice.id === config.defaultVoice) && el('option', { value: config.defaultVoice, selected: true }, config.defaultVoice || 'No voices available'));
   form.append(panel('Music playback', [
     toggleSection(session, 'Enable music', 'Members can add supported audio links to the queue in their current voice channel.', 'musicEnabled'),
@@ -52,7 +57,7 @@ async function renderVoice(main) {
       textField(session, 'Maximum time per track (minutes)', 'maxTrackMinutes', 'Between 1 and 30 minutes. Radio streams also stop at this limit so the queue can move on.', { type: 'number', min: 1, max: 30, required: true }))]),
     panel('Text to speech', [
       toggleSection(session, 'Enable text to speech', 'Read new messages from the active voice channel’s text chat, when their author is also in that call.', 'ttsEnabled'),
-      el('div', { className: 'form-section stack' }, field('Default voice', voiceInput, 'Members can choose a different voice for their own messages with /ttsvoice.'))]),
+      el('div', { className: 'form-section stack' }, field('Default voice', voiceInput, 'Six male and six female voices. Members can choose a different voice for their own messages with /ttsvoice.'))]),
     el('div', { className: 'save-bar' }, saveStatus, save));
 
   const activity = el('div', { className: 'form-section stack' });
@@ -120,10 +125,10 @@ async function renderVoice(main) {
     el('p', {}, el('code', {}, '/playmusic link'), ' adds audio to the queue. Use ', el('code', {}, '/musicqueue'), ' to see what’s next.'),
     el('p', {}, el('code', {}, '/skipmusic'), ' skips a track. ', el('code', {}, '/stopmusic'), ' clears music and leaves the call.'),
     el('p', {}, el('code', {}, '/addtts'), ' starts reading this call’s chat. ', el('code', {}, '/stoptts'), ' stops it.'),
-    el('p', {}, el('code', {}, '/ttsvoice'), ' chooses Daniel, Michael, Heart or Bella. Shortcuts ', el('code', {}, '/ttsvoice1'), ' through ', el('code', {}, '/ttsvoice4'), ' do the same.'),
+    el('p', {}, el('code', {}, '/ttsvoice'), ' offers 12 voices: six male and six female. Shortcuts ', el('code', {}, '/ttsvoice1'), ' through ', el('code', {}, '/ttsvoice12'), ' do the same.'),
     link('Access & commands', 'access')));
   const sources = contextCard('Supported music links', 'Use direct audio, supported radio streams, or a public YouTube video you have permission to play. YouTube support depends on access from this host; playlists and restricted videos are unavailable. Spotify does not provide full-track audio for this bot.', 'link');
-  const privacy = contextCard('One call at a time', 'Each server can have one Cyro voice session. Music and text to speech run separately; stop the current session before starting the other.', 'lock', el('p', {}, 'TTS uses four free Kokoro voices on Cyro’s host, with Daniel as the default. It reads new eligible messages only, without fetching chat history or sending text to a cloud voice service.'));
+  const privacy = contextCard('One call at a time', 'Each server can have one Cyro voice session. Music and text to speech run separately; stop the current session before starting the other.', 'lock', el('p', {}, 'TTS uses 12 free Kokoro voices on Cyro’s host, with Daniel as the default. It reads new eligible messages only, without fetching chat history or sending text to a cloud voice service.'));
   loading.replaceWith(availability, el('div', { className: 'settings-grid' }, form, el('aside', { className: 'stack' }, commands, sources, privacy)),
     panel('Current voice session', [activity, el('div', { className: 'form-section' }, refreshStatus)], refresh));
   drawActivity();

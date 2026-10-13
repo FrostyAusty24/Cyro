@@ -1,15 +1,15 @@
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { isVoiceId, type VoiceId } from './catalog.js';
 
-export type VoiceId = 'voice1'|'voice2'|'voice3'|'voice4';
+export { isVoiceId, type VoiceId } from './catalog.js';
 export interface VoiceConfig { musicEnabled:boolean; ttsEnabled:boolean; defaultVoice:VoiceId; volume:number; maxTrackMinutes:number }
 interface VoiceGuild {config:VoiceConfig; voices:Record<string,VoiceId>}
 export const defaultVoiceConfig=():VoiceConfig=>({musicEnabled:true,ttsEnabled:true,defaultVoice:'voice1',volume:50,maxTrackMinutes:15});
-export const isVoiceId=(id:unknown):id is VoiceId=>typeof id==='string'&&['voice1','voice2','voice3','voice4'].includes(id);
 export function parseVoiceConfig(input:unknown):VoiceConfig {
   const v=input as VoiceConfig;
-  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!['musicEnabled','ttsEnabled','defaultVoice','volume','maxTrackMinutes'].includes(k))||typeof v.musicEnabled!=='boolean'||typeof v.ttsEnabled!=='boolean'||!isVoiceId(v.defaultVoice)||!Number.isInteger(v.volume)||v.volume<5||v.volume>100||!Number.isInteger(v.maxTrackMinutes)||v.maxTrackMinutes<1||v.maxTrackMinutes>30)throw new Error('Choose valid voice settings: volume 5–100, track limit 1–30 minutes, and one of the four voices.');
+  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!['musicEnabled','ttsEnabled','defaultVoice','volume','maxTrackMinutes'].includes(k))||typeof v.musicEnabled!=='boolean'||typeof v.ttsEnabled!=='boolean'||!isVoiceId(v.defaultVoice)||!Number.isInteger(v.volume)||v.volume<5||v.volume>100||!Number.isInteger(v.maxTrackMinutes)||v.maxTrackMinutes<1||v.maxTrackMinutes>30)throw new Error('Choose valid voice settings: volume 5–100, track limit 1–30 minutes, and an available voice.');
   return {musicEnabled:v.musicEnabled,ttsEnabled:v.ttsEnabled,defaultVoice:v.defaultVoice,volume:v.volume,maxTrackMinutes:v.maxTrackMinutes};
 }
 const snowflake=(s:string)=>/^\d{17,20}$/.test(s);

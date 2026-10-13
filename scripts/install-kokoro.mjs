@@ -114,7 +114,7 @@ try {
     for (const asset of assets) await downloadAsset(...asset);
     await copyFile(path.join(definition, 'MODEL-LICENSE.txt'), path.join(runtime, 'model', 'LICENSE.txt'));
     await writeFile(marker, JSON.stringify({ engine: 'kokoro', version: '1.2.1', revision, lockHash, platform: process.platform, arch: process.arch, modelSha256: assets[3][2] }) + '\n', { mode: 0o600 });
-    console.log('[Cyro voices] Verified Kokoro q8 and four local neural voices. No speech text is sent to an external service.');
+    console.log('[Cyro voices] Verified Kokoro q8 local neural voice runtime. No speech text is sent to an external service.');
   }
 } catch (error) {
   console.warn(`[Cyro voices] Optional neural voices unavailable: ${error instanceof Error ? error.message : 'installation failed'}`);

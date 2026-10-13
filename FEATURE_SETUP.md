@@ -145,7 +145,7 @@ The public `/roles-panel` and legacy `/ticket panel` also use embedded cards. Mo
 
 Music & TTS is available in the dashboard. Join a regular server voice channel and use `/playmusic link:<YouTube or direct audio URL>` to queue MP3, WAV, OGG, FLAC, AAC and compatible direct media/radio streams. Use `/musicqueue`, `/skipmusic` and `/stopmusic`. Cyro joins your current call even if the command is used in a different text channel. Single public recorded YouTube videos are also supported when the optional pinned source runtime is installed and YouTube permits access from the host. Cyro validates metadata before joining, enforces the server duration limit, and resolves fresh audio when each queued track starts. Playlists, livestreams and restricted videos are not supported. Spotify does not provide full-track audio for this player; it returns a clear explanation. Late playback failures receive a private command follow-up where Discord permits it. Queues hold up to 25 waiting tracks and are discarded on restart. Server admins control music/TTS availability, volume and maximum track length. The decoder also has a hard 30-minute/64 MiB source limit.
 
-`/addtts` starts a separate TTS session in your current call. An embed announces that new messages in that call's chat from people in the call will be spoken. No microphone audio is received. `/ttsvoice voice:<choice>` or `/ttsvoice1` through `/ttsvoice4` selects a personal voice for that server: Daniel (British male), Michael (American male), Heart and Bella (American female). These are free Kokoro neural voices generated locally on Cyro’s host. The numbered shortcuts keep their existing IDs; `/ttsvoice1` and the default `voice1` select Daniel (`bm_daniel`). `/stoptts` disconnects. Text is limited to 400 characters, one queued message per member every two seconds, and ten waiting messages; links, mentions and spoilers are not expanded. Messages are not saved as a speech history. One voice channel/mode is supported per server at a time; sessions leave when empty or idle (one minute music, five minutes TTS). Voice role restrictions are under Access & commands; all numbered voice aliases follow the `/ttsvoice` rule.
+`/addtts` starts a separate TTS session in your current call. An embed announces that new messages in that call's chat from people in the call will be spoken. No microphone audio is received. `/ttsvoice voice:<choice>` or `/ttsvoice1` through `/ttsvoice12` selects a personal voice for that server. The 12 choices include six male and six female voices with British and American accents. These are free Kokoro neural voices generated locally on Cyro’s host. The numbered shortcuts keep their existing IDs; `/ttsvoice1` and the default `voice1` select Daniel (`bm_daniel`). `/stoptts` disconnects. Text is limited to 400 characters, one queued message per member every two seconds, and ten waiting messages; links, mentions and spoilers are not expanded. Messages are not saved as a speech history. One voice channel/mode is supported per server at a time; sessions leave when empty or idle (one minute music, five minutes TTS). Voice role restrictions are under Access & commands; all numbered voice aliases follow the `/ttsvoice` rule.
 
 Confessions start disabled. In Anonymous confessions, select the destination text channel, enable the feature and save. Members use `/confess confession:<text>` (up to 1,500 characters). Cyro sends an anonymous numbered embed and replies privately to the author. The default cooldown is 60 seconds (configurable 10–3,600). Staff remove inappropriate posts directly in Discord. Cyro stores delivery receipts and counts, not authors or confession text; the feature is anonymous to members, not Discord. Cooldowns are in memory and reset on restart. Confessions are not copied into a staff identity log.
 
@@ -164,9 +164,24 @@ Pricing copy reflects the operator's current intent: all current features are fr
 
 Run `npm run install-voices` to install the pinned runtime and verified model files under `bin/tts`. Installation needs internet access for packages and model assets. Speech generation itself uses local files and does not send message text to a remote speech service. Keep the runtime/model directory out of Git and code release archives.
 
-Cyro uses one CPU speech worker and divides longer messages into short pieces while retaining the 400-character message limit. Saved server defaults and member preferences keep the stable `voice1`–`voice4` values: Daniel (`bm_daniel`), Michael (`am_michael`), Heart (`af_heart`) and Bella (`af_bella`). There is no voice-account key or paid TTS subscription to configure.
+Cyro uses one CPU speech worker and divides longer messages into short pieces while retaining the 400-character message limit. Saved server defaults and member preferences keep their stable IDs. The original `voice1`–`voice4` choices retain their meanings; the added choices use `voice5`–`voice12`. There is no voice-account key or paid TTS subscription to configure. The dashboard groups the default voice choices into male and female voices.
 
-The startup check verifies generated speech through the local audio pipeline. Missing assets or a failed speech check make TTS unavailable; other bot features can start. The model needs more CPU and memory than the former synthetic engine. Check free disk, cold-start time and peak memory on the actual host, including concurrent bot/music activity, before enabling it broadly. A 1 GB allocation alone does not establish usable capacity. Test `/addtts` and all four voices in a real Discord call; a local check does not prove audible Discord playback.
+| Shortcut | Voice | Accent and type |
+| --- | --- | --- |
+| `/ttsvoice1` | Daniel (default) | British male |
+| `/ttsvoice2` | Michael | American male |
+| `/ttsvoice3` | Heart | American female |
+| `/ttsvoice4` | Bella | American female |
+| `/ttsvoice5` | Fenrir | American male |
+| `/ttsvoice6` | Puck | American male |
+| `/ttsvoice7` | George | British male |
+| `/ttsvoice8` | Fable | British male |
+| `/ttsvoice9` | Nicole | American female |
+| `/ttsvoice10` | Emma | British female |
+| `/ttsvoice11` | Aoede | American female |
+| `/ttsvoice12` | Sarah | American female |
+
+The startup check verifies generated speech through the local audio pipeline. Missing assets or a failed speech check make TTS unavailable; other bot features can start. The model needs more CPU and memory than the former synthetic engine. Check free disk, cold-start time and peak memory on the actual host, including concurrent bot/music activity, before enabling it broadly. A 1 GB allocation alone does not establish usable capacity. Test `/addtts` and all 12 voices in a real Discord call; a local check does not prove audible Discord playback.
 
 ### YouTube music host check
 
