@@ -2,7 +2,7 @@
 
 A Discord community bot with a web dashboard, creator alerts, moderation, tickets, applications and community activities. One running application can serve multiple Discord servers; settings, permissions and activity records stay separate for each server.
 
-**Version 2.14.1 · Node.js 22.12.0 or newer · TypeScript · discord.js**
+**Version 2.14.2 · Node.js 22.12.0 or newer · TypeScript · discord.js**
 
 [Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Community support](https://discord.gg/rcSsGQxbuh)
 

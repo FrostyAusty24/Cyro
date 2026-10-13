@@ -14,11 +14,13 @@ let activeSyntheses = 0;
 
 // eSpeak runs away from the Gateway thread. No network service receives message content.
 // Node 24's fetch cannot load this older package's local WASM URL; its built-in FS loader can.
+// text2wav 0.0.14 forwards options directly into Emscripten's CLI argv. Numeric values must
+// be strings: passing amplitude: 90 as a number becomes an empty argument and silences speech.
 const workerProgram = `
   const { parentPort, workerData } = require('node:worker_threads');
   globalThis.fetch = undefined;
   const synthesize = require(workerData.modulePath);
-  synthesize(' ' + workerData.text, { voice: workerData.voice, speed: 175, amplitude: 90, hasTags: false })
+  synthesize(' ' + workerData.text, { voice: workerData.voice, speed: '175', amplitude: '90', hasTags: false })
     .then(wav => parentPort.postMessage(wav));
 `;
 

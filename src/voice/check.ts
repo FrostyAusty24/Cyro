@@ -25,6 +25,7 @@ export async function checkVoiceRuntime(): Promise<VoiceRuntimeCheck> {
   let source: AudioSource | undefined;
   let encoded: Readable | undefined;
   let volume: Readable | undefined;
+  let decoder: import('opusscript') | undefined;
   try {
     // Instantiation and key-package generation load the platform native library, not just its metadata.
     try {
@@ -47,6 +48,9 @@ export async function checkVoiceRuntime(): Promise<VoiceRuntimeCheck> {
     const resource = createAudioResource(source.stream, { inputType: StreamType.Raw, inlineVolume: true });
     encoded = resource.playStream;
     volume = resource.volume;
+    const OpusScript = require('opusscript') as typeof import('opusscript');
+    decoder = new OpusScript(48_000, 2, OpusScript.Application.AUDIO);
+    let packets = 0, samples = 0, energy = 0, peak = 0;
     // Keep a handler throughout teardown; destroying a pipeline may report cancellation asynchronously.
     encoded.on('error', () => {});
     await new Promise<void>((resolve, reject) => {
@@ -58,16 +62,29 @@ export async function checkVoiceRuntime(): Promise<VoiceRuntimeCheck> {
         controller.signal.removeEventListener('abort', aborted);
         if (error) reject(error); else resolve();
       };
-      const packet = (data: unknown): void => finish(Buffer.isBuffer(data) && data.length > 0 ? undefined : new Error('No Opus packet.'));
+      const packet = (data: unknown): void => {
+        if (!Buffer.isBuffer(data) || !data.length) { finish(new Error('No Opus packet.')); return; }
+        try {
+          // A valid Opus silence packet is still three bytes. Decode the fixed probe to verify
+          // actual signal energy rather than mistaking packet presence for audible speech.
+          const pcm = decoder!.decode(data);
+          packets++;
+          for (let i = 0; i + 1 < pcm.length; i += 2) {
+            const value = pcm.readInt16LE(i);
+            samples++; energy += value * value; peak = Math.max(peak, Math.abs(value));
+          }
+        } catch { finish(new Error('The Opus encoder produced an invalid packet.')); }
+      };
       const failed = (error: Error): void => finish(error);
-      const ended = (): void => finish(new Error('The audio encoder did not produce a packet.'));
+      const ended = (): void => finish(packets > 0 ? undefined : new Error('The audio encoder did not produce a packet.'));
       const aborted = (): void => finish(new Error('Voice runtime check timed out.'));
-      stream.once('data', packet); stream.once('error', failed); stream.once('end', ended);
+      stream.on('data', packet); stream.once('error', failed); stream.once('end', ended);
       controller.signal.addEventListener('abort', aborted, { once: true });
       if (controller.signal.aborted) aborted();
     });
     result.audio = true;
-    result.tts = speechGenerated;
+    // The probe may begin with quiet frames; assess the full short phrase, never just frame one.
+    result.tts = speechGenerated && samples > 0 && peak > 512 && Math.sqrt(energy / samples) > 64;
   } catch { /* Startup reports individual capability flags without credentials or user content. */ }
   finally {
     clearTimeout(deadline);
@@ -75,6 +92,7 @@ export async function checkVoiceRuntime(): Promise<VoiceRuntimeCheck> {
     encoded?.destroy();
     volume?.destroy();
     source?.cleanup();
+    decoder?.delete();
   }
   return result;
 }
