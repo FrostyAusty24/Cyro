@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { splitSpeechText } from './neural-text.js';
+import { normalizeSpeechPronunciation, splitSpeechText } from './neural-text.js';
 import { TTS_VOICES } from './catalog.js';
 
 interface SpeechAudio { audio: Float32Array; sampling_rate: number }
@@ -68,7 +68,8 @@ async function main(): Promise<void> {
     void (async () => {
       const parts: Float32Array[] = [];
       let count = 0;
-      for (const text of splitSpeechText(request.text as string)) {
+      // Apply only after validating the original message: pronunciation spellings can expand its length.
+      for (const text of splitSpeechText(normalizeSpeechPronunciation(request.text as string))) {
         const audio = await engine.generate(text, { voice: request.voice as string, speed: 0.95 });
         if (audio.sampling_rate !== sampleRate || !(audio.audio instanceof Float32Array)) throw new Error('Invalid speech output.');
         count += audio.audio.length;

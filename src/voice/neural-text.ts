@@ -1,3 +1,8 @@
+/** Speech-only spelling gives both English accents the brand's intended "KY-roh" pronunciation. */
+export function normalizeSpeechPronunciation(text: string): string {
+  return text.replace(/(?<![\p{L}\p{N}\p{M}_])cyro(?![\p{L}\p{N}\p{M}_])/giu, 'Cairo');
+}
+
 /** Bound neural inference by short word/sentence chunks instead of a full 400-character activation graph. */
 export function splitSpeechText(text: string, maximum = 100): string[] {
   const chunks: string[] = [];
