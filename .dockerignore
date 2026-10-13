@@ -1,0 +1,14 @@
+node_modules
+dist
+data
+.env*
+.npmrc
+.secrets
+*.pem
+*.key
+*.log
+.git
+work
+.test-tmp
+tests
+backups

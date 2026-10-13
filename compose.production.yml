@@ -1,0 +1,53 @@
+# Standalone production stack. Use this file alone, not as an override of docker-compose.yml.
+services:
+  bot:
+    build: .
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 75s
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DASHBOARD_ENABLED: "true"
+      DASHBOARD_URL: https://${DASHBOARD_DOMAIN:?Set DASHBOARD_DOMAIN in .env}
+      DASHBOARD_HOST: 0.0.0.0
+      DASHBOARD_PORT: 3000
+      PORT: 3000
+      DASHBOARD_TRUST_PROXY: "true"
+      DISCORD_COMMAND_SCOPE: global
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/readyz',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:?Set DASHBOARD_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - bot
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  caddy_data:
+  caddy_config:

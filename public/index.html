@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#09121b">
+  <meta name="description" content="Cyro is a free, hosted Discord community bot with creator alerts, moderation, tickets, welcome cards, polls, music and more. Make it yours from one dashboard.">
+  <title>Cyro · Community dashboard</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/creator.css">
+  <link rel="stylesheet" href="/home.css">
+  <script src="/home.js" defer></script>
+  <script src="/setup.js" defer></script>
+  <script src="/studio.js" defer></script>
+  <script src="/identity.js" defer></script>
+  <script src="/suggestions.js" defer></script>
+  <script src="/status-roles.js" defer></script>
+  <script src="/audio.js" defer></script>
+  <script src="/confessions.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div id="app"><main class="boot" aria-live="polite"><span class="loader"></span><p>Opening your community dashboard…</p></main></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><form method="dialog"><h2 id="confirm-title">Remove this streamer?</h2><p id="confirm-description">This stops future alerts. You can add the streamer again in Discord.</p><div class="dialog-actions"><button class="button secondary" value="cancel">Keep streamer</button><button class="button danger" value="confirm">Remove streamer</button></div></form></dialog>
+</body>
+</html>
