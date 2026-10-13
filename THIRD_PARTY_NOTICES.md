@@ -1,6 +1,6 @@
 # Third-party notices
 
-Cyro's project license does not replace the licenses of fonts, dependencies, media engines or their transitive components. This repository contains source, web assets and a dependency lockfile. It does not vendor `node_modules`, FFmpeg executables, eSpeak/WASM binaries or compiled installers.
+Cyro's project license does not replace the licenses of fonts, dependencies, media engines or their transitive components. This repository contains source, web assets and a dependency lockfile. It does not vendor `node_modules`, FFmpeg executables, neural model weights, eSpeak/WASM binaries or compiled installers.
 
 ## Included font and artwork
 
@@ -10,7 +10,7 @@ Cyro's project license does not replace the licenses of fonts, dependencies, med
 
 ## Direct runtime dependencies
 
-These versions and declared package licenses are recorded from the dependency manifests used for this source export. `package-lock.json` records the complete resolved dependency tree. Installations fetch packages with their own notices and license texts; preserve those when distributing a packaged runtime.
+These versions and declared package licenses are recorded from the dependency manifests used for this source export. `package-lock.json` records the primary application dependencies; `scripts/kokoro-runtime/package-lock.json` records the separately installed speech runtime. Installations fetch packages with their own notices and license texts; preserve those when distributing a packaged runtime.
 
 | Package | Version | Declared package license | Source |
 | --- | --- | --- | --- |
@@ -21,16 +21,27 @@ These versions and declared package licenses are recorded from the dependency ma
 | ffmpeg-static | 5.3.0 | GPL-3.0-or-later | [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static) |
 | opusscript | 0.1.1 | MIT | [opusscript](https://github.com/abalabahaha/opusscript) |
 | proper-lockfile | 4.1.2 | MIT | [node-proper-lockfile](https://github.com/moxystudio/node-proper-lockfile) |
-| text2wav | 0.0.14 | MIT wrapper; embedded engine has separate licensing | [text2wav.node.js](https://github.com/abbr/text2wav.node.js) |
 | tiktok-live-connector | 2.4.2 | AGPL-3.0-only | [TikTok-Live-Connector](https://github.com/zerodytrash/TikTok-Live-Connector) |
 
 ## Audio engines and redistribution
 
 `ffmpeg-static` downloads a platform-specific FFmpeg build during installation. The binary's own license and enabled components matter independently of the JavaScript package label. Its installed distribution includes a license/readme alongside the binary. Consult [FFmpeg's licensing information](https://ffmpeg.org/legal.html) and the exact binary producer's notices/source instructions before distributing executables or container images.
 
-`text2wav` includes compiled eSpeak NG code and voice data in its npm package. Its own MIT wrapper license does not erase the engine's license. The installed generated engine identifies eSpeak NG commit `e13b602ce0bd81bb5b84f03631819fb2820fe19f`; the [eSpeak NG source project](https://github.com/espeak-ng/espeak-ng) provides its source and license. The [text2wav build instructions](https://github.com/abbr/text2wav.node.js#under-the-hood) describe compilation and voice data.
-
 `opusscript` includes compiled libopus code; Canvas and Discord voice also resolve platform or native/transitive dependencies. Review their installed notices as part of distributing a built application. The table is an attribution aid, not an exhaustive legal analysis or a statement that every component shares one license. In particular, the GPL and AGPL components must not be relabelled as MIT merely because a separate file in this project uses that license.
+
+## Optional Kokoro speech runtime
+
+The separate `bin/tts` installation uses these pinned components. Their own notices remain applicable; Cyro’s MIT license does not replace them. The installer and its manifest define the exact model revision and file checksums. Model weights and dependency binaries are downloaded for the host and are not committed to this source repository.
+
+| Component | Version | Declared license | Source |
+| --- | --- | --- | --- |
+| kokoro-js | 1.2.1 | Apache-2.0 | [Kokoro source and license](https://github.com/hexgrad/kokoro) |
+| @huggingface/transformers | 3.8.1 | Apache-2.0 | [Transformers.js 3.8.1 license](https://github.com/huggingface/transformers.js/blob/3.8.1/LICENSE) |
+| phonemizer | 1.2.1 | Apache-2.0 wrapper; embedded engine has separate licensing | [phonemizer.js](https://github.com/xenova/phonemizer.js) |
+| ONNX Runtime | 1.21.0 | MIT | [ONNX Runtime 1.21.0 license](https://github.com/microsoft/onnxruntime/blob/v1.21.0/LICENSE) |
+| Kokoro-82M-v1.0 ONNX model and supplied voices | `1939ad2a8e416c0acfeecc08a694d14ef25f2231`; q8 | Apache-2.0 | [ONNX model card](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) |
+
+The selected voice assets are `bm_daniel`, `am_michael`, `af_heart` and `af_bella`. The phonemizer includes eSpeak NG code: preserve its own [GPL license and source notices](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING) when distributing a built runtime. The wrapper’s Apache label does not relicense that embedded engine. Preserve model, runtime, transitive dependency and native-library notices alongside packaged installations, including container images. The runtime uses locally installed assets for speech; downloading those assets does not send chat text to their publishers.
 
 ## Optional YouTube source runtime
 

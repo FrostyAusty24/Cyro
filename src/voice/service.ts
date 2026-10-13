@@ -3,7 +3,7 @@ import type { AccessService } from '../control/access.js';
 import type { Logger } from '../logger.js';
 import { VoiceStore, parseVoiceConfig, isVoiceId, type VoiceId } from './store.js';
 import { VoiceSessions, type VoiceOutput } from './sessions.js';
-import { TTS_VOICES, ttsAvailable } from './tts.js';
+import { TTS_VOICES, ttsAvailable, shutdownSpeech } from './tts.js';
 import { parseAudioUrl } from './urls.js';
 import { VOICE_COMMAND_NAMES } from './commands.js';
 import { randomUUID } from 'node:crypto';
@@ -161,5 +161,5 @@ export class VoiceService {
   async guildIds(){return this.store.guildIds();}
   async purgeGuild(guildId:string,guard:()=>boolean=()=>true){await this.enqueue(guildId,async()=>{if(guard())this.sessions.leave(guildId);await this.store.purgeGuild(guildId,guard);});}
   stop(){this.stopped=true;this.loadingController.abort();this.sessions.stopAll();this.speechCooldown.clear();this.client.off(Events.InteractionCreate,this.onInteraction);this.client.off(Events.MessageCreate,this.onMessage);this.client.off(Events.VoiceStateUpdate,this.onVoiceState);this.client.off(Events.GuildUnavailable,this.onGuildUnavailable);this.client.off(Events.GuildDelete,this.onGuildUnavailable);this.client.off(Events.ShardDisconnect,this.onShardDisconnect);}
-  async flush(){while(this.active.size||this.queues.size)await Promise.allSettled([...this.active,...this.queues.values()]);await this.sessions.flush();await this.store.flush();}
+  async flush(){while(this.active.size||this.queues.size)await Promise.allSettled([...this.active,...this.queues.values()]);await this.sessions.flush();if(this.stopped)await shutdownSpeech();await this.store.flush();}
 }

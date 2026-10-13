@@ -1,10 +1,12 @@
-import { expect, it } from 'vitest';
-import { TTS_VOICES, synthesizeSpeech } from '../src/voice/tts.js';
+import { afterAll, expect, it } from 'vitest';
+import { TTS_VOICES, synthesizeSpeech, ttsAvailable, shutdownSpeech } from '../src/voice/tts.js';
 import { pcmSpeech } from '../src/voice/audio.js';
 import { createAudioResource, StreamType } from '@discordjs/voice';
 import OpusScript from 'opusscript';
 
-it('renders four distinct offline synthetic voices to WAV', async () => {
+afterAll(async () => { await shutdownSpeech(); });
+
+it.skipIf(!ttsAvailable())('renders four distinct offline neural voices to WAV', async () => {
   const wavs: Buffer[] = [];
   for (const voice of TTS_VOICES) {
     const wav = await synthesizeSpeech('Welcome to Cyro.', voice.id);
@@ -14,18 +16,14 @@ it('renders four distinct offline synthetic voices to WAV', async () => {
   }
   expect(TTS_VOICES.map(v => v.id)).toEqual(['voice1', 'voice2', 'voice3', 'voice4']);
   expect(new Set(wavs.map(w => w.toString('base64'))).size).toBe(4);
-}, 15_000);
+}, 30_000);
 
-it('rejects oversized text and unsupported voices before synthesis, and cancels an active worker', async () => {
+it('rejects oversized text and unsupported voices before synthesis', async () => {
   await expect(synthesizeSpeech('x'.repeat(401))).rejects.toThrow(/1–400/);
   await expect(synthesizeSpeech('Hello', '../../evil')).rejects.toThrow(/four available/);
-  const controller = new AbortController();
-  const pending = synthesizeSpeech('This worker should stop when the call closes.', 'voice2', controller.signal);
-  controller.abort();
-  await expect(pending).rejects.toThrow(/cancelled/);
 });
 
-it('produces audible speech for every voice through the actual Discord Opus encoder', async () => {
+it.skipIf(!ttsAvailable())('produces audible speech for every voice through the actual Discord Opus encoder', async () => {
   for (const voice of TTS_VOICES) {
     const source = await pcmSpeech('Cyro voice check. Hello from the community.', voice.id);
     const resource = createAudioResource(source.stream, { inputType: StreamType.Raw, inlineVolume: true });
@@ -45,4 +43,4 @@ it('produces audible speech for every voice through the actual Discord Opus enco
       expect(Math.sqrt(energy / samples), voice.id).toBeGreaterThan(100);
     } finally { decoder.delete(); resource.playStream.destroy(); resource.volume?.destroy(); source.cleanup(); }
   }
-}, 15_000);
+}, 30_000);

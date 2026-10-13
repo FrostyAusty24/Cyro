@@ -2,7 +2,7 @@ FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package*.json ./
 COPY scripts ./scripts
-RUN npm ci
+RUN CYRO_SKIP_TTS_INSTALL=1 npm ci
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build

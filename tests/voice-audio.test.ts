@@ -1,8 +1,11 @@
-import { expect, it } from 'vitest';
+import { afterAll, expect, it } from 'vitest';
 import { PassThrough, Readable } from 'node:stream';
 import { decodeAudio, pcmSpeech } from '../src/voice/audio.js';
+import { ttsAvailable, shutdownSpeech } from '../src/voice/tts.js';
 
-it('renders offline speech as raw 48k stereo PCM with deterministic cleanup', async () => {
+afterAll(async () => { await shutdownSpeech(); });
+
+it.skipIf(!ttsAvailable())('renders offline speech as raw 48k stereo PCM with deterministic cleanup', async () => {
   const source = await pcmSpeech('Hello Cyro.', 'voice3');
   const chunks: Buffer[] = [];
   try {

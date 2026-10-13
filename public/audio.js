@@ -120,10 +120,10 @@ async function renderVoice(main) {
     el('p', {}, el('code', {}, '/playmusic link'), ' adds audio to the queue. Use ', el('code', {}, '/musicqueue'), ' to see what’s next.'),
     el('p', {}, el('code', {}, '/skipmusic'), ' skips a track. ', el('code', {}, '/stopmusic'), ' clears music and leaves the call.'),
     el('p', {}, el('code', {}, '/addtts'), ' starts reading this call’s chat. ', el('code', {}, '/stoptts'), ' stops it.'),
-    el('p', {}, el('code', {}, '/ttsvoice'), ' chooses your voice. Shortcuts ', el('code', {}, '/ttsvoice1'), ' through ', el('code', {}, '/ttsvoice4'), ' do the same.'),
+    el('p', {}, el('code', {}, '/ttsvoice'), ' chooses Daniel, Michael, Heart or Bella. Shortcuts ', el('code', {}, '/ttsvoice1'), ' through ', el('code', {}, '/ttsvoice4'), ' do the same.'),
     link('Access & commands', 'access')));
   const sources = contextCard('Supported music links', 'Use direct audio, supported radio streams, or a public YouTube video you have permission to play. YouTube support depends on access from this host; playlists and restricted videos are unavailable. Spotify does not provide full-track audio for this bot.', 'link');
-  const privacy = contextCard('One call at a time', 'Each server can have one Cyro voice session. Music and text to speech run separately; stop the current session before starting the other.', 'lock', el('p', {}, 'TTS uses free voices hosted with Cyro. It reads new eligible messages only, without fetching chat history or sending text to a cloud voice service.'));
+  const privacy = contextCard('One call at a time', 'Each server can have one Cyro voice session. Music and text to speech run separately; stop the current session before starting the other.', 'lock', el('p', {}, 'TTS uses four free Kokoro voices on Cyro’s host, with Daniel as the default. It reads new eligible messages only, without fetching chat history or sending text to a cloud voice service.'));
   loading.replaceWith(availability, el('div', { className: 'settings-grid' }, form, el('aside', { className: 'stack' }, commands, sources, privacy)),
     panel('Current voice session', [activity, el('div', { className: 'form-section' }, refreshStatus)], refresh));
   drawActivity();

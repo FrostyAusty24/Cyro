@@ -636,8 +636,8 @@ function demoData() {
   state.demoDetail.channels.push({ id: `${channel}10`, name: 'The lounge', type: 2 }, { id: `${channel}11`, name: 'confessions', type: 0 });
   state.demoDetail.voice = {
     config: { musicEnabled: true, ttsEnabled: true, defaultVoice: 'voice1', volume: 50, maxTrackMinutes: 15 },
-    voices: [{ id: 'voice1', name: 'Atlas · male' }, { id: 'voice2', name: 'Rowan · male' }, { id: 'voice3', name: 'Nova · female' }, { id: 'voice4', name: 'Skye · female' }],
-    available: { music: true, tts: true }, notes: ['Four free, synthetic voices are included. No paid voice account is needed.'],
+    voices: [{ id: 'voice1', name: 'Daniel · British male' }, { id: 'voice2', name: 'Michael · American male' }, { id: 'voice3', name: 'Heart · American female' }, { id: 'voice4', name: 'Bella · American female' }],
+    available: { music: true, tts: true }, notes: ['Four free Kokoro neural voices run locally with Cyro. Daniel is the default; no paid voice account is needed.'],
     session: { channelId: `${channel}10`, mode: 'music', queueLength: 2, currentTitle: 'Late-night lounge radio · sample session' }
   };
   state.demoDetail.confessions = {
