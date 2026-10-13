@@ -1,6 +1,6 @@
 import type { VoiceConfig, VoiceId } from './store.js';
 export type VoiceMode='music'|'tts';
-export interface QueueItem {kind:VoiceMode;title:string;url?:string;text?:string;voice?:VoiceId;canPlay?:()=>boolean|Promise<boolean>}
+export interface QueueItem {kind:VoiceMode;title:string;url?:string;text?:string;voice?:VoiceId;canPlay?:()=>boolean|Promise<boolean>;onFailure?:(error:unknown,signal:AbortSignal)=>Promise<void>}
 export interface VoiceOutput {play(item:QueueItem,config:VoiceConfig,signal:AbortSignal):Promise<void>;stop():void;close():void}
 interface Room {guildId:string;channelId:string;mode:VoiceMode;config:VoiceConfig;queue:QueueItem[];controller:AbortController;connection:Promise<void>;output?:VoiceOutput;current?:QueueItem;track?:AbortController;pump?:Promise<void>;idle?:ReturnType<typeof setTimeout>;startedAt:number;ttsReadyAt?:number}
 export class VoiceSessions {
@@ -26,13 +26,21 @@ export class VoiceSessions {
     if(room.queue.length>=(room.mode==='music'?25:10))throw new Error('The voice queue is full. Please wait for it to clear.');
     room.queue.push(item);clearTimeout(room.idle);const position=room.queue.length+(room.current?1:0);this.pump(room);return position;
   }
+  private async reportFailure(room:Room,error:unknown){
+    const notify=room.current?.onFailure;if(!notify)return;
+    const signal=AbortSignal.any([room.controller.signal,room.track!.signal,AbortSignal.timeout(5_000)]);
+    let abort!:()=>void;
+    try{await Promise.race([notify(error,signal),new Promise<void>(resolve=>{abort=resolve;signal.addEventListener('abort',abort,{once:true});if(signal.aborted)resolve();})]);}
+    catch{/* Notification delivery must not stop playback or expose provider errors. */}
+    finally{if(abort)signal.removeEventListener('abort',abort);}
+  }
   private pump(room:Room){
     if(room.pump)return;
     room.pump=this.track((async()=>{
       while(!room.controller.signal.aborted&&room.queue.length){
         room.current=room.queue.shift()!;room.track=new AbortController();
         const abort=()=>room.track?.abort();room.controller.signal.addEventListener('abort',abort,{once:true});
-        try{if(room.current.canPlay&&!await room.current.canPlay())continue;if(room.track.signal.aborted||room.controller.signal.aborted)continue;await room.output!.play(room.current,room.config,room.track.signal);}catch{if(!room.track.signal.aborted)this.onFailure(room.guildId);}
+        try{if(room.current.canPlay&&!await room.current.canPlay())continue;if(room.track.signal.aborted||room.controller.signal.aborted)continue;await room.output!.play(room.current,room.config,room.track.signal);}catch(error){if(!room.track.signal.aborted){this.onFailure(room.guildId);await this.reportFailure(room,error);}}
         finally{room.controller.signal.removeEventListener('abort',abort);room.current=undefined;room.track=undefined;}
       }
     })().finally(()=>{room.pump=undefined;if(!room.controller.signal.aborted){if(room.queue.length)this.pump(room);else this.armIdle(room);}}));

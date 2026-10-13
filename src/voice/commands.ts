@@ -2,7 +2,7 @@ import { SlashCommandBuilder } from 'discord.js';
 import { TTS_VOICES } from './tts.js';
 export const VOICE_COMMAND_NAMES=['playmusic','musicqueue','skipmusic','stopmusic','addtts','stoptts','ttsvoice','ttsvoice1','ttsvoice2','ttsvoice3','ttsvoice4'];
 export const voiceCommands=[
-  new SlashCommandBuilder().setName('playmusic').setDescription('Join your voice call and queue a direct audio or radio link.').addStringOption(o=>o.setName('link').setDescription('Direct MP3, WAV, OGG, AAC or radio stream URL (not YouTube/Spotify pages)').setRequired(true).setMaxLength(2000)),
+  new SlashCommandBuilder().setName('playmusic').setDescription('Join your voice call and queue a YouTube, direct audio or radio link.').addStringOption(o=>o.setName('link').setDescription('Public YouTube video or direct audio/radio URL; Spotify full-track playback is unavailable').setRequired(true).setMaxLength(2000)),
   new SlashCommandBuilder().setName('musicqueue').setDescription('Show this call’s music queue.'),
   new SlashCommandBuilder().setName('skipmusic').setDescription('Skip the current track in your call.'),
   new SlashCommandBuilder().setName('stopmusic').setDescription('Clear music and disconnect Cyro from your call.'),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Readable } from 'node:stream';
-import { isPublicAudioAddress, parseAudioUrl, resolveAudioAddress, openAudioStream } from '../src/voice/urls.js';
+import { isPublicAudioAddress, parseAudioUrl, resolveAudioAddress, openAudioStream, audioFailureDetails } from '../src/voice/urls.js';
 
 describe('audio network boundary', () => {
   it('only accepts publicly routable addresses including IPv6', () => {
@@ -52,5 +52,16 @@ describe('audio network boundary', () => {
     });
     await expect((async () => { for await (const _chunk of audio.stream) { /* consume */ } })()).rejects.toThrow(/download limit/);
     expect(body.destroyed).toBe(true);
+  });
+  it('reports only safe status/family classifications, never error URLs or response contents', async () => {
+    try {
+      await openAudioStream('https://radio.example.org/live', {}, {
+        lookup: async () => [{ address: '2606:4700:4700::1111', family: 6 }],
+        request: async () => ({ status: 403, headers: { 'content-type': 'text/html' }, stream: Readable.from(['private provider response']) }),
+      });
+      throw new Error('Expected refusal');
+    } catch (error) { expect(audioFailureDetails(error)).toEqual({ code: 'http-status', status: 403, family: 6 }); }
+    expect(audioFailureDetails(Object.assign(new Error('Cannot reach https://signed.example/?secret=abc'), { code: 'ENETUNREACH' }))).toEqual({ code: 'network-unreachable' });
+    expect(audioFailureDetails(new Error('https://signed.example/?secret=abc'))).toEqual({ code: 'source-fetch-failed' });
   });
 });

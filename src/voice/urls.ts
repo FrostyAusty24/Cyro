@@ -37,13 +37,24 @@ export function parseAudioUrl(value: string): URL {
   }
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (['youtube.com', 'youtu.be', 'youtube-nocookie.com', 'googlevideo.com'].some(domain => onDomain(host, domain))) {
-    throw new Error('YouTube links cannot play through Cyro. Use a direct audio file or radio-stream URL instead.');
+    throw new Error('Use a supported single YouTube video link with /playmusic, or a direct audio or radio-stream URL. This YouTube URL type cannot be played.');
   }
   if (['spotify.com', 'spotify.link', 'scdn.co'].some(domain => onDomain(host, domain))) {
     throw new Error('Spotify links do not provide playable audio to Cyro. Use a direct audio file or radio-stream URL instead.');
   }
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || !host.includes('.') && !isIP(host) || isIP(host) && !isPublicAudioAddress(host)) {
     throw new Error('Music links must point to a public internet address.');
+  }
+  url.hash = '';
+  return url;
+}
+
+/** Only extractor-selected YouTube media may use this path; ordinary user audio links cannot. */
+export function parseYouTubeMediaUrl(value: string): URL {
+  if (value.length > 16_384) throw new Error('The YouTube media URL is too long.');
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.username || url.password || url.port || !onDomain(url.hostname, 'googlevideo.com') || url.pathname !== '/videoplayback') {
+    throw new Error('YouTube media must use its public HTTPS audio delivery service.');
   }
   url.hash = '';
   return url;
@@ -71,6 +82,36 @@ export interface AudioNetwork {
 export interface AudioDownload { stream: Readable; url: URL; cleanup: () => void }
 export interface AudioDownloadOptions { signal?: AbortSignal; maxBytes?: number }
 
+export interface AudioFailureDetails { code: string; family?: 4 | 6; status?: number }
+const networkCodes: Record<string, string> = {
+  ENETUNREACH: 'network-unreachable', EHOSTUNREACH: 'network-unreachable', EADDRNOTAVAIL: 'address-unavailable',
+  ECONNREFUSED: 'connection-refused', ECONNRESET: 'connection-reset', ETIMEDOUT: 'network-timeout',
+  ENOTFOUND: 'dns-unavailable', EAI_AGAIN: 'dns-unavailable', ABORT_ERR: 'cancelled',
+  CERT_HAS_EXPIRED: 'tls-failed', ERR_TLS_CERT_ALTNAME_INVALID: 'tls-failed', UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'tls-failed',
+};
+class AudioRequestError extends Error {
+  constructor(readonly details: AudioFailureDetails, message: string) { super(message); }
+}
+/** Fixed classifications only: never return a native error message, URL, hostname, address or response body. */
+export function audioFailureDetails(error: unknown): AudioFailureDetails {
+  if (error instanceof AudioRequestError) return { ...error.details };
+  const nativeCode = (error as NodeJS.ErrnoException | null)?.code;
+  if (typeof nativeCode === 'string' && networkCodes[nativeCode]) return { code: networkCodes[nativeCode]! };
+  const knownMessages: Record<string, string> = {
+    'The audio server took too long to respond.': 'headers-timeout',
+    'The audio stream stopped responding.': 'stream-timeout',
+    'Audio loading was cancelled or timed out.': 'cancelled-or-timeout',
+    'Music links must resolve only to public internet addresses.': 'non-public-address',
+    'The audio link redirects too many times.': 'redirect-limit',
+    'That link is not a direct supported audio stream. Use an MP3, WAV, OGG, FLAC, AAC, M4A or radio-stream URL.': 'unsupported-content-type',
+    'Compressed web responses cannot be used as music streams.': 'unsupported-content-encoding',
+    'That audio file exceeds the music download limit.': 'source-too-large',
+    'The music stream reached its download limit.': 'source-too-large',
+  };
+  const message = error instanceof Error ? error.message : '';
+  return { code: knownMessages[message] ?? 'source-fetch-failed' };
+}
+
 const requestAudio: AudioNetwork['request'] = (url, address, signal) => new Promise((resolve, reject) => {
   const request = (url.protocol === 'https:' ? httpsRequest : httpRequest)(url, {
     method: 'GET', agent: false, signal, family: address.family,
@@ -80,7 +121,7 @@ const requestAudio: AudioNetwork['request'] = (url, address, signal) => new Prom
   const headersTimeout = setTimeout(() => request.destroy(new Error('The audio server took too long to respond.')), 10_000);
   headersTimeout.unref();
   request.setTimeout(15_000, () => request.destroy(new Error('The audio stream stopped responding.')));
-  request.once('error', error => { clearTimeout(headersTimeout); reject(error); });
+  request.once('error', error => { clearTimeout(headersTimeout); reject(new AudioRequestError({ ...audioFailureDetails(error), family: address.family === 6 ? 6 : 4 }, 'The audio server could not be reached.')); });
   request.once('response', response => {
     clearTimeout(headersTimeout);
     resolve({ status: response.statusCode ?? 0, headers: response.headers, stream: response });
@@ -100,7 +141,7 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 /** Stream bytes through Node only; never pass an untrusted URL or filename to a media decoder. */
-export async function openAudioStream(value: string, options: AudioDownloadOptions = {}, network: AudioNetwork = defaultNetwork): Promise<AudioDownload> {
+async function downloadAudio(value: string, parse: (value: string) => URL, options: AudioDownloadOptions, network: AudioNetwork): Promise<AudioDownload> {
   options.signal?.throwIfAborted();
   const controller = new AbortController();
   const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
@@ -108,7 +149,7 @@ export async function openAudioStream(value: string, options: AudioDownloadOptio
   let current: Readable | undefined;
   const cleanup = (): void => { controller.abort(); current?.destroy(); };
   try {
-    let url = parseAudioUrl(value);
+    let url = parse(value);
     for (let redirects = 0; redirects <= 4; redirects++) {
       const dnsSignal = AbortSignal.any([signal, AbortSignal.timeout(5_000)]);
       const address = await abortable(resolveAudioAddress(url, network.lookup), dnsSignal);
@@ -117,10 +158,10 @@ export async function openAudioStream(value: string, options: AudioDownloadOptio
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         response.stream.destroy();
         if (redirects === 4 || !response.headers.location) throw new Error('The audio link redirects too many times.');
-        url = parseAudioUrl(new URL(response.headers.location, url).href);
+        url = parse(new URL(response.headers.location, url).href);
         continue;
       }
-      if (![200, 206].includes(response.status)) throw new Error('The audio server could not play this link.');
+      if (![200, 206].includes(response.status)) throw new AudioRequestError({ code: 'http-status', status: response.status, family: address.family === 6 ? 6 : 4 }, 'The audio server could not play this link.');
       const contentType = String(response.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
       if (!playableTypes.has(contentType)) throw new Error('That link is not a direct supported audio stream. Use an MP3, WAV, OGG, FLAC, AAC, M4A or radio-stream URL.');
       if (response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') throw new Error('Compressed web responses cannot be used as music streams.');
@@ -133,11 +174,19 @@ export async function openAudioStream(value: string, options: AudioDownloadOptio
       } });
       // Attach before piping so rejection during caller setup cannot become an unhandled stream error.
       limited.on('error', cleanup);
-      response.stream.on('error', error => limited.destroy(error));
+      response.stream.on('error', error => limited.destroy(new AudioRequestError({ ...audioFailureDetails(error), family: address.family === 6 ? 6 : 4 }, 'The audio stream ended unexpectedly.')));
       limited.once('close', cleanup);
       response.stream.pipe(limited);
       return { stream: limited, url, cleanup: () => { limited.destroy(); cleanup(); } };
     }
     throw new Error('The audio link redirects too many times.');
   } catch (error) { cleanup(); throw error; }
+}
+
+export function openAudioStream(value: string, options: AudioDownloadOptions = {}, network: AudioNetwork = defaultNetwork): Promise<AudioDownload> {
+  return downloadAudio(value, parseAudioUrl, options, network);
+}
+
+export function openYouTubeAudioStream(value: string, options: AudioDownloadOptions = {}, network: AudioNetwork = defaultNetwork): Promise<AudioDownload> {
+  return downloadAudio(value, parseYouTubeMediaUrl, options, network);
 }

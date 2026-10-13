@@ -28,7 +28,7 @@ The server owner always retains dashboard access and can configure additional ac
 
 ## Native Node hosting
 
-Use Node.js **22.12.0 or newer**; Node 24 is recommended. Keep npm optional platform dependencies and install scripts enabled so Canvas and FFmpeg can install for your actual host. Do not copy Windows `node_modules` onto Linux.
+Use Node.js **22.12.0 or newer**; Node 24 is recommended. Keep npm optional platform dependencies and install scripts enabled so Canvas and FFmpeg can install for your actual host. Do not copy Windows `node_modules` onto Linux. YouTube music additionally uses a pinned optional yt-dlp binary in `bin/`, installed by the project postinstall script on supported Windows/glibc Linux hosts. Installation failures leave other features usable. After building, `npm run check-youtube` tests source access without joining Discord; host IP restrictions can still prevent playback. The Dockerfile uses a glibc Debian base for this runtime.
 
 ```sh
 npm ci

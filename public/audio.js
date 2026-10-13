@@ -70,6 +70,7 @@ async function renderVoice(main) {
       : empty('No active voice session', 'Join a voice channel in Discord, then use /playmusic or /addtts to bring Cyro in.', 'music'));
     availability.replaceChildren(...[
       !snapshot.available?.music && el('div', { className: 'alert info' }, 'Music is unavailable on this host. The bot operator needs to finish the audio setup.'),
+      snapshot.available?.youtube === false && el('div', { className: 'alert info' }, 'YouTube links are unavailable on this host. Direct audio and radio links can still be used.'),
       !snapshot.available?.tts && el('div', { className: 'alert info' }, 'Text to speech is unavailable on this host. The bot operator needs to install the free voices.'),
       ...(snapshot.notes || []).map(note => el('p', { className: 'field-hint' }, note))
     ].filter(Boolean));
@@ -121,7 +122,7 @@ async function renderVoice(main) {
     el('p', {}, el('code', {}, '/addtts'), ' starts reading this call’s chat. ', el('code', {}, '/stoptts'), ' stops it.'),
     el('p', {}, el('code', {}, '/ttsvoice'), ' chooses your voice. Shortcuts ', el('code', {}, '/ttsvoice1'), ' through ', el('code', {}, '/ttsvoice4'), ' do the same.'),
     link('Access & commands', 'access')));
-  const sources = contextCard('Supported music links', 'Use direct audio files or supported radio streams you have permission to play. YouTube and Spotify page links are not playable in this release.', 'link');
+  const sources = contextCard('Supported music links', 'Use direct audio, supported radio streams, or a public YouTube video you have permission to play. YouTube support depends on access from this host; playlists and restricted videos are unavailable. Spotify does not provide full-track audio for this bot.', 'link');
   const privacy = contextCard('One call at a time', 'Each server can have one Cyro voice session. Music and text to speech run separately; stop the current session before starting the other.', 'lock', el('p', {}, 'TTS uses free voices hosted with Cyro. It reads new eligible messages only, without fetching chat history or sending text to a cloud voice service.'));
   loading.replaceWith(availability, el('div', { className: 'settings-grid' }, form, el('aside', { className: 'stack' }, commands, sources, privacy)),
     panel('Current voice session', [activity, el('div', { className: 'form-section' }, refreshStatus)], refresh));

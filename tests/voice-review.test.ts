@@ -76,7 +76,7 @@ it('rechecks current command access when queued speech reaches playback', async 
 it('shows unavailable voice capabilities and rejects sessions when host checks fail', async () => {
   const f = await fixture();
   f.service.setRuntimeStatus({ audio: true, tts: true, dave: false });
-  expect(f.service.snapshot(A).available).toEqual({ music: false, tts: false });
+  expect(f.service.snapshot(A).available).toEqual({ music: false, tts: false, youtube: false });
   await expect(f.service.startTts(f.guild, U)).rejects.toThrow('unavailable');
   await expect(f.service.playMusic(f.guild, U, 'https://example.org/song.mp3')).rejects.toThrow('unavailable');
   expect(f.connect).not.toHaveBeenCalled();

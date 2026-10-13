@@ -1,6 +1,6 @@
 {
   "name": "cyro",
-  "version": "2.13.0",
+  "version": "2.14.1",
   "private": true,
   "description": "Self-hosted multi-server Discord community bot with a dashboard, stream alerts, moderation, tickets and games.",
   "type": "module",
@@ -13,7 +13,10 @@
     "check-hosting": "node dist/src/check-hosting.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run tests"
+    "test": "vitest run tests",
+    "postinstall": "node scripts/install-ytdlp.mjs --probe-once",
+    "install-youtube": "node scripts/install-ytdlp.mjs",
+    "check-youtube": "node scripts/check-youtube.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

@@ -2,8 +2,9 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
-import { openAudioStream } from './urls.js';
+import { openAudioStream, openYouTubeAudioStream } from './urls.js';
 import { synthesizeSpeech, TTS_VOICES } from './tts.js';
+import { parseYouTubeUrl, resolveYouTubeSource, YouTubeSourceError } from './youtube.js';
 
 export interface AudioSource { stream: Readable; title: string; cleanup: () => void }
 export interface MusicSourceOptions { signal?: AbortSignal; maxDurationSeconds?: number }
@@ -85,6 +86,15 @@ export async function decodeAudio(input: Readable, title: string, options: Music
 }
 
 export async function loadMusicSource(url: string, options: MusicSourceOptions = {}): Promise<AudioSource> {
+  if (parseYouTubeUrl(url)) {
+    // A queue contains only the canonical page URL. Signed media URLs are resolved when playback starts.
+    const youtube = await resolveYouTubeSource(url, options);
+    let download;
+    try { download = await openYouTubeAudioStream(youtube.mediaUrl, { signal: options.signal }); }
+    catch { throw new YouTubeSourceError('YouTube refused or could not deliver this audio from Cyro’s host. Try another video or a direct audio link.'); }
+    try { return await decodeAudio(download.stream, youtube.title, options, download.cleanup); }
+    catch (error) { download.cleanup(); throw error; }
+  }
   const download = await openAudioStream(url, { signal: options.signal });
   const title = `Music from ${download.url.hostname}`;
   try { return await decodeAudio(download.stream, title, options, download.cleanup); }

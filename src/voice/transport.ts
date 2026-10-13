@@ -26,10 +26,11 @@ export async function connectVoice(client:Client,guildId:string,channelId:string
     async play(item,config,trackSignal){
       if(closed)throw new Error('The voice connection has closed.');trackSignal.throwIfAborted();
       const abort=new AbortController();playbackAbort=abort;const cancel=()=>abort.abort();trackSignal.addEventListener('abort',cancel,{once:true});signal.addEventListener('abort',cancel,{once:true});
-      const limit=setTimeout(cancel,item.kind==='music'?config.maxTrackMinutes*60_000:60_000);limit.unref();let source:AudioSource|undefined;
+      let limit:ReturnType<typeof setTimeout>|undefined;let source:AudioSource|undefined;
       try{
         source=item.kind==='music'?await loadMusicSource(item.url!,{signal:abort.signal,maxDurationSeconds:config.maxTrackMinutes*60}):await pcmSpeech(item.text!,item.voice,abort.signal);
         abort.signal.throwIfAborted();
+        limit=setTimeout(cancel,item.kind==='music'?config.maxTrackMinutes*60_000:60_000);limit.unref();
         const resource=createAudioResource(source.stream,{inputType:StreamType.Raw,inlineVolume:true});resource.volume?.setVolume(config.volume/100);
         await new Promise<void>((resolve,reject)=>{
           const finish=(error?:Error)=>{player.off(AudioPlayerStatus.Idle,idle);player.off('error',fail);source!.stream.off('error',fail);abort.signal.removeEventListener('abort',stop);error?reject(error):resolve();};
