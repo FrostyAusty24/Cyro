@@ -95,4 +95,4 @@ Confirmed removed-server records are eligible for cleanup after 30 days while Cy
 - Restart and confirm persistence; test restoring a private backup. Inspect incomplete support operations before retrying.
 - Check provider credentials, quotas, supported metrics and TikTok app approval. No self-hosted credentials are supplied by this repository.
 
-The offline demo and automated tests are useful checks, but do not replace these live tests. [Community support](https://discord.gg/rcSsGQxbuh) can help with setup questions. Keep secrets and private logs out of public discussions.
+The offline demo and automated tests are useful checks, but do not replace these live tests. [Headache Development support](https://discord.gg/dAZheerkkD) can help with setup questions. Keep secrets and private logs out of public discussions.

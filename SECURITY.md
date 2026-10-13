@@ -2,7 +2,7 @@
 
 Please do not publish an exploit, credentials, private user records or detailed vulnerability steps in a public issue, pull request or Discord channel.
 
-If this GitHub repository has **Security → Report a vulnerability** available, use that private reporting form. Otherwise join the [Cyro support server](https://discord.gg/rcSsGQxbuh) and ask Headache Development for a private security-reporting conversation. Keep the initial public request brief and free of sensitive details.
+If this GitHub repository has **Security → Report a vulnerability** available, use that private reporting form. Otherwise join the [Headache Development Discord](https://discord.gg/dAZheerkkD) and ask Headache Development for a private security-reporting conversation. Keep the initial public request brief and free of sensitive details.
 
 Include the affected version, feature, a minimal reproduction using a test application/server, the expected security boundary and the observed impact. Provide redacted logs only when needed. Do not send passwords, bot tokens, OAuth secrets, session cookies or another person's private data.
 

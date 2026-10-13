@@ -4,7 +4,7 @@ A Discord community bot with a web dashboard, creator alerts, moderation, ticket
 
 **Version 2.15.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
 
-[Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Community support](https://discord.gg/rcSsGQxbuh)
+[Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Headache Development support](https://discord.gg/dAZheerkkD)
 
 ## Included
 

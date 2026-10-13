@@ -1,6 +1,6 @@
 # Contributing to Cyro
 
-Use a separate Discord test application and test servers. Never use somebody else's credentials or copy production server data into fixtures. The [Cyro support server](https://discord.gg/rcSsGQxbuh) is available for setup questions and feature discussion.
+Use a separate Discord test application and test servers. Never use somebody else's credentials or copy production server data into fixtures. The [Headache Development Discord](https://discord.gg/dAZheerkkD) is available for setup questions and feature discussion.
 
 For a bug, describe the affected feature, expected behavior, actual result, bot version and a minimal reproduction. Redact tokens, session cookies, private messages, member details and private channel/server identifiers. For vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 

@@ -1,7 +1,7 @@
 'use strict';
 
 window.CyroHome = (() => {
-  const support = 'https://discord.gg/rcSsGQxbuh';
+  const support = 'https://discord.gg/dAZheerkkD';
   const features = [
     ['radio', 'purple', 'Creator alerts & leaderboards', 'One creator, all their accounts.', [
       'Bring Twitch, Kick, YouTube and TikTok accounts together and link them to a Discord member.',
@@ -56,7 +56,7 @@ window.CyroHome = (() => {
     const sectionHead = (eyebrow, title, copy) => el('header', { className: 'home-section-heading' },
       el('span', { className: 'home-eyebrow' }, eyebrow), el('h2', {}, title), copy && el('p', {}, copy));
     const faq = (question, ...answer) => el('details', { className: 'home-faq' }, el('summary', {}, question, icon('plus')), el('div', {}, ...answer.map(part => typeof part === 'string' ? el('p', {}, part) : part)));
-    const helpLink = () => el('a', { href: support, target: '_blank', rel: 'noopener noreferrer' }, 'Cyro support Discord', icon('arrow'));
+    const helpLink = () => el('a', { href: support, target: '_blank', rel: 'noopener noreferrer' }, 'Headache Development Discord', icon('arrow'));
 
     app.replaceChildren(el('div', { className: 'login-screen home-page' },
       el('nav', { className: 'login-nav home-nav', 'aria-label': 'Main navigation' }, brandLink,
