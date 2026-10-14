@@ -53,7 +53,7 @@ it('publishes the legacy ticket embed while preserving its category dropdown and
   await (service as any).ticket(interaction, 'panel');
   const payload = channel.send.mock.calls[0]![0];
   expect(payload.content).toBeUndefined();
-  expect(payload.embeds[0].toJSON()).toMatchObject({ title: 'Need a hand?', description: 'Choose a category to open a private ticket.', color: 0x82d9f7 });
+  expect(payload.embeds[0].toJSON()).toMatchObject({ title: 'Need a hand?', description: 'Choose a category to open a ticket.', color: 0x82d9f7 });
   expect(payload.components[0].toJSON().components[0]).toMatchObject({ custom_id: 'mod:ticket:choose', options: [expect.objectContaining({ value: 'default' })] });
   expect(payload.allowedMentions).toEqual({ parse: [] });
   expect(interaction.editReply).toHaveBeenCalledExactlyOnceWith('Ticket panel posted.');

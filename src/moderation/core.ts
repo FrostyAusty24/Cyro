@@ -1,6 +1,7 @@
+export type TicketVisibility = 'inherit' | 'private';
 export interface TicketType {
   id: string; name: string; enabled: boolean; categoryId: string | null; archiveCategoryId: string | null;
-  logChannelId: string | null; staffRoleIds: string[]; maxOpenPerUser: number; closeAction?: 'archive' | 'delete';
+  logChannelId: string | null; staffRoleIds: string[]; maxOpenPerUser: number; closeAction?: 'archive' | 'delete'; visibility?: TicketVisibility;
 }
 export interface ApplicationForm {
   id: string; name: string; enabled: boolean; reviewChannelId: string | null; reviewerRoleIds: string[];
@@ -15,14 +16,14 @@ export interface ModerationConfig {
   modLogChannelId: string | null;
   blockedWords: string[];
   antiSpam: { enabled: boolean; maxMessages: number; windowSeconds: number; timeoutMinutes: number };
-  tickets: { enabled: boolean; categoryId: string | null; archiveCategoryId: string | null; logChannelId: string | null; staffRoleIds: string[]; maxOpenPerUser: number; closeAction?: 'archive' | 'delete'; types?: TicketType[] };
+  tickets: { enabled: boolean; categoryId: string | null; archiveCategoryId: string | null; logChannelId: string | null; staffRoleIds: string[]; maxOpenPerUser: number; closeAction?: 'archive' | 'delete'; visibility?: TicketVisibility; types?: TicketType[] };
   applications: { enabled: boolean; reviewChannelId: string | null; reviewerRoleIds: string[]; acceptedRoleId: string | null; questions: string[]; forms?: ApplicationForm[] };
   panels?: SupportPanel[];
 }
 export const DEFAULT_CONFIG: ModerationConfig = {
   enabled: false, modLogChannelId: null, blockedWords: [],
   antiSpam: { enabled: false, maxMessages: 6, windowSeconds: 8, timeoutMinutes: 5 },
-  tickets: { enabled: false, categoryId: null, archiveCategoryId: null, logChannelId: null, staffRoleIds: [], maxOpenPerUser: 2, closeAction: 'archive', types: [] },
+  tickets: { enabled: false, categoryId: null, archiveCategoryId: null, logChannelId: null, staffRoleIds: [], maxOpenPerUser: 2, closeAction: 'archive', visibility: 'inherit', types: [] },
   applications: { enabled: false, reviewChannelId: null, reviewerRoleIds: [], acceptedRoleId: null, questions: ['Why would you like to join the team?', 'What experience can you bring?'], forms: [] },
   panels: [],
 };
@@ -50,9 +51,10 @@ function mergeKnown(base: Record<string, unknown>, patch: Record<string, unknown
   return result;
 }
 export function mergeConfig(current: ModerationConfig | undefined, patch: unknown): ModerationConfig {
-  const base = { ...DEFAULT_CONFIG, ...current, tickets: { ...DEFAULT_CONFIG.tickets, ...current?.tickets }, applications: { ...DEFAULT_CONFIG.applications, ...current?.applications } };
+  const base = { ...DEFAULT_CONFIG, ...current, tickets: { ...DEFAULT_CONFIG.tickets, ...current?.tickets, visibility: current ? current.tickets.visibility ?? 'private' : DEFAULT_CONFIG.tickets.visibility }, applications: { ...DEFAULT_CONFIG.applications, ...current?.applications } };
   const next = mergeKnown(base as unknown as Record<string, unknown>, object(patch)) as unknown as ModerationConfig;
   if (next.tickets.closeAction !== 'archive' && next.tickets.closeAction !== 'delete') throw new Error('Ticket close action must be archive or delete.');
+  if (next.tickets.visibility !== 'inherit' && next.tickets.visibility !== 'private') throw new Error('Ticket visibility must be inherit or private.');
   for (const value of [next.enabled, next.antiSpam.enabled, next.tickets.enabled, next.applications.enabled]) if (typeof value !== 'boolean') throw new Error('Enabled settings must be true or false.');
   for (const id of [next.modLogChannelId, next.tickets.categoryId, next.tickets.archiveCategoryId, next.tickets.logChannelId, next.applications.reviewChannelId, next.applications.acceptedRoleId]) if (id !== null && !isSnowflake(id)) throw new Error('Channel and role IDs must be Discord IDs or null.');
   for (const ids of [next.tickets.staffRoleIds, next.applications.reviewerRoleIds]) if (!Array.isArray(ids) || ids.length > 20 || ids.some(id => !isSnowflake(id))) throw new Error('Staff roles must be a list of up to 20 Discord role IDs.');
@@ -87,16 +89,18 @@ function list(value: unknown, label: string): asserts value is unknown[] {
 function validateDefinitions(config: ModerationConfig): void {
   list(config.tickets.types, 'Ticket types'); list(config.applications.forms, 'Application forms'); list(config.panels, 'Support panels');
   for (const raw of config.tickets.types) {
-    const item = fields({ closeAction: 'archive', ...raw }, ['id', 'name', 'enabled', 'categoryId', 'archiveCategoryId', 'logChannelId', 'staffRoleIds', 'maxOpenPerUser', 'closeAction']);
+    const item = fields({ closeAction: 'archive', visibility: 'private', ...raw }, ['id', 'name', 'enabled', 'categoryId', 'archiveCategoryId', 'logChannelId', 'staffRoleIds', 'maxOpenPerUser', 'closeAction', 'visibility']);
     if (item.closeAction !== 'archive' && item.closeAction !== 'delete') throw new Error('Ticket close action must be archive or delete.');
     raw.closeAction = item.closeAction;
+    if (item.visibility !== 'inherit' && item.visibility !== 'private') throw new Error('Ticket visibility must be inherit or private.');
+    raw.visibility = item.visibility;
     text(item.name, 80, 'Ticket type name');
     if (typeof item.enabled !== 'boolean') throw new Error('Ticket type enabled must be true or false.');
     for (const key of ['categoryId', 'archiveCategoryId', 'logChannelId']) if (item[key] !== null && !isSnowflake(item[key])) throw new Error('Ticket destinations must be Discord IDs or null.');
     ids(item.staffRoleIds);
     if (!Number.isInteger(item.maxOpenPerUser) || (item.maxOpenPerUser as number) < 1 || (item.maxOpenPerUser as number) > 5) throw new Error('Ticket limits must be between 1 and 5.');
     if (item.categoryId && item.categoryId === item.archiveCategoryId) throw new Error('Choose an archive category separate from the active ticket category.');
-    if (item.enabled && (!item.categoryId || !item.logChannelId || !(item.staffRoleIds as string[]).length)) throw new Error('Enabled ticket types need a category, private log channel and staff roles.');
+    if (item.enabled && (!item.categoryId || !item.logChannelId || !(item.staffRoleIds as string[]).length)) throw new Error('Enabled ticket types need a category, transcript channel and staff roles.');
   }
   for (const raw of config.applications.forms) {
     const item = fields(raw, ['id', 'name', 'enabled', 'reviewChannelId', 'reviewerRoleIds', 'acceptedRoleId', 'questions']);
@@ -106,7 +110,7 @@ function validateDefinitions(config: ModerationConfig): void {
     ids(item.reviewerRoleIds);
     if (!Array.isArray(item.questions) || item.questions.length < 1 || item.questions.length > 5) throw new Error('Applications require 1–5 questions.');
     for (const question of item.questions) text(question, 100, 'Application question');
-    if (item.enabled && (!item.reviewChannelId || !(item.reviewerRoleIds as string[]).length)) throw new Error('Enabled application forms need a private review channel and reviewer roles.');
+    if (item.enabled && (!item.reviewChannelId || !(item.reviewerRoleIds as string[]).length)) throw new Error('Enabled application forms need a review channel and reviewer roles.');
   }
   for (const raw of config.panels) {
     const item = fields(raw, ['id', 'name', 'kind', 'presentation', 'title', 'description', 'options']);

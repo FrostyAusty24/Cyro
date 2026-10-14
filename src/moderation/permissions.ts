@@ -1,5 +1,6 @@
 import { assertNotAccessRole } from '../control/access.js';
-import { PermissionFlagsBits, type GuildMember, type Role, type TextChannel } from 'discord.js';
+import { PermissionFlagsBits, type CategoryChannel, type GuildMember, type OverwriteData, type Role } from 'discord.js';
+import type { TicketVisibility } from './core.js';
 export function assertCanModerate(actor: GuildMember, target: GuildMember, bot: GuildMember, permission: bigint, ownerId: string): void {
   if (!actor.permissions.has(permission)) throw new Error('You do not have permission for this action.');
   if (!bot.permissions.has(permission)) throw new Error('The bot is missing permission for this action.');
@@ -16,17 +17,25 @@ export function assertSafeRole(role: Role, bot: GuildMember): void {
   if (role.id === role.guild.id || role.managed || role.permissions.any(dangerous) || !bot.permissions.has(PermissionFlagsBits.ManageRoles) || bot.roles.highest.comparePositionTo(role) <= 0) throw new Error('The acceptance role must be a regular role below the bot, without management or moderation permissions.');
 }
 
-export async function assertPrivateAccess(channel: TextChannel, staffRoles: string[]): Promise<void> {
-  const bot = await channel.guild.members.fetchMe();
-  const roles = await channel.guild.roles.fetch();
-  for (const role of roles.values()) {
-    if (role.id === bot.roles.botRole?.id || staffRoles.includes(role.id) || role.permissions.has(PermissionFlagsBits.ManageGuild)) continue;
-    if (channel.permissionsFor(role).has(PermissionFlagsBits.ViewChannel)) throw new Error('Transcript and application review channels must be private: only configured staff roles and server administrators may view them.');
+export function ticketPermissionOverwrites(category: CategoryChannel, botId: string, ownerId: string, staffRoles: string[], visibility: TicketVisibility = 'private'): OverwriteData[] {
+  const memberAccess = PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages | PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.AttachFiles;
+  const botAccess = memberAccess | PermissionFlagsBits.ManageChannels | PermissionFlagsBits.ManageRoles | PermissionFlagsBits.ManageMessages;
+  if (visibility === 'private') return [
+    { id: category.guild.id, type: 0, deny: PermissionFlagsBits.ViewChannel },
+    { id: botId, type: 1, allow: botAccess },
+    { id: ownerId, type: 1, allow: memberAccess },
+    ...staffRoles.map(id => ({ id, type: 0 as const, allow: memberAccess })),
+  ];
+  // Copy the category audience without broadening any role's visibility. Only the
+  // ticket owner and bot receive the access necessary to use this new ticket.
+  const overwrites = [...category.permissionOverwrites.cache.values()].map(overwrite => ({
+    id: overwrite.id, type: overwrite.type, allow: overwrite.allow.bitfield, deny: overwrite.deny.bitfield,
+  }));
+  for (const [id, permissions] of [[botId, botAccess], [ownerId, memberAccess]] as const) {
+    const existing = overwrites.find(overwrite => overwrite.id === id && overwrite.type === 1);
+    if (existing) { existing.allow |= permissions; existing.deny &= ~permissions; }
+    else overwrites.push({ id, type: 1, allow: permissions, deny: 0n });
   }
-  for (const overwrite of channel.permissionOverwrites.cache.values()) {
-    if (overwrite.type !== 1 || overwrite.id === bot.id || !overwrite.allow.has(PermissionFlagsBits.ViewChannel)) continue;
-    const member = await channel.guild.members.fetch({ user: overwrite.id, force: true }).catch(() => null);
-    if (!member || !isStaff(member, staffRoles)) throw new Error('This channel is not private: a member permission override allows someone outside the configured staff team to view it.');
-  }
+  return overwrites;
 }
 

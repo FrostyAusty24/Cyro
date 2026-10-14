@@ -116,7 +116,7 @@ describe('application and ticket record snapshots', () => {
         create: async (payload: unknown) => { created.push(payload); return { id: `channel-${created.length}`, send: async () => {} }; },
       },
     };
-    (service as any).privateChannel = async () => ({ id: channelId });
+    (service as any).textChannel = async () => ({ id: channelId });
     const interaction = { guildId, guild, user: { id: actor.id }, editReply: async () => {} };
     await (service as any).ticket(interaction, 'open', 'report');
     await expect((service as any).ticket(interaction, 'open', 'report')).rejects.toThrow('limit for this category');
@@ -125,7 +125,7 @@ describe('application and ticket record snapshots', () => {
     expect(created[0].permissionOverwrites.map((item: any) => item.id)).toEqual([guildId, 'bot', 'member', report.staffRoleIds[0]]);
     expect(store.read(guildId).tickets.map(ticket => ticket.ticketType?.id)).toEqual(['report', 'support']);
     await store.update(guildId, state => { state.config.tickets.types = []; });
-    expect(store.read(guildId).tickets[0]?.ticketType).toEqual(report);
+    expect(store.read(guildId).tickets[0]?.ticketType).toEqual({ ...report, closeAction: 'archive', visibility: 'private' });
   });
   it('opens a selected application modal as the initial response, without Discord fetches', async () => {
     const store = new ModerationStore('unused.json', async () => {});
@@ -151,7 +151,7 @@ describe('application and ticket record snapshots', () => {
       expect(saved.applicationForm.reviewerRoleIds).toEqual([roleId]);
       return { id: 'message-' + saved.applicationForm.id };
     });
-    (service as any).privateChannel = async () => ({ id: channelId, send });
+    (service as any).textChannel = async () => ({ id: channelId, send });
     for (const formId of ['staff', 'creator']) {
       let modal: any;
       await (service as any).showApplication({ guildId, user: { id: 'member' }, showModal: async (value: any) => { modal = value; } }, formId);
@@ -184,7 +184,7 @@ describe('application and ticket record snapshots', () => {
     });
     const service = serviceWith(store);
     let actor = { id: 'replacement', permissions: { has: () => false }, roles: { cache: new Map([[replacementRole, {}]]) } };
-    (service as any).privateChannel = async () => ({ id: channelId });
+    (service as any).textChannel = async () => ({ id: channelId });
     const message = { id: 'review', edit: vi.fn(async () => {}) };
     const interaction = { guildId, channelId, customId: 'mod:application:deny:old', user: { id: 'actor' }, guild: { members: { fetch: async () => actor } }, message, editReply: async () => {} };
     await expect((service as any).reviewApplication(interaction)).rejects.toThrow('reviewers');

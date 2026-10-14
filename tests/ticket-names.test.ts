@@ -60,7 +60,7 @@ it('creates the friendly label while retaining the UUID recovery marker and priv
   });
   const guild = { id: guildId, members: { fetch: async () => actor, fetchMe: async () => ({ id: 'bot' }) }, roles: { fetch: async () => ({ id: 'staff', guild: { id: guildId }, managed: false }) }, channels: { fetch: async (id?: string) => id ? category : new Map([['other', { id: 'other', name: 'general-support-example' }]]), create } };
   const service = new ModerationService({} as never, '.', { warn() {}, error() {} } as never);
-  (service as any).store = store; (service as any).privateChannel = async () => ({ id: 'log' });
+  (service as any).store = store; (service as any).textChannel = async () => ({ id: 'log' });
   await (service as any).ticket({ guildId, guild, user: { id: actor.id }, editReply: async () => {} }, 'open');
   expect(create.mock.calls[0]?.[0].name).toBe('general-support-example-2');
   expect(store.read(guildId).tickets[0]?.channelId).toBe('new-channel');

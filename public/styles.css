@@ -681,7 +681,7 @@ h1{font-size:27px}
 .sidebar{background:linear-gradient(180deg,#152131d9,#101720f5 60%);box-shadow:inset -1px 0 0 #ffffff03;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .brand-name small{font-size:10px;letter-spacing:0;color:var(--subtle)}
 .brand-mark{box-shadow:0 0 0 1px #8bdafa20,0 3px 12px #00000030}
-.guild-control select{background:#ffffff04;box-shadow:inset 0 1px 0 #ffffff05;border-color:#ffffff1c}
+.guild-control select{background:var(--input);box-shadow:inset 0 1px 0 #ffffff05;border-color:#ffffff1c}
 .nav a:hover{background:#ffffff06}
 .nav a[aria-current=page]{background:linear-gradient(110deg,#28475c99,#35375070);box-shadow:inset 0 0 0 1px #9cddff18,inset 0 1px 0 #ffffff05;color:#d0f0ff}
 .nav-label{font-size:10px;letter-spacing:.055em}
@@ -709,6 +709,14 @@ h1{font-size:27px}
 .field input,.field select,.field textarea{border-color:#607188;box-shadow:inset 0 1px 3px #00000020}
 .field input:hover,.field select:hover,.field textarea:hover{border-color:#8296ae}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+
+/* Native menus need opaque colours as well as the closed select control.
+   Keep the browser's keyboard, selection and high-contrast behaviour. */
+@media (forced-colors:none){
+  select,.guild-control select,.field select{color-scheme:dark;background-color:var(--input);color:var(--text)}
+  select option,select optgroup{background-color:var(--input);color:var(--text)}
+  select option:disabled,select optgroup:disabled{color:var(--subtle)}
+}
 .field input::placeholder,.field textarea::placeholder{color:#91a1b5;opacity:1}
 .save-bar{background:#18212fef;border-color:#ffffff20;box-shadow:0 8px 28px #00000035,inset 0 1px 0 #ffffff08;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
 .creator-header{background:#ffffff03}

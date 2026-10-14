@@ -13,8 +13,8 @@ export const moderationCommands = [
     .addSubcommand(sub => sub.setName('release').setDescription('After checking Discord, release stalled local state without undoing Discord actions')
       .addStringOption(option => option.setName('operation').setDescription('Exact operation ID shown by support-recovery list or the dashboard').setRequired(true).setMaxLength(64))
       .addStringOption(option => option.setName('reason').setDescription('What you checked in Discord and why this operation can be released').setRequired(true).setMinLength(10).setMaxLength(500))),
-  new SlashCommandBuilder().setName('ticket').setDescription('Open or manage a private support ticket').setDMPermission(false)
-    .addSubcommand(sub => sub.setName('open').setDescription('Open a private support ticket').addStringOption(option => option.setName('type').setDescription('Saved ticket type ID; leave blank to choose a category').setMaxLength(40)))
+  new SlashCommandBuilder().setName('ticket').setDescription('Open or manage a support ticket').setDMPermission(false)
+    .addSubcommand(sub => sub.setName('open').setDescription('Open a support ticket').addStringOption(option => option.setName('type').setDescription('Saved ticket type ID; leave blank to choose a category').setMaxLength(40)))
     .addSubcommand(sub => sub.setName('claim').setDescription('Claim this ticket (configured support staff only)'))
     .addSubcommand(sub => sub.setName('close').setDescription('Close this ticket and save its transcript').addBooleanOption(option => option.setName('keep_channel').setDescription('Staff: retain a read-only archive instead of deleting the channel')))
     .addSubcommand(sub => sub.setName('panel').setDescription('Post a ticket or saved support panel (Manage Server required)').addStringOption(option => option.setName('panel').setDescription('Saved panel ID from the dashboard; leave blank for ticket categories').setMaxLength(40))),

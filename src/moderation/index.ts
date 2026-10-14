@@ -10,7 +10,7 @@ import {
 import type { Logger } from '../logger.js';
 import { mergeConfig, ticketTypes, applicationForms, isSnowflake, type ModerationConfig } from './core.js';
 import { panelPayload, selectedPanelOption } from './panels.js';
-import { assertCanModerate, assertSafeRole, assertPrivateAccess, isStaff } from './permissions.js';
+import { assertCanModerate, assertSafeRole, isStaff, ticketPermissionOverwrites } from './permissions.js';
 import { ModerationStore, ModerationPersistenceError, type ModCase, type Ticket, type Application, type SupportOperation } from './store.js';
 import { assertCategoryCapacity, archiveTicketChannel, isTicketArchived, freezeTicketChannel, assertTicketCanBeDeleted, ticketTopic, exportMarker } from './recovery.js';
 import { staffStats } from './stats.js';
@@ -188,7 +188,7 @@ export class ModerationService {
       const current = this.store.read(guildId);
       const next = mergeConfig(current.config, input);
       const rolesChanged = (before: string[], after: string[]) => JSON.stringify([...before].sort()) !== JSON.stringify([...after].sort());
-      if (current.tickets.some(ticket => ticket.status === 'open' && !ticket.ticketType) && rolesChanged(current.config.tickets.staffRoleIds, next.tickets.staffRoleIds)) throw new Error('Close existing tickets before changing support staff roles so their private channel access stays consistent.');
+      if (current.tickets.some(ticket => ticket.status === 'open' && !ticket.ticketType) && rolesChanged(current.config.tickets.staffRoleIds, next.tickets.staffRoleIds)) throw new Error('Close existing tickets before changing support staff roles so their staff access stays consistent.');
       if (current.applications.some(application => application.status === 'pending' && !application.applicationForm) && (rolesChanged(current.config.applications.reviewerRoleIds, next.applications.reviewerRoleIds) || current.config.applications.reviewChannelId !== next.applications.reviewChannelId)) throw new Error('Review all pending applications before changing the review channel or reviewer roles.');
       const guild = await this.client.guilds.fetch(guildId);
       const bot = await guild.members.fetchMe({ force: true });
@@ -203,13 +203,13 @@ export class ModerationService {
           if (!category || category.guild.id !== guildId || category.type !== ChannelType.GuildCategory) throw new Error('Ticket categories must be categories in this server.');
           if (next.tickets.enabled && type.enabled && type.closeAction === 'delete' && id === type.categoryId && !category.permissionsFor(bot).has([PermissionFlagsBits.ManageThreads, PermissionFlagsBits.ManageWebhooks])) throw new Error('Delete-after-transcript requires Manage Threads and Manage Webhooks for Cyro in the selected ticket category. Grant those permissions or keep a read-only archive.');
         }
-        if (type.logChannelId) await this.privateChannel(guild, type.logChannelId, type.staffRoleIds);
-        if (next.tickets.enabled && type.enabled && (!type.categoryId || !type.logChannelId || !type.staffRoleIds.length)) throw new Error('Tickets require a category, private transcript channel, and at least one staff role.');
+        if (type.logChannelId) await this.textChannel(guild, type.logChannelId);
+        if (next.tickets.enabled && type.enabled && (!type.categoryId || !type.logChannelId || !type.staffRoleIds.length)) throw new Error('Tickets require a category, transcript channel, and at least one staff role.');
       }
       for (const form of forms) {
-        if (form.reviewChannelId) await this.privateChannel(guild, form.reviewChannelId, form.reviewerRoleIds);
+        if (form.reviewChannelId) await this.textChannel(guild, form.reviewChannelId);
         if (form.acceptedRoleId) { const role = await guild.roles.fetch(form.acceptedRoleId); if (!role || role.guild.id !== guildId) throw new Error('Acceptance role does not exist in this server.'); assertSafeRole(role, bot); }
-        if (next.applications.enabled && form.enabled && (!form.reviewChannelId || !form.reviewerRoleIds.length)) throw new Error('Applications require a private review channel and at least one reviewer role.');
+        if (next.applications.enabled && form.enabled && (!form.reviewChannelId || !form.reviewerRoleIds.length)) throw new Error('Applications require a review channel and at least one reviewer role.');
       }
       await this.store.update(guildId, state => { state.config = next; });
       return next;
@@ -247,11 +247,6 @@ export class ModerationService {
     if (!channel || channel.guild.id !== guild.id || channel.type !== ChannelType.GuildText) throw new Error('Select a text channel in this server.');
     const bot = await guild.members.fetchMe();
     if (!channel.permissionsFor(bot).has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) throw new Error('The bot needs View Channel and Send Messages in the selected channel.');
-    return channel;
-  }
-  private async privateChannel(guild: Guild, id: string, staffRoles: string[]): Promise<TextChannel> {
-    const channel = await this.textChannel(guild, id);
-    await assertPrivateAccess(channel, staffRoles);
     return channel;
   }
   private async handleInteraction(interaction: Interaction): Promise<void> {
@@ -415,7 +410,7 @@ export class ModerationService {
         const channel = await this.textChannel(interaction.guild, interaction.channelId);
         const bot = await interaction.guild.members.fetchMe();
         if (!channel.permissionsFor(bot)?.has(PermissionFlagsBits.EmbedLinks)) throw new Error('The bot needs Embed Links in the panel channel.');
-        await channel.send({ embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle('Need a hand?').setDescription('Choose a category to open a private ticket.')], components: [this.choiceMenu('mod:ticket:choose', available)], allowedMentions: NONE });
+        await channel.send({ embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle('Need a hand?').setDescription('Choose a category to open a ticket.')], components: [this.choiceMenu('mod:ticket:choose', available)], allowedMentions: NONE });
         await interaction.editReply('Ticket panel posted.'); return;
       }
       if (action === 'open') {
@@ -432,20 +427,20 @@ export class ModerationService {
         if (!category.permissionsFor(bot).has([PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles])) throw new Error('The bot needs Manage Channels and Manage Roles in the ticket category.');
         await assertCategoryCapacity(interaction.guild, category.id);
         for (const id of config.staffRoleIds) { const role = await interaction.guild.roles.fetch(id); if (!role || role.guild.id !== interaction.guildId || role.id === interaction.guildId || role.managed) throw new Error('A configured support staff role is no longer available.'); }
-        await this.privateChannel(interaction.guild, config.logChannelId, config.staffRoleIds);
+        await this.textChannel(interaction.guild, config.logChannelId);
         const channels = await interaction.guild.channels.fetch();
         const name = ticketChannelName(config.name, actor, [...channels.values()].filter(channel => channel !== null).map(channel => channel.name));
-        const allow = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles];
+        const permissionOverwrites = ticketPermissionOverwrites(category, bot.id, actor.id, config.staffRoleIds, config.visibility ?? 'private');
         const record: Ticket = { id: randomUUID(), channelId: '', ownerId: actor.id, status: 'open', createdAt: new Date().toISOString(), claimedBy: null, claimedAt: null, closedBy: null, closedAt: null, ticketType: structuredClone(config), operation: { id: randomUUID(), kind: 'ticket-create', stage: 'sending', actorId: actor.id, startedAt: new Date().toISOString() } };
         await this.store.update(interaction.guildId, data => { data.tickets.push(record); });
         let channel: TextChannel;
         try {
-          channel = await interaction.guild.channels.create({ name, topic: ticketTopic(record.id), type: ChannelType.GuildText, parent: config.categoryId, permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: bot.id, allow: [...allow, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages] }, { id: actor.id, allow }, ...config.staffRoleIds.map(id => ({ id, allow }))], reason: `Support ticket ${record.id} opened by ${actor.id}` });
+          channel = await interaction.guild.channels.create({ name, topic: ticketTopic(record.id), type: ChannelType.GuildText, parent: config.categoryId, permissionOverwrites, reason: `Support ticket ${record.id} opened by ${actor.id}` });
           await this.store.update(interaction.guildId, data => { const saved = data.tickets.find(ticket => ticket.id === record.id)!; saved.channelId = channel.id; delete saved.operation; });
         } catch (error) { await this.markIssue(interaction.guildId, 'ticket', record.id, 'Ticket creation was interrupted. Its channel may exist; an administrator must run /support-recovery list and inspect it before retrying.'); throw error; }
-        try { await channel.send({ content: `**${config.name}** · private ticket for <@${actor.id}>. Describe what you need help with. Staff can claim the ticket; staff or the ticket owner can close it. Closing automatically saves a transcript to the server’s private support log.${config.closeAction === 'delete' ? ' This category then deletes the ticket channel. Download any original attachments you want to keep before closing; the transcript stores links that can expire.' : ' The channel remains as a read-only archive.'}`, components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('mod:ticket:claim').setLabel('Claim ticket').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('mod:ticket:close').setLabel(config.closeAction === 'delete' ? 'Close, save & delete' : 'Close & save transcript').setStyle(ButtonStyle.Secondary))], allowedMentions: NONE }); }
+        try { await channel.send({ content: `**${config.name}** · ticket for <@${actor.id}>. ${config.visibility === 'inherit' ? 'This ticket copied the category permissions when it opened.' : 'Visible to you and the configured support team.'} Describe what you need help with. Staff can claim the ticket; staff or the ticket owner can close it. Closing automatically saves a transcript to the configured transcript channel.${config.closeAction === 'delete' ? ' This category then deletes the ticket channel. Download any original attachments you want to keep before closing; the transcript stores links that can expire.' : ' The channel remains as a read-only archive.'}`, components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('mod:ticket:claim').setLabel('Claim ticket').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('mod:ticket:close').setLabel(config.closeAction === 'delete' ? 'Close, save & delete' : 'Close & save transcript').setStyle(ButtonStyle.Secondary))], allowedMentions: NONE }); }
         catch (error) { this.logger.warn('Ticket created but welcome message failed.', { guildId: interaction.guildId, error: errorText(error) }); }
-        await interaction.editReply({ content: `Your private ticket is ready: <#${channel.id}>.`, allowedMentions: NONE }); return;
+        await interaction.editReply({ content: `Your ticket is ready: <#${channel.id}>.`, allowedMentions: NONE }); return;
       }
       const record = state.tickets.find(t => t.channelId === interaction.channelId);
       if (!record || record.status !== 'open') throw new Error('Use this inside an open ticket created by this bot.');
@@ -494,9 +489,9 @@ export class ModerationService {
     if (record.operation && record.operation.kind !== 'ticket-close') throw new Error('This ticket has an unfinished creation request. Ask an administrator to run /support-recovery list.');
     let operation = record.operation;
     const logId = operation?.transcriptChannelId ?? config.logChannelId;
-    if (!logId) throw new Error('Staff must set a private transcript channel before closing tickets.');
+    if (!logId) throw new Error('Staff must set a transcript channel before closing tickets.');
     const channel = await this.textChannel(interaction.guild, record.channelId);
-    const log = await this.privateChannel(interaction.guild, logId, config.staffRoleIds);
+    const log = await this.textChannel(interaction.guild, logId);
     if (log.id === channel.id) throw new Error('The transcript channel must be separate from the ticket being closed.');
     const bot = await interaction.guild.members.fetchMe({ force: true });
     if (!channel.permissionsFor(bot).has([PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles]) || !log.permissionsFor(bot).has([PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory])) throw new Error('The bot needs Read Message History, Manage Channels and Manage Roles in this ticket, and Attach Files plus Read Message History in the transcript channel.');
@@ -584,7 +579,7 @@ export class ModerationService {
       this.applicationCooldown.set(key, Date.now());
       if (this.applicationCooldown.size > 10000) this.applicationCooldown.delete(this.applicationCooldown.keys().next().value!);
       await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
-      const channel = await this.privateChannel(interaction.guild, config.reviewChannelId, config.reviewerRoleIds);
+      const channel = await this.textChannel(interaction.guild, config.reviewChannelId);
       const answers = config.questions.map((_q, index) => interaction.fields.getTextInputValue(`answer-${index}`).trim());
       if (answers.some(answer => !answer || answer.length > 800)) throw new Error('All application answers are required and must be at most 800 characters.');
       const id = randomUUID();
@@ -594,7 +589,7 @@ export class ModerationService {
         const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x619cec).setTitle(config.name).setDescription(`Applicant: <@${interaction.user.id}> (${interaction.user.id})`).addFields(config.questions.map((q, index) => ({ name: q, value: answers[index]! }))).setFooter({ text: id }).setTimestamp()], components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`mod:application:accept:${id}`).setLabel('Accept').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`mod:application:deny:${id}`).setLabel('Decline').setStyle(ButtonStyle.Danger))], allowedMentions: NONE });
         await this.store.update(interaction.guildId, data => { const saved = data.applications.find(application => application.id === id)!; saved.messageId = message.id; delete saved.operation; });
       } catch (error) { await this.markIssue(interaction.guildId, 'application', id, 'Application delivery was interrupted. Its review message may already exist; a server manager must inspect /support-recovery list. The message was not deleted or sent again.'); throw error; }
-      await interaction.editReply('Your application was sent to the staff team. They can now review your answers.');
+      await interaction.editReply('Your application was sent to the configured review channel. Authorized reviewers can now review your answers.');
     });
   }
   private async reviewApplication(interaction: ButtonInteraction<'cached'>): Promise<void> {
@@ -610,7 +605,7 @@ export class ModerationService {
       if (record.status !== 'pending') throw new Error('This application has already been reviewed.');
       if (record.operation) throw new Error('This application has an unfinished operation. A server manager must inspect /support-recovery list before another decision.');
       if (record.userId === actor.id) throw new Error('You cannot review your own application.');
-      await this.privateChannel(interaction.guild, record.channelId, config.reviewerRoleIds);
+      await this.textChannel(interaction.guild, record.channelId);
       let assignedRole: string | null = null;
       let applicant: GuildMember | null = null;
       let acceptedRole = null;

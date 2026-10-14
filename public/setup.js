@@ -19,7 +19,8 @@ function renderSupportSetup(main, kind) {
   session.config[kind][definitionKey] ||= [];
   if (tickets) {
     session.config.tickets.closeAction ||= 'archive';
-    session.config.tickets.types.forEach(type => { type.closeAction ||= 'archive'; });
+    session.config.tickets.visibility ??= 'private';
+    session.config.tickets.types.forEach(type => { type.closeAction ||= 'archive'; type.visibility ??= 'private'; });
   }
   session.config.panels ||= [];
   const definitions = () => session.config[kind][definitionKey];
@@ -37,14 +38,15 @@ function renderSupportSetup(main, kind) {
     return [!legacyMode && textField(sub, tickets ? 'Category name' : 'Form name', 'name', 'Shown to members when they choose an option.', { required: true, maxlength: 80 }),
       !legacyMode && toggleSection(sub, 'Accept new requests', 'Pause this option without removing existing records.', 'enabled'),
       ...(tickets ? [
-        channelField(sub, 'New ticket category', 'categoryId', 'Discord category for new private channels.', true),
+        channelField(sub, 'New ticket category', 'categoryId', 'Discord category where new ticket channels are created.', true),
+        choiceField(sub, 'Ticket visibility', 'visibility', [['inherit', 'Use Discord category permissions'], ['private', 'Private ticket']], 'Category permissions: copy its access rules when a ticket opens, then add the opener and Cyro. Later category changes do not sync to the ticket. Private: restrict access to the opener, support staff and Discord administrators. Applies to new tickets only.'),
         choiceField(sub, 'After saving the transcript', 'closeAction', [['archive', 'Keep a read-only channel'], ['delete', 'Delete the ticket channel']], 'Every close saves a downloadable transcript automatically. Delete mode removes the channel only after the complete export is confirmed; Cyro needs Manage Threads and Manage Webhooks to check for unsaved content.'),
         channelField(sub, 'Closed-ticket archive', 'archiveCategoryId', 'Used when keeping a read-only channel. Ignored when deleting after export.', true, 'Keep in current category'),
-        roleField(sub, 'Support staff roles', 'staffRoleIds', 'Who can access and manage these tickets.', true),
-        channelField(sub, 'Private transcript channel', 'logChannelId', 'Saved HTML transcripts appear here automatically. Large exports are compressed. Download files you want to keep; links to original message attachments can expire.'),
+        roleField(sub, 'Support staff roles', 'staffRoleIds', 'Who can manage tickets. With category permissions, give these roles channel access in Discord; private tickets grant them access automatically.', true),
+        channelField(sub, 'Transcript channel', 'logChannelId', 'Saved HTML transcripts appear here automatically. Anyone who can read this channel can read the transcripts; choose its permissions in Discord. Large exports are compressed, and original attachment links can expire.'),
         textField(sub, 'Open tickets per member', 'maxOpenPerUser', 'Applies to this ticket category.', { type: 'number', min: 1, max: 5, required: true })
       ] : [
-        channelField(sub, 'Private review channel', 'reviewChannelId', 'Application answers and decision buttons appear here.'),
+        channelField(sub, 'Review channel', 'reviewChannelId', 'Application answers and decision buttons appear here. Discord channel permissions decide who can read the answers; reviewer roles decide who can act on them.'),
         roleField(sub, 'Reviewer roles', 'reviewerRoleIds', 'Who can accept or deny this application.', true),
         roleField(sub, 'Role on acceptance', 'acceptedRoleId', 'Optional. Must be below Cyro and safe to assign.'),
         linesField(sub, 'Questions', 'questions', 'One question per line. Up to five questions, 100 characters each.', 5, 100)
@@ -89,7 +91,7 @@ function renderSupportSetup(main, kind) {
       session.change('panels', session.config.panels.map(value => value.kind === kind ? { ...value, options: value.options.map(option => option.id === 'default' ? { ...option, id: retained.id } : option) } : value));
     }
     const item = { ...base, enabled: true, id: newSettingId(tickets ? 'ticket' : 'form'), name: tickets ? 'New ticket category' : 'New application form' };
-    if (tickets) item.closeAction = 'delete';
+    if (tickets) { item.closeAction = 'delete'; item.visibility = 'inherit'; }
     session.change(`${kind}.${definitionKey}`, [...definitions(), item]); drawDefinitions(item.id); drawPanels();
   }
   function drawPanels(openId = null) {
@@ -152,7 +154,7 @@ function renderSupportSetup(main, kind) {
   const addPanel = () => {
     if (session.config.panels.length >= 25) return toast('Use up to 25 saved support and application panels per server.', true);
     const first = choices()[0];
-    const item = { id: newSettingId('panel'), name: tickets ? 'Support panel' : 'Application panel', kind, presentation: 'buttons', title: tickets ? 'How can we help?' : 'Join the team', description: tickets ? 'Choose a topic to open a private conversation with our team.' : 'Choose an application to get started. Your answers go privately to our reviewers.', options: first ? [{ id: first.id, label: first.name }] : [] };
+    const item = { id: newSettingId('panel'), name: tickets ? 'Support panel' : 'Application panel', kind, presentation: 'buttons', title: tickets ? 'How can we help?' : 'Join the team', description: tickets ? 'Choose a topic to open a ticket with our team. Ticket visibility follows this server\'s settings.' : 'Choose an application to get started. Your answers are posted in this server\'s review channel.', options: first ? [{ id: first.id, label: first.name }] : [] };
     session.change('panels', [...session.config.panels, item]); drawPanels(item.id);
   };
   drawDefinitions(); drawPanels();
@@ -161,7 +163,7 @@ function renderSupportSetup(main, kind) {
   settingsLayout(main, session, [panel(tickets ? 'Ticket categories' : 'Application forms', [toggleSection(session, tickets ? 'Enable support tickets' : 'Accept applications', 'Turn off new requests while retaining existing records.', `${kind}.enabled`), definitionList], button(tickets ? 'Add category' : 'Add form', addDefinition, 'secondary small', 'plus')),
     panel('Member panels', panelList, button('Add panel', addPanel, 'secondary small', 'plus'))],
     [contextCard('Set up, save, publish', 'Configure your options and staff access. Save changes, then publish a button or dropdown panel to any suitable Discord channel.', tickets ? 'ticket' : 'file'),
-      contextCard('Existing requests keep their settings', 'Open tickets and submitted applications retain their original staff access. Changes to a category apply to new requests.', 'lock')]);
+      contextCard('Existing requests keep their settings', 'Changing these options applies to new requests. Existing ticket channels keep their Discord permissions, and submitted applications keep their saved reviewer roles.', 'lock')]);
   const records = state.detail.moderation.snapshot[kind] || [];
   main.append(el('div', { className: 'section-gap' }, panel(tickets ? 'Recent tickets' : 'Recent applications', records.length ? table([tickets ? 'Ticket' : 'Form', 'Member', 'Status', 'Created', ...(tickets ? ['Transcript'] : [])], records.slice(0, 20).map(record => [tickets ? record.ticketType?.name || record.id : record.applicationForm?.name || 'General application', userLabel(tickets ? record.ownerId : record.userId), tag(capitalize(record.status), record.status === 'open' || record.status === 'accepted' ? 'green' : 'muted'), dateLabel(record.createdAt), ...(tickets ? [record.transcript?.channelId && record.transcript?.messageId ? el('a', { href: `https://discord.com/channels/${encodeURIComponent(state.guildId)}/${encodeURIComponent(record.transcript.channelId)}/${encodeURIComponent(record.transcript.messageId)}`, target: '_blank', rel: 'noopener noreferrer' }, 'Open saved transcript') : '—'] : [])])) : empty('No requests yet.', 'Published panels give members a place to get started.', tickets ? 'ticket' : 'file'))));
 }

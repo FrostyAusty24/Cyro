@@ -11,7 +11,7 @@ A Discord community bot with a web dashboard, creator alerts, moderation, ticket
 - **Creators:** group Twitch, Kick, YouTube and TikTok accounts under one creator; configure live announcements, supported video uploads, title filters and linked Discord roles. Streamer leaderboards cover measured time while a confirmed announcement is active.
 - **Moderation:** warnings, timeouts, kicks, bans, message cleanup, blocked phrases, spam controls and moderation records.
 - **Welcomes and roles:** custom welcome/goodbye text and image cards, automatic roles, self-role panels, reaction or image-challenge verification, and configurable custom-status rewards.
-- **Support:** multiple ticket categories and application forms, button/dropdown panels, staff claims, saved transcripts and optional ticket-channel deletion after a successful export.
+- **Support:** multiple ticket categories and application forms, button/dropdown panels, category-based or private ticket visibility, staff claims, saved transcripts and optional ticket-channel deletion after a successful export.
 - **Community:** counting, message XP, invite challenges, optional staff invite history, polls, embed publishing, suggestions/voting and anonymous public confession posts.
 - **Voice:** compatible direct audio/radio and supported public YouTube video links, plus 12 free Kokoro neural TTS voices for messages from members in the current call: six male and six female.
 - **Management:** Discord sign-in, per-server settings, owner-controlled dashboard/command access, server-specific bot appearance and staff leaderboards.
@@ -75,6 +75,8 @@ The optional TTS installer downloads pinned Kokoro q8 model assets and an isolat
 Start with `/dashboard`. Useful member commands include `/counting`, `/rank`, `/leaderboard`, `/invites`, `/streamer-leaderboard`, `/suggestion`, `/confess`, `/ticket open` and `/apply`. Voice commands include `/playmusic`, `/musicqueue`, `/skipmusic`, `/stopmusic`, `/addtts`, `/ttsvoice` and `/stoptts`.
 
 Platform commands such as `/twitch add`, `/twitch edit` and `/twitch test` manage alerts. `/streamalerts status` shows provider readiness. Staff use `/moderate`, `/ticket claim`, `/ticket close` and `/staff-leaderboard` according to current permissions. Most community features need channels, roles and an enabled setting before they can run. See [FEATURE_SETUP.md](FEATURE_SETUP.md).
+
+New ticket categories copy the chosen Discord category's access rules when each ticket opens, with access added for the opener and Cyro. Later category permission changes do not automatically update those ticket channels. Select **Private ticket** when you want Cyro to restrict new tickets to the opener, support staff and Discord administrators. Existing configurations keep their previous private behavior until changed; existing ticket channels are not changed by an upgrade. Transcript, application review, moderation log and invite log channels can use the audience you choose in Discord. Anyone who can read a destination channel can read the records posted there; staff action permissions remain separate.
 
 `AUTO_DEPLOY_COMMANDS=true` registers commands on startup. To register manually after a command change, run `npm run deploy-commands`. Use `npm run deploy-commands -- --dry-run` to inspect registration scope without changing Discord.
 

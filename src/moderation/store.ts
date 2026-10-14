@@ -42,11 +42,15 @@ export class ModerationStore {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid moderation database.');
       for (const [id, value] of Object.entries(parsed)) {
         if (!isSnowflake(id) || !value || typeof value !== 'object' || !Array.isArray(value.cases) || !Array.isArray(value.tickets) || !Array.isArray(value.applications) || !value.config) throw new Error('Invalid moderation guild record.');
-        value.config.tickets = { ...DEFAULT_CONFIG.tickets, ...value.config.tickets };
+        value.config.tickets = { ...DEFAULT_CONFIG.tickets, ...value.config.tickets, visibility: value.config.tickets.visibility ?? 'private' };
+        for (const type of value.config.tickets.types ?? []) type.visibility ??= 'private';
         value.config.applications = { ...DEFAULT_CONFIG.applications, ...value.config.applications };
         value.config.panels ??= [];
         // Freeze the historical audience and destinations before an administrator can edit definitions.
-        for (const ticket of value.tickets) ticket.ticketType ??= structuredClone(ticketTypes(value.config)[0]);
+        for (const ticket of value.tickets) {
+          ticket.ticketType ??= structuredClone(ticketTypes(value.config)[0]);
+          if (ticket.ticketType) ticket.ticketType.visibility ??= 'private';
+        }
         for (const application of value.applications) application.applicationForm ??= { ...structuredClone(applicationForms(value.config)[0]), questions: [...application.questions], reviewChannelId: application.channelId };
       }
       this.state = parsed as Record<string, GuildState>;

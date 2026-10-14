@@ -11,7 +11,7 @@ it('journals a ticket before Discord creation and blocks another creation while 
   const category = { id: 'category', guild: { id: guildId }, type: 4, permissionsFor: () => ({ has: () => true }) };
   const guild = { id: guildId, members: { fetch: async () => actor, fetchMe: async () => ({ id: 'bot' }) }, roles: { fetch: async () => ({ id: 'staff', guild: { id: guildId }, managed: false }) }, channels: { fetch: async (id?: string) => id ? category : new Map(), create: async () => { attempts++; expect(JSON.parse(disk)[guildId].tickets[0].operation.kind).toBe('ticket-create'); throw new Error('Response lost after creation'); } } };
   const service = new ModerationService({} as never, '.', { warn() {}, error() {} } as never);
-  (service as any).store = store; (service as any).privateChannel = async () => ({ id: 'log' });
+  (service as any).store = store; (service as any).textChannel = async () => ({ id: 'log' });
   const interaction = { guildId, guild, user: { id: 'owner' } };
   await expect((service as any).ticket(interaction, 'open')).rejects.toThrow('Response lost');
   expect(store.read(guildId).tickets[0]?.operation?.stage).toBe('needs-review');
