@@ -24,7 +24,7 @@ function createChild(directory: string): ChildProcess {
 }
 
 interface Job {
-  id: number; text: string; voice: string; signal?: AbortSignal; abort: () => void;
+  id: number; text: string; voice: string; speakerName?: string; signal?: AbortSignal; abort: () => void;
   resolve: (wav: Buffer) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>;
 }
 interface RuntimeOptions { directory?: string; spawn?: () => ChildProcess; timeoutMs?: number; idleMs?: number; maxPending?: number }
@@ -52,13 +52,13 @@ export class NeuralTtsQueue {
     this.maxPending = options.maxPending ?? 12;
   }
 
-  synthesize(text: string, voice: string, signal?: AbortSignal): Promise<Buffer> {
+  synthesize(text: string, voice: string, signal?: AbortSignal, speakerName?: string): Promise<Buffer> {
     if (this.closed) return Promise.reject(new Error('Speech is stopping.'));
     if (signal?.aborted) return Promise.reject(new Error('Speech was cancelled.'));
     if (this.queue.length + (this.active ? 1 : 0) >= this.maxPending) return Promise.reject(new Error('Cyro has too many speech messages waiting. Try again shortly.'));
     return new Promise((resolve, reject) => {
       const job: Job = {
-        id: ++this.nextId, text, voice, signal, resolve, reject,
+        id: ++this.nextId, text, voice, speakerName, signal, resolve, reject,
         abort: () => this.cancel(job, new Error('Speech was cancelled.')),
         timer: setTimeout(() => this.cancel(job, new Error('Speech took too long. Try a shorter message.')), this.timeoutMs),
       };
@@ -76,6 +76,7 @@ export class NeuralTtsQueue {
     if (index !== -1) this.queue.splice(index, 1);
     // Drop the message content as soon as the request leaves the queue.
     job.text = '';
+    job.speakerName = undefined;
     if (error) job.reject(error); else job.resolve(wav!);
   }
 
@@ -119,7 +120,7 @@ export class NeuralTtsQueue {
   private send(job: Job): void {
     if (!this.child?.connected || this.active !== job) { this.cancel(job, new Error('The speech worker disconnected.')); return; }
     try {
-      this.child.send({ type: 'synthesize', id: job.id, text: job.text, voice: job.voice }, error => {
+      this.child.send({ type: 'synthesize', id: job.id, text: job.text, voice: job.voice, speakerName: job.speakerName }, error => {
         if (error && this.active === job) this.cancel(job, new Error('The speech worker could not accept this message.'));
       });
     } catch { this.cancel(job, new Error('The speech worker could not accept this message.')); }

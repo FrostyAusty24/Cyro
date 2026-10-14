@@ -1,6 +1,6 @@
 import type { VoiceConfig, VoiceId } from './store.js';
 export type VoiceMode='music'|'tts';
-export interface QueueItem {kind:VoiceMode;title:string;url?:string;text?:string;voice?:VoiceId;canPlay?:()=>boolean|Promise<boolean>;onFailure?:(error:unknown,signal:AbortSignal)=>Promise<void>}
+export interface QueueItem {kind:VoiceMode;title:string;url?:string;text?:string;voice?:VoiceId;speakerName?:string;canPlay?:()=>boolean|Promise<boolean>;onFailure?:(error:unknown,signal:AbortSignal)=>Promise<void>}
 export interface VoiceOutput {play(item:QueueItem,config:VoiceConfig,signal:AbortSignal):Promise<void>;stop():void;close():void}
 interface Room {guildId:string;channelId:string;mode:VoiceMode;config:VoiceConfig;queue:QueueItem[];controller:AbortController;connection:Promise<void>;output?:VoiceOutput;current?:QueueItem;track?:AbortController;pump?:Promise<void>;idle?:ReturnType<typeof setTimeout>;startedAt:number;ttsReadyAt?:number}
 export class VoiceSessions {

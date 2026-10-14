@@ -92,6 +92,7 @@ function heading(title, description, action = null) { return el('header', { clas
 function contextCard(title, text, iconName = 'help', extra = null) { return el('section', { className: 'context-card' }, el('span', { className: 'module-icon' }, icon(iconName)), el('h3', {}, title), el('p', {}, text), extra); }
 
 function renderLanding(error = null) {
+  window.CyroSearchSelect.close();
   closeNavigation?.(false);
   closeNavigation = null;
   const setup = state.status && !state.status.configured;
@@ -101,15 +102,17 @@ function renderLanding(error = null) {
 function feature(iconName, color, title, copy) { return el('div', { className: 'module-row' }, el('div', { className: `module-icon ${color}` }, icon(iconName)), el('div', { className: 'module-text' }, el('div', { className: 'module-name' }, title), el('div', { className: 'module-copy' }, copy))); }
 
 function renderShell() {
+  window.CyroSearchSelect.close();
   closeNavigation?.(false);
   state.page = navigation.some(item => item[0] === location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
   const active = navigation.find(item => item[0] === state.page);
-  const select = el('select', { id: 'guild-select', onChange: event => selectGuild(event.target.value) }, state.guilds.map(g => el('option', { value: g.id, selected: g.id === state.guildId }, g.name + (g.installed ? '' : ' · Add bot'))));
+  const select = el('select', { id: 'guild-select', 'data-search-kind': 'servers', onChange: event => selectGuild(event.target.value) }, state.guilds.map(g => el('option', { value: g.id, selected: g.id === state.guildId }, g.name + (g.installed ? '' : ' · Add bot'))));
+  const guildPicker = window.CyroSearchSelect.enhance(select, 'Your server');
   const nav = el('nav', { className: 'nav', 'aria-label': 'Community settings' }, navigation.map(([key, label, iconName]) => [({ overview: 'Workspace', streams: 'Creators', counting: 'Community', moderation: 'Server management' })[key] && el('p', { className: 'nav-label' }, ({ overview: 'Workspace', streams: 'Creators', counting: 'Community', moderation: 'Server management' })[key]), el('a', { href: `#${key}`, ...(key === state.page ? { 'aria-current': 'page' } : {}) }, icon(iconName), label)]));
   const shell = el('div', { className: 'shell' });
   const toggleMenu = () => setMenuOpen(!shell.classList.contains('menu-open'));
   const menuButton = el('button', { type: 'button', className: 'menu-toggle', 'aria-label': 'Toggle navigation', 'aria-controls': 'server-navigation', 'aria-expanded': 'false', onClick: toggleMenu }, icon('menu'));
-  const sidebar = el('aside', { id: 'server-navigation', className: 'sidebar', 'aria-label': 'Server navigation' }, brand(), el('div', { className: 'guild-control' }, el('label', { for: 'guild-select' }, 'Your server'), select), nav, el('div', { className: 'sidebar-foot' }, el('a', { className: 'install-link', href: '/invite' }, icon('plus'), 'Add to another server'), el('a', { className: 'community-link', href: 'https://discord.gg/dAZheerkkD', target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Headache Development community and support (opens in a new tab)' }, icon('discord'), el('span', {}, 'Headache Development', el('small', {}, 'Community & support')), icon('arrow')), el('nav', { className: 'dashboard-public-links', 'aria-label': 'Creator and legal links' }, el('a', { href: '/?home=1' }, 'About Cyro'), el('a', { href: '/connections' }, 'My connections'), el('a', { href: '/privacy' }, 'Privacy'), el('a', { href: '/terms' }, 'Terms'))));
+  const sidebar = el('aside', { id: 'server-navigation', className: 'sidebar', 'aria-label': 'Server navigation' }, brand(), el('div', { className: 'guild-control' }, el('label', { for: guildPicker === select ? 'guild-select' : 'guild-select-trigger' }, 'Your server'), guildPicker), nav, el('div', { className: 'sidebar-foot' }, el('a', { className: 'install-link', href: '/invite' }, icon('plus'), 'Add to another server'), el('a', { className: 'community-link', href: 'https://discord.gg/dAZheerkkD', target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Headache Development community and support (opens in a new tab)' }, icon('discord'), el('span', {}, 'Headache Development', el('small', {}, 'Community & support')), icon('arrow')), el('nav', { className: 'dashboard-public-links', 'aria-label': 'Creator and legal links' }, el('a', { href: '/?home=1' }, 'About Cyro'), el('a', { href: '/connections' }, 'My connections'), el('a', { href: '/privacy' }, 'Privacy'), el('a', { href: '/terms' }, 'Terms'))));
   const title = state.me?.user?.username || 'Your account';
   const topbar = el('header', { className: 'topbar' }, el('div', { className: 'breadcrumb' }, menuButton, icon('grid'), el('span', { className: 'breadcrumb-context' }, state.guilds.find(g => g.id === state.guildId)?.name || 'Your servers'), icon('chevron'), el('strong', {}, active[1])), el('div', { className: 'topbar-right' }, el('span', { className: 'status-pill' }, DEMO ? 'Demo session' : 'Connected to Discord'), el('div', { className: 'user-menu' }, el('span', { className: 'avatar', title }, title.slice(0, 2).toUpperCase()), el('button', { type: 'button', className: 'signout', onClick: logout }, 'Sign out'))));
   const main = el('main', { id: 'main', className: 'content', tabindex: '-1' });
@@ -122,7 +125,7 @@ function renderShell() {
     if (open) {
       sidebar.setAttribute('role', 'dialog');
       sidebar.setAttribute('aria-modal', 'true');
-      (sidebar.querySelector('[aria-current="page"]') || select).focus();
+      (sidebar.querySelector('[aria-current="page"]') || (guildPicker === select ? select : guildPicker.querySelector('button'))).focus();
     } else {
       sidebar.removeAttribute('role');
       sidebar.removeAttribute('aria-modal');
@@ -134,7 +137,7 @@ function renderShell() {
     if (!shell.classList.contains('menu-open')) return;
     if (event.key === 'Escape') { event.preventDefault(); setMenuOpen(false); return; }
     if (event.key !== 'Tab') return;
-    const controls = [...sidebar.querySelectorAll('a[href], select:not(:disabled), button:not(:disabled)')].filter(node => node.getClientRects().length);
+    const controls = [...sidebar.querySelectorAll('a[href], input:not(:disabled), select:not(:disabled):not([aria-hidden="true"]), button:not(:disabled)')].filter(node => node.getClientRects().length);
     const first = controls[0], last = controls.at(-1);
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -209,7 +212,7 @@ function formSession(type) {
   });
   return { config, change, form, onSaved(callback) { afterSave = callback; }, finish() { form.append(el('div', { className: 'save-bar' }, message, save)); return form; } };
 }
-function field(label, input, hint = null) { const id = `field-${Math.random().toString(36).slice(2, 10)}`; input.id = id; if (hint) input.setAttribute('aria-describedby', `${id}-hint`); return el('div', { className: 'field' }, el('label', { for: id, className: 'field-label' }, label), input, hint && el('span', { className: 'field-hint', id: `${id}-hint` }, hint)); }
+function field(label, input, hint = null) { const id = `field-${Math.random().toString(36).slice(2, 10)}`; input.id = id; if (hint) input.setAttribute('aria-describedby', `${id}-hint`); const searchable = input.tagName === 'SELECT' && input.dataset.searchKind; const control = searchable ? window.CyroSearchSelect.enhance(input, label) : input; return el('div', { className: 'field' }, el('label', { for: control === input ? id : `${id}-trigger`, className: 'field-label' }, label), control, hint && el('span', { className: 'field-hint', id: `${id}-hint` }, hint)); }
 function textField(session, label, path, hint = '', options = {}) {
   const textarea = options.multiline;
   const input = el(textarea ? 'textarea' : 'input', { type: options.type || 'text', value: byPath(session.config, path) ?? '', placeholder: options.placeholder || '', min: options.min, max: options.max, maxlength: options.maxlength, required: options.required, rows: textarea ? options.rows || 3 : null, onInput: event => { const value = options.type === 'number' ? (event.target.value === '' ? null : Number(event.target.value)) : event.target.value; session.change(path, value); options.onInput?.(value); } });
@@ -222,14 +225,16 @@ function linesField(session, label, path, hint, maxLines = 20, maxLength = 200) 
 function channelField(session, label, path, hint, category = false, emptyLabel = null, textOnly = false) {
   const current = byPath(session.config, path);
   const options = (state.detail.channels || []).filter(c => category ? c.type === 4 || c.type === 'GuildCategory' : c.type === 0 || c.type === 'GuildText' || (!textOnly && (c.type === 5 || c.type === 'GuildAnnouncement')));
-  const select = el('select', { onChange: event => session.change(path, event.target.value || null) }, el('option', { value: '', selected: !current }, emptyLabel || (category ? 'Select a category' : 'Select a channel')), options.map(c => el('option', { value: c.id, selected: current === c.id }, `${category ? '' : '# '}${c.name}`)), current && !options.some(c => c.id === current) && el('option', { value: current, selected: true }, `Unavailable · ${current}`));
+  const select = el('select', { 'data-search-kind': category ? 'categories' : 'channels', onChange: event => session.change(path, event.target.value || null) }, el('option', { value: '', selected: !current }, emptyLabel || (category ? 'Select a category' : 'Select a channel')), options.map(c => el('option', { value: c.id, selected: current === c.id }, `${category ? '' : '# '}${c.name}`)), current && !options.some(c => c.id === current) && el('option', { value: current, selected: true }, `Unavailable · ${current}`));
   return field(label, select, hint);
 }
 function roleField(session, label, path, hint, multiple = false) {
   const current = byPath(session.config, path);
   const roles = (state.detail.roles || []).filter(role => role.id !== state.guildId && !role.managed);
-  const select = el('select', { multiple, size: multiple ? Math.min(5, Math.max(3, roles.length)) : null, onChange: event => session.change(path, multiple ? [...event.target.selectedOptions].map(o => o.value).filter(Boolean) : event.target.value || null) }, !multiple && el('option', { value: '', selected: !current }, 'No role'), roles.map(role => el('option', { value: role.id, selected: multiple ? (current || []).includes(role.id) : current === role.id }, role.name)));
-  return field(label, select, hint + (multiple ? ' Hold Ctrl (Windows) or Command (Mac) to select multiple roles.' : ''));
+  const selectedIds = multiple ? current || [] : current ? [current] : [];
+  const missing = selectedIds.filter(id => !roles.some(role => role.id === id));
+  const select = el('select', { 'data-search-kind': 'roles', multiple, size: multiple ? Math.min(5, Math.max(3, roles.length)) : null, onChange: event => session.change(path, multiple ? [...event.target.selectedOptions].map(o => o.value).filter(Boolean) : event.target.value || null) }, !multiple && el('option', { value: '', selected: !current }, 'No role'), roles.map(role => el('option', { value: role.id, selected: selectedIds.includes(role.id) }, role.name)), missing.map(id => el('option', { value: id, selected: true }, `Unavailable role · ${id}`)));
+  return field(label, select, (hint || '') + (multiple ? ' Search and select as many roles as you need.' : ''));
 }
 function toggleSection(session, title, text, path) { return el('div', { className: 'form-section' }, el('div', { className: 'toggle-row' }, el('div', {}, el('h3', {}, title), el('p', {}, text)), toggleControl(title, Boolean(byPath(session.config, path)), value => session.change(path, value)))); }
 function settingsLayout(main, session, sections, aside) { session.form.append(...sections); main.append(el('div', { className: 'settings-grid' }, session.finish(), el('aside', {}, aside))); }
@@ -264,7 +269,8 @@ function renderWelcome(main) {
   const rolesArea = el('div', {});
   const renderRoleRows = () => {
     const roles = session.config.selfRoles.roles;
-    rolesArea.replaceChildren(...roles.map((entry, index) => el('div', { className: 'self-role-row' }, field('Role', el('select', { 'aria-label': `Self role ${index + 1}`, onChange: e => { entry.roleId = e.target.value; session.change('selfRoles.roles', roles); } }, el('option', { value: '', selected: !entry.roleId }, 'Select a role'), (state.detail.roles || []).filter(r => r.id !== state.guildId && !r.managed).map(role => el('option', { value: role.id, selected: role.id === entry.roleId }, role.name)))), field('Button label', el('input', { type: 'text', maxlength: 80, value: entry.label, placeholder: 'Choose this role', onInput: e => { entry.label = e.target.value; session.change('selfRoles.roles', roles); } })), el('button', { type: 'button', className: 'icon-button', 'aria-label': `Remove self role ${index + 1}`, onClick: () => { roles.splice(index, 1); session.change('selfRoles.roles', roles); renderRoleRows(); } }, icon('trash')))));
+    const availableRoles = (state.detail.roles || []).filter(role => role.id !== state.guildId && !role.managed);
+    rolesArea.replaceChildren(...roles.map((entry, index) => el('div', { className: 'self-role-row' }, field('Role', el('select', { 'data-search-kind': 'roles', 'aria-label': `Self role ${index + 1}`, onChange: e => { entry.roleId = e.target.value; session.change('selfRoles.roles', roles); } }, el('option', { value: '', selected: !entry.roleId }, 'Select a role'), availableRoles.map(role => el('option', { value: role.id, selected: role.id === entry.roleId }, role.name)), entry.roleId && !availableRoles.some(role => role.id === entry.roleId) && el('option', { value: entry.roleId, selected: true }, `Unavailable role · ${entry.roleId}`))), field('Button label', el('input', { type: 'text', maxlength: 80, value: entry.label, placeholder: 'Choose this role', onInput: e => { entry.label = e.target.value; session.change('selfRoles.roles', roles); } })), el('button', { type: 'button', className: 'icon-button', 'aria-label': `Remove self role ${index + 1}`, onClick: () => { roles.splice(index, 1); session.change('selfRoles.roles', roles); renderRoleRows(); } }, icon('trash')))));
     rolesArea.append(button('Add a role', () => { if (roles.length >= 20) return toast('You can add up to 20 self roles.', true); roles.push({ roleId: '', label: '' }); session.change('selfRoles.roles', roles); renderRoleRows(); }, 'secondary small', 'plus'));
   };
   renderRoleRows();
@@ -578,8 +584,8 @@ function confirmAction(title, description, confirmText = 'Discard changes', canc
 }
 
 async function selectGuild(id, force = false) {
-  if (state.saving) { toast('Please wait for your settings to finish saving.'); document.getElementById('guild-select').value = state.guildId; return; }
-  if (state.dirty && !force && !await confirmAction('Leave your unsaved changes?', 'Your changes have not been saved. Switching servers will discard them.')) { document.getElementById('guild-select').value = state.guildId; return; }
+  if (state.saving) { toast('Please wait for your settings to finish saving.'); const select = document.getElementById('guild-select'); select.value = state.guildId; window.CyroSearchSelect.sync(select); return; }
+  if (state.dirty && !force && !await confirmAction('Leave your unsaved changes?', 'Your changes have not been saved. Switching servers will discard them.')) { const select = document.getElementById('guild-select'); select.value = state.guildId; window.CyroSearchSelect.sync(select); return; }
   state.dirty = false; state.streamEditor = null; state.creatorEditor = null; state.guildId = id; state.detail = null; state.loadError = null;
   const sequence = ++state.loadSequence;
   const url = new URL(location.href); url.searchParams.set('guild', id); history.replaceState({}, '', url);
@@ -635,7 +641,7 @@ function demoData() {
   state.demoDetail.statusRoles = { config: { enabled: true, text: 'discord.gg/commonroom', roleId: `${role}5`, match: 'contains', caseSensitive: false, offlineBehavior: 'keep' }, available: true, counts: { assigned: 18, pendingAdd: 0, pendingRemove: 0 }, warnings: [] };
   state.demoDetail.channels.push({ id: `${channel}10`, name: 'The lounge', type: 2 }, { id: `${channel}11`, name: 'confessions', type: 0 });
   state.demoDetail.voice = {
-    config: { musicEnabled: true, ttsEnabled: true, defaultVoice: 'voice1', volume: 50, maxTrackMinutes: 15 },
+    config: { musicEnabled: true, ttsEnabled: true, announceSpeaker: false, defaultVoice: 'voice1', volume: 50, maxTrackMinutes: 15 },
     voices: [
       { id: 'voice1', name: 'Daniel · British male', gender: 'male', accent: 'British' },
       { id: 'voice2', name: 'Michael · American male', gender: 'male', accent: 'American' },

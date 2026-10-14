@@ -2,6 +2,8 @@
 
 Sign in to the dashboard with **Manage Server** permission and select the correct Discord server. Settings belong to that server. This guide describes setup; it does not confirm deployment or a live Discord test.
 
+Server, channel, category and role pickers support search. Open a picker and type part of its name to narrow the list. Multiple-role pickers keep existing selections while you search for another role. Use the arrow keys and Enter to choose an option, or Escape to close without choosing another value.
+
 YouTube notifications require a valid `YOUTUBE_API_KEY` in the running hosted environment. TikTok public-video alerts require configured Login Kit credentials and each creator's consent; sandbox target users can test before production approval. TikTok LIVE is a separate, best-effort feature.
 
 **Support tickets and application forms**
@@ -144,6 +146,8 @@ The public `/roles-panel` and legacy `/ticket panel` also use embedded cards. Mo
 ## Cyro 2.12 — Music, TTS and anonymous confessions
 
 Music & TTS is available in the dashboard. Join a regular server voice channel and use `/playmusic link:<YouTube or direct audio URL>` to queue MP3, WAV, OGG, FLAC, AAC and compatible direct media/radio streams. Use `/musicqueue`, `/skipmusic` and `/stopmusic`. Cyro joins your current call even if the command is used in a different text channel. Single public recorded YouTube videos are also supported when the optional pinned source runtime is installed and YouTube permits access from the host. Cyro validates metadata before joining, enforces the server duration limit, and resolves fresh audio when each queued track starts. Playlists, livestreams and restricted videos are not supported. Spotify does not provide full-track audio for this player; it returns a clear explanation. Late playback failures receive a private command follow-up where Discord permits it. Queues hold up to 25 waiting tracks and are discarded on restart. Server admins control music/TTS availability, volume and maximum track length. The decoder also has a hard 30-minute/64 MiB source limit.
+
+Turn on **Say the speaker’s name** to hear a short prefix such as “Frosty said:” before each message. This option starts off and is saved per server. It uses the member’s server display name (with a username fallback) and the same personal voice as their message. Name announcements do not reduce the existing 400-character message allowance. Save the setting; it also applies to the current TTS session.
 
 `/addtts` starts a separate TTS session in your current call. An embed announces that new messages in that call's chat from people in the call will be spoken. No microphone audio is received. `/ttsvoice voice:<choice>` or `/ttsvoice1` through `/ttsvoice12` selects a personal voice for that server. The 12 choices include six male and six female voices with British and American accents. These are free Kokoro neural voices generated locally on Cyro’s host. The numbered shortcuts keep their existing IDs; `/ttsvoice1` and the default `voice1` select Daniel (`bm_daniel`). `/stoptts` disconnects. Text is limited to 400 characters, one queued message per member every two seconds, and ten waiting messages; links, mentions and spoilers are not expanded. Messages are not saved as a speech history. One voice channel/mode is supported per server at a time; sessions leave when empty or idle (one minute music, five minutes TTS). Voice role restrictions are under Access & commands; all numbered voice aliases follow the `/ttsvoice` rule.
 

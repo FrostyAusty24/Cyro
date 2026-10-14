@@ -46,7 +46,7 @@ async function renderStatusRoles(main) {
   const statusText = textField(session, 'Status text to match', 'text', 'A phrase, your server name, or an invite link. Up to 128 characters; spaces at the ends are trimmed when saved.', { maxlength: 128, placeholder: 'discord.gg/your-community' });
   const textInput = statusText.querySelector('input');
   const roles = (detail.roles || []).filter(role => role.id !== guildId && !role.managed);
-  const roleInput = el('select', { onChange: event => session.change('roleId', event.target.value || null) },
+  const roleInput = el('select', { 'data-search-kind': 'roles', onChange: event => session.change('roleId', event.target.value || null) },
     el('option', { value: '', selected: !config.roleId }, 'Select a reward role'),
     roles.map(role => el('option', { value: role.id, selected: role.id === config.roleId }, role.name)),
     config.roleId && !roles.some(role => role.id === config.roleId) && el('option', { value: config.roleId, selected: true }, `Unavailable role · ${config.roleId}`));

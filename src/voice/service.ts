@@ -9,10 +9,11 @@ import { VOICE_COMMAND_NAMES } from './commands.js';
 import { randomUUID } from 'node:crypto';
 import { audioAvailable } from './audio.js';
 import { parseYouTubeUrl, resolveYouTubeSource, youtubeAvailable, YouTubeSourceError } from './youtube.js';
+import { speechSpeakerName, TTS_MAX_CHARACTERS } from './speech-text.js';
 
 export function spokenText(text:string):string {
   if(text.trimStart().startsWith('/'))return '';
-  return text.replace(/\|\|[\s\S]*?\|\|/g,' spoiler ').replace(/https?:\/\/\S+/gi,' link ').replace(/<@!?\d+>/g,'someone').replace(/<@&\d+>/g,'role').replace(/<#\d+>/g,'channel').replace(/<a?:(\w+):\d+>/g,'$1').replace(/@everyone|@here/g,'everyone').replace(/[`*_~]/g,'').replace(/[\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,400);
+  return text.replace(/\|\|[\s\S]*?\|\|/g,' spoiler ').replace(/https?:\/\/\S+/gi,' link ').replace(/<@!?\d+>/g,'someone').replace(/<@&\d+>/g,'role').replace(/<#\d+>/g,'channel').replace(/<a?:(\w+):\d+>/g,'$1').replace(/@everyone|@here/g,'everyone').replace(/[`*_~]/g,'').replace(/[\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,TTS_MAX_CHARACTERS);
 }
 export class VoiceService {
   private store:VoiceStore;readonly sessions:VoiceSessions;private stopped=false;private attached=false;private active=new Set<Promise<unknown>>();private speechCooldown=new Map<string,number>();
@@ -153,7 +154,8 @@ export class VoiceService {
     if(this.speechCooldown.size>=10000)return false;
     this.speechCooldown.set(key,now+2000);
     const state=this.store.get(message.guildId),voice=state.voices[message.author.id]??state.config.defaultVoice;
-    try{this.sessions.enqueue(message.guildId,session.channelId,{kind:'tts',title:'Spoken chat message',text,voice,canPlay:async()=>{
+    const speakerName=state.config.announceSpeaker?speechSpeakerName(message.member.displayName,message.author.username):undefined;
+    try{this.sessions.enqueue(message.guildId,session.channelId,{kind:'tts',title:'Spoken chat message',text,voice,speakerName,canPlay:async()=>{
       if(this.stopped||!message.guild||!this.getConfig(message.guildId!).ttsEnabled)return false;
       try{const current=await this.memberChannel(message.guild,message.author.id,'addtts');return current.channel.id===session.channelId;}catch{return false;}
     }});return true;}catch{return false;}

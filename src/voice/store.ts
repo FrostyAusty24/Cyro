@@ -4,13 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { isVoiceId, type VoiceId } from './catalog.js';
 
 export { isVoiceId, type VoiceId } from './catalog.js';
-export interface VoiceConfig { musicEnabled:boolean; ttsEnabled:boolean; defaultVoice:VoiceId; volume:number; maxTrackMinutes:number }
+export interface VoiceConfig { musicEnabled:boolean; ttsEnabled:boolean; announceSpeaker:boolean; defaultVoice:VoiceId; volume:number; maxTrackMinutes:number }
 interface VoiceGuild {config:VoiceConfig; voices:Record<string,VoiceId>}
-export const defaultVoiceConfig=():VoiceConfig=>({musicEnabled:true,ttsEnabled:true,defaultVoice:'voice1',volume:50,maxTrackMinutes:15});
+export const defaultVoiceConfig=():VoiceConfig=>({musicEnabled:true,ttsEnabled:true,announceSpeaker:false,defaultVoice:'voice1',volume:50,maxTrackMinutes:15});
 export function parseVoiceConfig(input:unknown):VoiceConfig {
   const v=input as VoiceConfig;
-  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!['musicEnabled','ttsEnabled','defaultVoice','volume','maxTrackMinutes'].includes(k))||typeof v.musicEnabled!=='boolean'||typeof v.ttsEnabled!=='boolean'||!isVoiceId(v.defaultVoice)||!Number.isInteger(v.volume)||v.volume<5||v.volume>100||!Number.isInteger(v.maxTrackMinutes)||v.maxTrackMinutes<1||v.maxTrackMinutes>30)throw new Error('Choose valid voice settings: volume 5–100, track limit 1–30 minutes, and an available voice.');
-  return {musicEnabled:v.musicEnabled,ttsEnabled:v.ttsEnabled,defaultVoice:v.defaultVoice,volume:v.volume,maxTrackMinutes:v.maxTrackMinutes};
+  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!['musicEnabled','ttsEnabled','announceSpeaker','defaultVoice','volume','maxTrackMinutes'].includes(k))||typeof v.musicEnabled!=='boolean'||typeof v.ttsEnabled!=='boolean'||(v.announceSpeaker!==undefined&&typeof v.announceSpeaker!=='boolean')||!isVoiceId(v.defaultVoice)||!Number.isInteger(v.volume)||v.volume<5||v.volume>100||!Number.isInteger(v.maxTrackMinutes)||v.maxTrackMinutes<1||v.maxTrackMinutes>30)throw new Error('Choose valid voice settings: volume 5–100, track limit 1–30 minutes, and an available voice.');
+  return {musicEnabled:v.musicEnabled,ttsEnabled:v.ttsEnabled,announceSpeaker:v.announceSpeaker??false,defaultVoice:v.defaultVoice,volume:v.volume,maxTrackMinutes:v.maxTrackMinutes};
 }
 const snowflake=(s:string)=>/^\d{17,20}$/.test(s);
 export class VoiceStore {

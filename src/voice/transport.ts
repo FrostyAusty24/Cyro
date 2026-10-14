@@ -28,7 +28,7 @@ export async function connectVoice(client:Client,guildId:string,channelId:string
       const abort=new AbortController();playbackAbort=abort;const cancel=()=>abort.abort();trackSignal.addEventListener('abort',cancel,{once:true});signal.addEventListener('abort',cancel,{once:true});
       let limit:ReturnType<typeof setTimeout>|undefined;let source:AudioSource|undefined;
       try{
-        source=item.kind==='music'?await loadMusicSource(item.url!,{signal:abort.signal,maxDurationSeconds:config.maxTrackMinutes*60}):await pcmSpeech(item.text!,item.voice,abort.signal);
+        source=item.kind==='music'?await loadMusicSource(item.url!,{signal:abort.signal,maxDurationSeconds:config.maxTrackMinutes*60}):await pcmSpeech(item.text!,item.voice,abort.signal,config.announceSpeaker?item.speakerName:undefined);
         abort.signal.throwIfAborted();
         limit=setTimeout(cancel,item.kind==='music'?config.maxTrackMinutes*60_000:60_000);limit.unref();
         const resource=createAudioResource(source.stream,{inputType:StreamType.Raw,inlineVolume:true});resource.volume?.setVolume(config.volume/100);

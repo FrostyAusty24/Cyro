@@ -14,16 +14,18 @@ function wav() { const result = Buffer.alloc(100); result.write('RIFF'); result.
 it('serializes inference across callers using one reusable child', async () => {
   const child = fakeChild(), spawn = vi.fn(() => child as any);
   const runtime = new NeuralTtsQueue({ spawn });
-  const first = runtime.synthesize('First message', 'bm_daniel');
+  const first = runtime.synthesize('First message', 'bm_daniel', undefined, 'Frosty');
   const second = runtime.synthesize('Second message', 'af_heart');
   expect(spawn).toHaveBeenCalledTimes(1);
   child.emit('message', { type: 'ready' });
   expect(child.send).toHaveBeenCalledTimes(1);
   const firstId = child.send.mock.calls[0][0].id;
+  expect(child.send.mock.calls[0][0]).toMatchObject({ text: 'First message', speakerName: 'Frosty' });
   child.emit('message', { type: 'result', id: firstId, wav: wav() });
   await expect(first).resolves.toEqual(wav());
   expect(child.send).toHaveBeenCalledTimes(2);
   const secondId = child.send.mock.calls[1][0].id;
+  expect(child.send.mock.calls[1][0].speakerName).toBeUndefined();
   child.emit('message', { type: 'result', id: secondId, wav: wav() });
   await expect(second).resolves.toEqual(wav());
   expect(spawn).toHaveBeenCalledTimes(1);

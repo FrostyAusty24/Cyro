@@ -101,8 +101,8 @@ export async function loadMusicSource(url: string, options: MusicSourceOptions =
   catch (error) { download.cleanup(); throw error; }
 }
 
-export async function pcmSpeech(text: string, voiceId: string = 'voice1', signal?: AbortSignal): Promise<AudioSource> {
-  const wav = await synthesizeSpeech(text, voiceId, signal);
+export async function pcmSpeech(text: string, voiceId: string = 'voice1', signal?: AbortSignal, speakerName?: string): Promise<AudioSource> {
+  const wav = await synthesizeSpeech(text, voiceId, signal, speakerName);
   const voice = TTS_VOICES.find(item => item.id === voiceId)!;
   return decodeAudio(Readable.from([wav]), `${voice.name} TTS`, { signal, maxDurationSeconds: 90 });
 }

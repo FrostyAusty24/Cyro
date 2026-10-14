@@ -57,6 +57,7 @@ async function renderVoice(main) {
       textField(session, 'Maximum time per track (minutes)', 'maxTrackMinutes', 'Between 1 and 30 minutes. Radio streams also stop at this limit so the queue can move on.', { type: 'number', min: 1, max: 30, required: true }))]),
     panel('Text to speech', [
       toggleSection(session, 'Enable text to speech', 'Read new messages from the active voice channel’s text chat, when their author is also in that call.', 'ttsEnabled'),
+      toggleSection(session, 'Say the speaker’s name', 'Add the member’s server display name before each new message, for example: “Frosty said: Hello everyone.” Turn this off to read only their message.', 'announceSpeaker'),
       el('div', { className: 'form-section stack' }, field('Default voice', voiceInput, 'Six male and six female voices. Members can choose a different voice for their own messages with /ttsvoice.'))]),
     el('div', { className: 'save-bar' }, saveStatus, save));
 

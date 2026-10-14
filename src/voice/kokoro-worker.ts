@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { normalizeSpeechPronunciation, splitSpeechText } from './neural-text.js';
 import { TTS_VOICES } from './catalog.js';
+import { prepareSpeechText, TTS_MAX_CHARACTERS } from './speech-text.js';
 
 interface SpeechAudio { audio: Float32Array; sampling_rate: number }
 interface SpeechEngine { generate(text: string, options: { voice: string; speed: number }): Promise<SpeechAudio> }
@@ -60,8 +61,8 @@ async function main(): Promise<void> {
   let busy = false;
   process.on('message', (message: unknown) => {
     if (!message || typeof message !== 'object') return;
-    const request = message as { type?: unknown; id?: unknown; text?: unknown; voice?: unknown };
-    if (request.type !== 'synthesize' || !Number.isSafeInteger(request.id) || typeof request.text !== 'string' || request.text.length > 400 || !request.text.trim() || typeof request.voice !== 'string' || !voices.has(request.voice) || busy) {
+    const request = message as { type?: unknown; id?: unknown; text?: unknown; voice?: unknown; speakerName?: unknown };
+    if (request.type !== 'synthesize' || !Number.isSafeInteger(request.id) || typeof request.text !== 'string' || request.text.length > TTS_MAX_CHARACTERS || !request.text.trim() || typeof request.voice !== 'string' || !voices.has(request.voice) || busy) {
       process.send?.({ type: 'error', id: request.id }); return;
     }
     busy = true;
@@ -69,7 +70,8 @@ async function main(): Promise<void> {
       const parts: Float32Array[] = [];
       let count = 0;
       // Apply only after validating the original message: pronunciation spellings can expand its length.
-      for (const text of splitSpeechText(normalizeSpeechPronunciation(request.text as string))) {
+      const spoken = prepareSpeechText(request.text as string, request.speakerName as string | undefined);
+      for (const text of splitSpeechText(normalizeSpeechPronunciation(spoken))) {
         const audio = await engine.generate(text, { voice: request.voice as string, speed: 0.95 });
         if (audio.sampling_rate !== sampleRate || !(audio.audio instanceof Float32Array)) throw new Error('Invalid speech output.');
         count += audio.audio.length;

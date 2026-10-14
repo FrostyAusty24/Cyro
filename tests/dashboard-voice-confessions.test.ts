@@ -98,7 +98,7 @@ it('protects feature saves with session, origin, CSRF, and current dashboard acc
   }
 });
 
-it('exposes twelve voices and durably saves the twelfth default through the authorized dashboard', async () => {
+it('durably saves a default voice and speaker names through the authorized dashboard for only that guild', async () => {
   const folder = await mkdtemp(path.join(os.tmpdir(), 'cyro-dashboard-voices-'));
   const client = Object.assign(new EventEmitter(), { guilds: { cache: new Map() } });
   const voice = new VoiceService(client as never, folder, new Logger('error'), {} as AccessService);
@@ -112,17 +112,21 @@ it('exposes twelve voices and durably saves the twelfth default through the auth
     expect(snapshot.voices.map((item: { id: string }) => item.id)).toEqual(Array.from({ length: 12 }, (_, i) => `voice${i + 1}`));
     expect(snapshot.voices.filter((item: { gender: string }) => item.gender === 'male')).toHaveLength(6);
     expect(snapshot.voices.filter((item: { gender: string }) => item.gender === 'female')).toHaveLength(6);
-    const updated = { ...snapshot.config, defaultVoice: 'voice12' };
+    expect(snapshot.config.announceSpeaker).toBe(false);
+    const updated = { ...snapshot.config, defaultVoice: 'voice12', announceSpeaker: true };
     const saved = await fetch(url, { method: 'PATCH', headers: f.headers, body: JSON.stringify(updated) });
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ config: updated });
     expect(await (await fetch(url, { headers: f.headers })).json()).toMatchObject({ config: updated });
     const restart = new VoiceStore(folder); await restart.init();
     expect(restart.get(guildId).config.defaultVoice).toBe('voice12');
+    expect(restart.get(guildId).config.announceSpeaker).toBe(true);
     expect(restart.get(otherGuildId).config.defaultVoice).toBe('voice1');
+    expect(restart.get(otherGuildId).config.announceSpeaker).toBe(false);
     f.revoke();
-    expect((await fetch(url, { method: 'PATCH', headers: f.headers, body: JSON.stringify({ ...updated, defaultVoice: 'voice10' }) })).status).toBe(403);
+    expect((await fetch(url, { method: 'PATCH', headers: f.headers, body: JSON.stringify({ ...updated, defaultVoice: 'voice10', announceSpeaker: false }) })).status).toBe(403);
     expect(voice.getConfig(guildId).defaultVoice).toBe('voice12');
+    expect(voice.getConfig(guildId).announceSpeaker).toBe(true);
   } finally {
     voice.stop(); await voice.flush();
     await rm(folder, { recursive: true, force: true });

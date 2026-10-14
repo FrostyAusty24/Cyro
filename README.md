@@ -2,7 +2,7 @@
 
 A Discord community bot with a web dashboard, creator alerts, moderation, tickets, applications and community activities. One running application can serve multiple Discord servers; settings, permissions and activity records stay separate for each server.
 
-**Version 2.15.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
+**Version 2.18.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
 
 [Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Headache Development support](https://discord.gg/dAZheerkkD)
 
@@ -14,7 +14,7 @@ A Discord community bot with a web dashboard, creator alerts, moderation, ticket
 - **Support:** multiple ticket categories and application forms, button/dropdown panels, category-based or private ticket visibility, staff claims, saved transcripts and optional ticket-channel deletion after a successful export.
 - **Community:** counting, message XP, invite challenges, optional staff invite history, polls, embed publishing, suggestions/voting and anonymous public confession posts.
 - **Voice:** compatible direct audio/radio and supported public YouTube video links, plus 12 free Kokoro neural TTS voices for messages from members in the current call: six male and six female.
-- **Management:** Discord sign-in, per-server settings, owner-controlled dashboard/command access, server-specific bot appearance and staff leaderboards.
+- **Management:** Discord sign-in, searchable server/channel/role pickers, per-server settings, owner-controlled dashboard/command access, server-specific bot appearance and staff leaderboards.
 
 All current features of the official hosted Cyro service are free. Paid options would only be considered if its hosting costs became too expensive to sustain. Self-hosting requires your own infrastructure and platform credentials.
 
@@ -73,6 +73,8 @@ The optional TTS installer downloads pinned Kokoro q8 model assets and an isolat
 ## Commands and feature setup
 
 Start with `/dashboard`. Useful member commands include `/counting`, `/rank`, `/leaderboard`, `/invites`, `/streamer-leaderboard`, `/suggestion`, `/confess`, `/ticket open` and `/apply`. Voice commands include `/playmusic`, `/musicqueue`, `/skipmusic`, `/stopmusic`, `/addtts`, `/ttsvoice` and `/stoptts`.
+
+Under **Music & TTS**, enable **Say the speaker’s name** to announce each member’s server display name before their chat message, for example “Frosty said: Hello everyone.” It starts off and is saved separately for each server. Personal voice choices still apply.
 
 Platform commands such as `/twitch add`, `/twitch edit` and `/twitch test` manage alerts. `/streamalerts status` shows provider readiness. Staff use `/moderate`, `/ticket claim`, `/ticket close` and `/staff-leaderboard` according to current permissions. Most community features need channels, roles and an enabled setting before they can run. See [FEATURE_SETUP.md](FEATURE_SETUP.md).
 

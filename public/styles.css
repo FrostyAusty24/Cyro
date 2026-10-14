@@ -721,3 +721,37 @@ h1{font-size:27px}
 .save-bar{background:#18212fef;border-color:#ffffff20;box-shadow:0 8px 28px #00000035,inset 0 1px 0 #ffffff08;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
 .creator-header{background:#ffffff03}
 @media(prefers-reduced-transparency:reduce){.sidebar{background:var(--sidebar)}.topbar{background:var(--bg)}.metric,.panel{background:var(--panel)}.save-bar{background:#18212f}.sidebar,.topbar,.save-bar{backdrop-filter:none;-webkit-backdrop-filter:none}}
+
+/* Searchable server, channel and role pickers retain a native backing select. */
+.search-select{position:relative;min-width:0;width:100%}
+.search-select .search-select-native{display:none!important}
+.search-select-trigger{display:flex;align-items:center;gap:12px;min-height:44px;width:100%;padding:10px 12px;background:var(--input);border:1px solid #607188;border-radius:7px;color:var(--text);font-size:13px;text-align:start;box-shadow:inset 0 1px 3px #00000020}
+.search-select-trigger:hover:not(:disabled){border-color:#8296ae}
+.search-select-trigger:focus-visible,.search-select-trigger[aria-expanded=true]{border-color:var(--accent)}
+.search-select-trigger[aria-invalid=true]{border-color:var(--red)}
+.search-select-trigger:disabled{cursor:not-allowed;opacity:.6}
+.search-select-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-select-trigger>svg{width:17px;height:17px;color:var(--subtle);flex:0 0 17px}
+.guild-control .search-select-trigger{font-weight:550;border-color:#ffffff1c;border-radius:8px}
+.guild-control .search-select-trigger:hover,.guild-control .search-select-trigger:focus-visible{border-color:var(--accent)}
+.search-select-popup{position:fixed;inset:auto;margin:0;padding:8px;max-width:calc(100vw - 24px);overflow:hidden;color:var(--text);background:var(--panel);border:0;border-radius:10px;box-shadow:0 12px 40px #0009;z-index:110;box-sizing:border-box}
+.search-select-popup:popover-open{display:flex;flex-direction:column;gap:6px}
+.search-select-popup::backdrop{background:transparent}
+.search-select-popup input.search-select-search{flex-shrink:0;width:100%;min-height:44px;padding:9px 11px;margin:0;background:var(--input);border:1px solid #607188;border-radius:6px;color:var(--text);font-size:14px;box-shadow:none;caret-color:var(--accent)}
+.search-select-popup input.search-select-search::placeholder{color:var(--subtle);opacity:1}
+.search-select-popup input.search-select-search:focus{outline:2px solid var(--accent);outline-offset:-2px;border-color:var(--accent)}
+.search-select-options{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#607188 var(--panel);scroll-padding-block:4px}
+.search-select-option{display:flex;gap:12px;align-items:center;min-height:42px;padding:9px 10px;border-radius:5px;color:var(--text);font-size:13px;cursor:pointer}
+.search-select-option-label{min-width:0;flex:1;overflow-wrap:anywhere}
+.search-select-option>svg{width:17px;height:17px;flex:0 0 17px;visibility:hidden;color:var(--accent)}
+.search-select-option[aria-selected=true]>svg{visibility:visible}
+.search-select-option[aria-selected=true]{color:#d0f0ff;background:var(--accent-soft)}
+.search-select-option.is-active{outline:1px solid var(--accent);outline-offset:-1px;background:#263b4b}
+.search-select-option[aria-disabled=true]{color:var(--subtle);cursor:not-allowed;opacity:.7}
+.search-select-empty{padding:18px 10px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.search-select-footer{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:5px 3px 1px;flex-shrink:0}
+.search-select-summary{font-size:12px;line-height:1.5;color:var(--muted)}
+.search-select-done{flex-shrink:0;min-height:36px;padding:6px 12px;background:var(--accent-soft);border:1px solid #607188;border-radius:6px;color:var(--accent);font-size:12px;font-weight:600}
+.search-select-done:hover{background:var(--panel-hover);border-color:var(--accent)}
+@media(max-width:720px){.search-select-popup input.search-select-search{font-size:16px}.search-select-option{min-height:44px;font-size:14px}.search-select-done{min-height:44px}}
+@media(forced-colors:active){.search-select-popup{border:1px solid CanvasText;box-shadow:none;background:Canvas;color:CanvasText}.search-select-option[aria-selected=true]{color:HighlightText;background:Highlight}.search-select-option.is-active{outline-color:Highlight}.search-select-option>svg{color:currentColor}}
