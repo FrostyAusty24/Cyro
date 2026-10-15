@@ -1,3 +1,4 @@
+import { BotMessageError } from '../i18n/index.js';
 import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import type { ProviderResult, ResolvedStreamer, StreamerRecord } from '../types.js';
@@ -31,7 +32,7 @@ export class TwitchProvider implements StreamProvider {
     this.assertConfigured();
     const data = await this.api<{ data: TwitchUser[] }>(`/users?login=${encodeURIComponent(username)}`);
     const user = data.data[0];
-    if (!user) throw new Error(`Twitch channel “${username}” was not found.`);
+    if (!user) throw new BotMessageError('Twitch channel “{username}” was not found.',{username});
     return { username: user.login.toLowerCase(), displayName: user.display_name, platformUserId: user.id, avatarUrl: user.profile_image_url };
   }
 
@@ -56,7 +57,7 @@ export class TwitchProvider implements StreamProvider {
             kind: 'live',
             snapshot: {
               sessionId: stream.id,
-              title: stream.title || 'Untitled stream',
+              title: stream.title || '',
               category: stream.game_name || undefined,
               viewerCount: metricCount(stream.viewer_count),
               followerCount: followers.get(userId),

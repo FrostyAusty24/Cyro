@@ -1,8 +1,11 @@
+import { botText } from '../i18n/index.js';
 import path from 'node:path';
 import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from '@napi-rs/canvas';
 import { defaultMemberCard, type MemberCardSettings } from './types.js';
 
 export interface MemberCardInput {
+  guildId?: string;
+  locale?: string;
   kind: 'join' | 'leave';
   displayName: string;
   serverName: string;
@@ -17,7 +20,17 @@ let fontReady = false;
 let activeRenders = 0;
 
 export function memberCardText(value: string, input: Pick<MemberCardInput, 'displayName' | 'serverName' | 'memberCount'>): string {
-  return value.replaceAll('{user}', input.displayName).replaceAll('{server}', input.serverName).replaceAll('{count}', String(input.memberCount));
+  const values: Record<string, string> = { user: input.displayName, server: input.serverName, count: String(input.memberCount) };
+  return value.replace(/\{(user|server|count)\}/g, (_, key: string) => values[key]!);
+}
+
+/** Localize only unchanged built-in copy; custom headings and templates remain literal. */
+export function localizedMemberCardSettings(settings: MemberCardSettings, guildId?: string, locale?: string): MemberCardSettings {
+  const defaults = defaultMemberCard(), result = { ...defaults, ...settings };
+  for (const key of ['joinHeading', 'leaveHeading', 'joinFooter', 'leaveFooter'] as const) {
+    if (result[key] === defaults[key]) result[key] = botText(guildId, defaults[key], {}, locale);
+  }
+  return result;
 }
 
 function clean(value: string, max = 300): string {
@@ -76,7 +89,7 @@ export async function renderMemberCard(input: MemberCardInput, fetcher: typeof f
     }
     const canvas = createCanvas(MEMBER_CARD_SIZE.width, MEMBER_CARD_SIZE.height);
     const ctx = canvas.getContext('2d');
-    const settings = { ...defaultMemberCard(), ...input.settings };
+    const settings = localizedMemberCardSettings(input.settings, input.guildId, input.locale);
     const theme = settings.background;
     const accent = /^#[0-9a-f]{6}$/i.test(input.settings.accentColor) ? input.settings.accentColor : '#63D7FF';
     const background = ctx.createLinearGradient(0, 0, 960, 340);
@@ -118,7 +131,6 @@ export async function renderMemberCard(input: MemberCardInput, fetcher: typeof f
     ctx.fillStyle = settings.secondaryColor; fittedText(ctx, memberCardText(settings.subtitle, input), x, 211, width, 23, 500);
     ctx.fillStyle = settings.secondaryColor; if (settings.showDivider) ctx.fillRect(x, 244, width, 1);
     ctx.fillStyle = settings.secondaryColor;
-    const count = Number.isSafeInteger(input.memberCount) && input.memberCount >= 0 ? input.memberCount.toLocaleString('en-US') : '—';
     fittedText(ctx, memberCardText(input.kind === 'join' ? settings.joinFooter : settings.leaveFooter, input), x, 280, settings.brandText ? width - 165 : width, 18, 500);
     ctx.fillStyle = accent; fittedText(ctx, memberCardText(settings.brandText, input), 750, 280, 145, 16, 800);
     return await canvas.encode('png');

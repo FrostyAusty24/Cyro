@@ -8,6 +8,7 @@ import { tempVoiceCommands } from '../temp-voice/commands.js';
 import { communityToolsCommands } from '../community-tools/commands.js';
 import { voiceCommands } from '../voice/commands.js';
 import { commandDescriptionLocalizations } from '../i18n/commands.js';
+import { localizeCommandOptions } from '../i18n/command-options.js';
 
 export function createRegistrationPlan(config: Pick<AppConfig, 'discordClientId' | 'commandScope' | 'developmentGuildId'>) {
   const { commandScope, developmentGuildId } = commandRegistrationConfig({
@@ -22,6 +23,7 @@ export function createRegistrationPlan(config: Pick<AppConfig, 'discordClientId'
     const { dm_permission: _dmPermission, ...command } = builder.toJSON();
     const translatedDescriptions = commandDescriptionLocalizations(command.name, command.description);
     if (translatedDescriptions) command.description_localizations = { ...command.description_localizations, ...translatedDescriptions };
+    if (command.options) command.options = localizeCommandOptions(command.options);
     if (['dashboard','twitch','kick','youtube','tiktok','streamalerts','roles-panel'].includes(command.name)) delete command.default_member_permissions;
     return { ...command, contexts: [InteractionContextType.Guild], integration_types: [ApplicationIntegrationType.GuildInstall] };
   });

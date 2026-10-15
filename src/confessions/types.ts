@@ -1,3 +1,4 @@
+import { BotMessageError } from '../i18n/index.js';
 export interface ConfessionsConfig { enabled: boolean; channelId: string | null; cooldownSeconds: number }
 /** A receipt deliberately contains neither the confession text nor its author's ID. */
 export interface ConfessionReceipt {
@@ -12,8 +13,8 @@ export const defaultConfessionsConfig = (): ConfessionsConfig => ({ enabled: fal
 export const defaultConfessionsGuild = (): ConfessionsGuild => ({ config: defaultConfessionsConfig(), nextNumber: 1, published: 0, receipts: [] });
 export const snowflake = (value: unknown): value is string => typeof value === 'string' && /^\d{17,20}$/.test(value);
 export function parseConfessionsConfig(input: unknown): ConfessionsConfig {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid confessions settings.');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BotMessageError('Invalid confessions settings.');
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).some(k => !['enabled', 'channelId', 'cooldownSeconds'].includes(k)) || typeof value.enabled !== 'boolean' || (value.channelId !== null && !snowflake(value.channelId)) || !Number.isInteger(value.cooldownSeconds) || (value.cooldownSeconds as number) < 10 || (value.cooldownSeconds as number) > 3600 || (value.enabled && !value.channelId)) throw new Error('Choose a confessions channel and a cooldown from 10 to 3,600 seconds.');
+  if (Object.keys(value).some(k => !['enabled', 'channelId', 'cooldownSeconds'].includes(k)) || typeof value.enabled !== 'boolean' || (value.channelId !== null && !snowflake(value.channelId)) || !Number.isInteger(value.cooldownSeconds) || (value.cooldownSeconds as number) < 10 || (value.cooldownSeconds as number) > 3600 || (value.enabled && !value.channelId)) throw new BotMessageError('Choose a confessions channel and a cooldown from 10 to 3,600 seconds.');
   return { enabled: value.enabled, channelId: value.channelId as string | null, cooldownSeconds: value.cooldownSeconds as number };
 }

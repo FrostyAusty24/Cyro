@@ -4,6 +4,17 @@ export type BotLocale = 'en' | 'fr' | 'es' | 'de' | 'pt';
 export type BotLocalePreference = BotLocale | 'auto';
 export type TextParams = Readonly<Record<string, string | number>>;
 
+function interpolate(template: string, params: TextParams): string {
+  return template.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (token, key: string) => Object.hasOwn(params, key) ? String(params[key]) : token);
+}
+
+/** Carries trusted copy separately from names and other values until the response locale is known. */
+export class BotMessageError extends Error {
+  constructor(readonly sourceEnglish: string, readonly params: TextParams = {}) {
+    super(interpolate(sourceEnglish, params));
+  }
+}
+
 /** Unsupported Discord/browser locales deliberately fall back to English. */
 export function normalizeLocale(value: unknown): BotLocale {
   if (typeof value !== 'string') return 'en';
@@ -26,5 +37,21 @@ export function botText(guildId: string | null | undefined, sourceEnglish: strin
   const entry = Object.hasOwn(BOT_TRANSLATIONS, sourceEnglish) ? BOT_TRANSLATIONS[sourceEnglish] : undefined;
   const template = locale === 'en' ? sourceEnglish : entry?.[locale] ?? sourceEnglish;
   // A single pass keeps placeholders inside user values literal and never evaluates them.
-  return template.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (token, key: string) => Object.hasOwn(params, key) ? String(params[key]) : token);
+  return interpolate(template, params);
+}
+
+/** Never send arbitrary provider, filesystem, or Discord API errors to members. */
+export function botError(guildId: string | null | undefined, error: unknown, discordLocale?: string | null, fallback = 'Something went wrong.'): string {
+  if (error instanceof BotMessageError && Object.hasOwn(BOT_TRANSLATIONS, error.sourceEnglish)) return botText(guildId, error.sourceEnglish, error.params, discordLocale);
+  if (error instanceof Error) {
+    if (Object.hasOwn(BOT_TRANSLATIONS, error.message)) return botText(guildId, error.message, {}, discordLocale);
+    // Older handlers sometimes throw an already localized, fixed bot message.
+    if (Object.values(BOT_TRANSLATIONS).some(entry => Object.values(entry).includes(error.message))) return error.message;
+  }
+  return botText(guildId, fallback, {}, discordLocale);
+}
+
+export function botNumber(guildId: string | null | undefined, value: number, discordLocale?: string | null, options: Intl.NumberFormatOptions = {}): string {
+  const locale = botLocale(guildId, discordLocale);
+  return new Intl.NumberFormat(locale === 'pt' ? 'pt-BR' : locale, options).format(value);
 }

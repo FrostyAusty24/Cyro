@@ -68,7 +68,7 @@ it('reports source failure privately and advances to the next queued track', asy
   f.output.play.mockRejectedValueOnce(new YouTubeSourceError('YouTube host refused this video.'));
   const notice = vi.fn(async () => {});
   await f.service.playMusic(f.guild, f.userId, link, notice); await f.service.sessions.flush();
-  expect(notice).toHaveBeenCalledWith('YouTube host refused this video.', expect.any(AbortSignal));
+  expect(notice).toHaveBeenCalledWith('YouTube host refused this video.', expect.any(AbortSignal), expect.objectContaining({ sourceEnglish: 'YouTube host refused this video.' }));
   await f.service.playMusic(f.guild, f.userId, 'https://example.org/audio.mp3'); await f.service.sessions.flush();
   expect(f.output.play).toHaveBeenCalledTimes(2);
 });

@@ -1,3 +1,4 @@
+import { BotMessageError } from '../i18n/index.js';
 export interface SuggestionsConfig { enabled: boolean; channelId: string | null; cooldownMinutes: number }
 export type SuggestionStatus = 'open' | 'accepted' | 'declined' | 'closed';
 export type VoteChoice = 'up' | 'down' | null;
@@ -15,9 +16,9 @@ export const defaultSuggestionsConfig = (): SuggestionsConfig => ({ enabled: fal
 export const defaultSuggestionsGuild = (): SuggestionsGuild => ({ config: defaultSuggestionsConfig(), nextNumber: 1, items: [] });
 export const snowflake = (value: unknown): value is string => typeof value === 'string' && /^\d{17,20}$/.test(value);
 export function parseSuggestionsConfig(input: unknown): SuggestionsConfig {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid suggestions settings.');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BotMessageError('Invalid suggestions settings.');
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).some(k => !['enabled', 'channelId', 'cooldownMinutes'].includes(k)) || typeof value.enabled !== 'boolean' || (value.channelId !== null && !snowflake(value.channelId)) || !Number.isInteger(value.cooldownMinutes) || (value.cooldownMinutes as number) < 0 || (value.cooldownMinutes as number) > 1440 || (value.enabled && !value.channelId)) throw new Error('Choose a suggestions channel and a cooldown from 0 to 1,440 minutes.');
+  if (Object.keys(value).some(k => !['enabled', 'channelId', 'cooldownMinutes'].includes(k)) || typeof value.enabled !== 'boolean' || (value.channelId !== null && !snowflake(value.channelId)) || !Number.isInteger(value.cooldownMinutes) || (value.cooldownMinutes as number) < 0 || (value.cooldownMinutes as number) > 1440 || (value.enabled && !value.channelId)) throw new BotMessageError('Choose a suggestions channel and a cooldown from 0 to 1,440 minutes.');
   return { enabled: value.enabled, channelId: value.channelId as string | null, cooldownMinutes: value.cooldownMinutes as number };
 }
 export function suggestionSummary(guildId: string, record: SuggestionRecord) {

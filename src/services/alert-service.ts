@@ -1,3 +1,4 @@
+import { botText, botNumber, type TextParams } from '../i18n/index.js';
 import {
   Client,
   EmbedBuilder,
@@ -158,30 +159,32 @@ export class AlertService {
     const channel = await guild.channels.fetch(record.alertChannelId);
     if (!channel?.isSendable()) throw new Error('The configured alert channel is missing or is not sendable.');
 
-    const embed = this.liveEmbed(record, snapshot, test);
+    if(test) snapshot={...snapshot,title:botText(record.guildId,'This is a test live alert',{},guild.preferredLocale),category:botText(record.guildId,'Test category',{},guild.preferredLocale)};
+    const embed = this.liveEmbed(record, snapshot, test, guild.preferredLocale);
     return channel.send({
-      content: renderMessage(record, snapshot).slice(0, 2000),
+      content: renderMessage(record, snapshot, guild.preferredLocale).slice(0, 2000),
       embeds: [embed],
       allowedMentions: record.pingRoleId ? { parse: [], roles: [record.pingRoleId] } : { parse: [] },
     });
   }
 
-  private liveEmbed(record: StreamerRecord, snapshot: LiveSnapshot, test: boolean): EmbedBuilder {
+  private liveEmbed(record: StreamerRecord, snapshot: LiveSnapshot, test: boolean, locale?:string): EmbedBuilder {
+    const t=(source:string,params:TextParams={})=>botText(record.guildId,source,params,locale);
     const platform = record.platform[0]!.toUpperCase() + record.platform.slice(1);
     const embed = new EmbedBuilder()
       .setColor(COLORS[record.platform])
-      .setTitle(`${test ? 'TEST • ' : ''}${record.creatorName || record.displayName} is live on ${platform}`)
+      .setTitle((test ? t('TEST • ') : '')+t('{name} is live on {platform}',{name:record.creatorName||record.displayName,platform}))
       .setURL(snapshot.url)
-      .setDescription(`**${snapshot.title || 'Untitled stream'}**`)
+      .setDescription(`**${snapshot.title || t('Untitled stream')}**`)
       .addFields(
-        { name: 'Category', value: snapshot.category || 'No category', inline: true },
-        { name: 'Viewers', value: snapshot.viewerCount?.toLocaleString() ?? 'Unknown', inline: true },
+        { name: t('Category'), value: snapshot.category || t('No category'), inline: true },
+        { name: t('Viewers'), value: snapshot.viewerCount===undefined?t('Unknown'):botNumber(record.guildId,snapshot.viewerCount,locale), inline: true },
       )
-      .setFooter({ text: `${test ? 'Test alert' : 'Live alert'} • ${record.username}` })
+      .setFooter({ text: `${t(test ? 'Test alert' : 'Live alert')} • ${record.username}` })
       .setTimestamp();
     if (snapshot.startedAt) {
       const date = new Date(snapshot.startedAt);
-      if (!Number.isNaN(date.valueOf())) embed.addFields({ name: 'Started', value: time(date, TimestampStyles.RelativeTime), inline: true });
+      if (!Number.isNaN(date.valueOf())) embed.addFields({ name: t('Started'), value: time(date, TimestampStyles.RelativeTime), inline: true });
     }
     if (snapshot.thumbnailUrl) embed.setImage(snapshot.thumbnailUrl);
     const avatar = snapshot.avatarUrl || record.avatarUrl;
@@ -201,16 +204,17 @@ export class AlertService {
         await message.delete();
         return;
       }
+      const t=(source:string,params:TextParams={})=>botText(record.guildId,source,params,guild.preferredLocale);
       const platform = record.platform[0]!.toUpperCase() + record.platform.slice(1);
       const embed = new EmbedBuilder()
         .setColor(0x59636f)
-        .setTitle(`${record.creatorName || record.displayName} is now offline`)
+        .setTitle(t('{name} is now offline',{name:record.creatorName||record.displayName}))
         .setURL(streamUrl(record.platform, record.username))
-        .setDescription(record.lastSnapshot?.title ? `Last stream: **${record.lastSnapshot.title}**` : `The ${platform} stream has ended.`)
-        .setFooter({ text: `${platform} • Stream ended` })
+        .setDescription(record.lastSnapshot?.title ? t('Last stream: **{title}**',{title:record.lastSnapshot.title}) : t('The {platform} stream has ended.',{platform}))
+        .setFooter({ text: `${platform} • ${t('Stream ended')}` })
         .setTimestamp();
       if (record.avatarUrl) embed.setThumbnail(record.avatarUrl);
-      await message.edit({ content: `⚫ **${record.creatorName || record.displayName} is now offline.**`, embeds: [embed], allowedMentions: { parse: [] } });
+      await message.edit({ content: t('⚫ **{name} is now offline.**',{name:record.creatorName||record.displayName}), embeds: [embed], allowedMentions: { parse: [] } });
     } catch (error) {
       this.logger.warn('Could not clean up an alert message.', {
         streamerId: record.id,
@@ -227,7 +231,7 @@ export class AlertService {
       const role = await guild.roles.fetch(record.liveRoleId);
       if (!role) throw new Error('The live role no longer exists.');
       assertSafeRole(role);
-      if (!member.roles.cache.has(record.liveRoleId)) await member.roles.add(record.liveRoleId, `${record.displayName} went live on ${record.platform}`);
+      if (!member.roles.cache.has(record.liveRoleId)) await member.roles.add(record.liveRoleId, botText(record.guildId,'{name} went live on {platform}',{name:record.displayName,platform:record.platform},guild.preferredLocale).slice(0,512));
     } catch (error) {
       this.logRoleError('add', record, error);
     }
@@ -248,7 +252,7 @@ export class AlertService {
     try {
       const guild = await this.client.guilds.fetch(record.guildId);
       const member = await guild.members.fetch(record.discordMemberId);
-      if (member.roles.cache.has(record.liveRoleId)) await member.roles.remove(record.liveRoleId, `${record.displayName} is no longer live on ${record.platform}`);
+      if (member.roles.cache.has(record.liveRoleId)) await member.roles.remove(record.liveRoleId, botText(record.guildId,'{name} is no longer live on {platform}',{name:record.displayName,platform:record.platform},guild.preferredLocale).slice(0,512));
     } catch (error) {
       this.logRoleError('remove', record, error);
     }

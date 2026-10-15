@@ -1,21 +1,24 @@
+import { botText, botNumber } from '../i18n/index.js';
 import type { LiveSnapshot, StreamerRecord } from '../types.js';
 
 export const DEFAULT_MESSAGE_TEMPLATE = '{mention} 🔴 **{streamer} is LIVE on {platform}!**\n{url}';
 
 const PLACEHOLDERS = ['streamer', 'username', 'platform', 'url', 'title', 'category', 'viewers', 'mention'] as const;
 
-export function renderMessage(record: StreamerRecord, snapshot: LiveSnapshot): string {
+export function renderMessage(record: StreamerRecord, snapshot: LiveSnapshot, locale?: string): string {
+  const t=(source:string)=>botText(record.guildId,source,{},locale);
   const values: Record<(typeof PLACEHOLDERS)[number], string> = {
     streamer: record.creatorName || record.displayName,
     username: record.username,
     platform: record.platform[0]!.toUpperCase() + record.platform.slice(1),
     url: snapshot.url,
-    title: snapshot.title || 'Untitled stream',
-    category: snapshot.category || 'No category',
-    viewers: snapshot.viewerCount?.toLocaleString() ?? 'Unknown',
+    title: snapshot.title || t('Untitled stream'),
+    category: snapshot.category || t('No category'),
+    viewers: snapshot.viewerCount === undefined ? t('Unknown') : botNumber(record.guildId,snapshot.viewerCount,locale),
     mention: record.pingRoleId ? `<@&${record.pingRoleId}>` : '',
   };
-  return record.messageTemplate.replace(/\{(streamer|username|platform|url|title|category|viewers|mention)\}/g, (_, key: keyof typeof values) => values[key]);
+  const template=record.messageTemplate===DEFAULT_MESSAGE_TEMPLATE?t(DEFAULT_MESSAGE_TEMPLATE):record.messageTemplate;
+  return template.replace(/\{(streamer|username|platform|url|title|category|viewers|mention)\}/g, (_, key: keyof typeof values) => values[key]);
 }
 
 export function titleMatches(filter: string | undefined, title: string): boolean {

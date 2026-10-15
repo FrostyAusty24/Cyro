@@ -11,8 +11,8 @@ import { audioAvailable } from './audio.js';
 import { parseYouTubeUrl, resolveYouTubeSource, youtubeAvailable, YouTubeSourceError } from './youtube.js';
 import { speechSpeakerName, TTS_MAX_CHARACTERS } from './speech-text.js';
 import type { SpeechLanguage } from './catalog.js';
-import { botLocale, botText } from '../i18n/index.js';
-import { voiceChoices } from './voice-search.js';
+import { botLocale, botText, botError, BotMessageError } from '../i18n/index.js';
+import { voiceChoices, localizedVoiceName } from './voice-search.js';
 
 export function spokenText(text:string,language:SpeechLanguage='en'):string {
   if(text.trimStart().startsWith('/'))return '';
@@ -84,19 +84,19 @@ export class VoiceService {
       }catch(error){if(!existing)this.sessions.leave(guild.id,room);throw error;}
     });
   }
-  async playMusic(guild:Guild,userId:string,link:string,onFailure?:(message:string,signal:AbortSignal)=>Promise<void>){
+  async playMusic(guild:Guild,userId:string,link:string,onFailure?:(message:string,signal:AbortSignal,sourceError?:Error)=>Promise<void>){
     this.assertRunning();this.assertAvailable('music');
     const youtube=parseYouTubeUrl(link);const url=youtube??parseAudioUrl(link);if(!this.getConfig(guild.id).musicEnabled)throw new Error('Music is disabled in this server’s dashboard.');
     const {channel}=await this.memberChannel(guild,userId,'playmusic');const initial=this.sessions.snapshot(guild.id);
     if(initial&&(initial.channelId!==channel.id||initial.mode!=='music'))throw new Error('Cyro is already in another call or TTS session. Stop that session there first.');
     if(initial&&initial.queueLength>=25)throw new Error('The voice queue is full. Please wait for it to clear.');
     // Source preflight stays outside the guild mutation queue so stop/skip/disable remain responsive.
-    const file=url.pathname.split('/').pop()||'Radio stream';let label=file;try{label=decodeURIComponent(file);}catch{}
+    const file=url.pathname.split('/').pop()||botText(guild.id,'Radio stream',{},guild.preferredLocale);let label=file;try{label=decodeURIComponent(file);}catch{}
     let title=`${label.slice(0,90)} · ${url.hostname}`;
     if(youtube){
       const controller=new AbortController();const signal=AbortSignal.any([controller.signal,this.loadingController.signal]);
       const loads=this.pendingMusic.get(guild.id)??new Map<AbortController,string>();this.pendingMusic.set(guild.id,loads);loads.set(controller,channel.id);
-      try{const source=await resolveYouTubeSource(youtube.href,{signal,maxDurationSeconds:this.getConfig(guild.id).maxTrackMinutes*60});signal.throwIfAborted();title=`${escapeMarkdown(source.title)} · YouTube`;}
+      try{const source=await resolveYouTubeSource(youtube.href,{signal,maxDurationSeconds:this.getConfig(guild.id).maxTrackMinutes*60});signal.throwIfAborted();title=`${escapeMarkdown(source.titleIsFallback?botText(guild.id,'YouTube video',{},guild.preferredLocale):source.title)} · YouTube`;}
       finally{loads.delete(controller);if(!loads.size)this.pendingMusic.delete(guild.id);}
     }
     return this.enqueue(guild.id,async()=>{
@@ -110,7 +110,7 @@ export class VoiceService {
         const current=await this.memberChannel(guild,userId,'playmusic');
         if(current.channel.id!==channel.id)throw new Error('Stay in the same voice channel while Cyro connects.');
         if(!this.getConfig(guild.id).musicEnabled)throw new Error('Music has been disabled.');
-        return this.sessions.enqueue(guild.id,channel.id,{kind:'music',title,url:url.href,onFailure:onFailure?async(error,signal)=>{await onFailure(error instanceof YouTubeSourceError?error.message:'This music source could not be played. Cyro skipped it; try another publicly accessible source.',signal);}:undefined});
+        return this.sessions.enqueue(guild.id,channel.id,{kind:'music',title,url:url.href,onFailure:onFailure?async(error,signal)=>{const safe=error instanceof YouTubeSourceError?error:new Error('This music source could not be played. Cyro skipped it; try another publicly accessible source.');await onFailure(safe.message,signal,safe);}:undefined});
       }catch(error){if(!existing)this.sessions.leave(guild.id,room);throw error;}
     });
   }
@@ -133,15 +133,15 @@ export class VoiceService {
     const task=(async()=>{
       if(!interaction.inCachedGuild()){await interaction.reply({content:t('Use voice commands inside a server.'),flags:MessageFlags.Ephemeral});return;}
       await interaction.deferReply({flags:MessageFlags.Ephemeral});const name=interaction.commandName;let text:string;
-      if(name==='playmusic'){let acknowledge!:()=>void;const acknowledged=new Promise<void>(resolve=>{acknowledge=resolve;});const position=await this.playMusic(interaction.guild,interaction.user.id,interaction.options.getString('link',true),async(message,signal)=>{await acknowledged;signal.throwIfAborted();await interaction.client.rest.post(Routes.webhook(interaction.applicationId,interaction.token),{auth:false,signal,query:new URLSearchParams({wait:'true'}),body:{embeds:[{title:t('Music could not play'),description:t(message),color:0x82d9f7}],flags:MessageFlags.Ephemeral,allowed_mentions:{parse:[]}}});});text=t('Added to this call’s music queue (position {position}). Use /musicqueue, /skipmusic or /stopmusic. If the source cannot play, Cyro will skip it and send you a private notice.',{position});try{await interaction.editReply({embeds:[{title:t('Cyro voice'),description:text,color:0x82d9f7}],allowedMentions:{parse:[]}});}finally{acknowledge();}return;}
+      if(name==='playmusic'){let acknowledge!:()=>void;const acknowledged=new Promise<void>(resolve=>{acknowledge=resolve;});const position=await this.playMusic(interaction.guild,interaction.user.id,interaction.options.getString('link',true),async(message,signal,sourceError)=>{await acknowledged;signal.throwIfAborted();await interaction.client.rest.post(Routes.webhook(interaction.applicationId,interaction.token),{auth:false,signal,query:new URLSearchParams({wait:'true'}),body:{embeds:[{title:t('Music could not play'),description:botError(interaction.guildId,sourceError??new Error(message),interaction.locale),color:0x82d9f7}],flags:MessageFlags.Ephemeral,allowed_mentions:{parse:[]}}});});text=t('Added to this call’s music queue (position {position}). Use /musicqueue, /skipmusic or /stopmusic. If the source cannot play, Cyro will skip it and send you a private notice.',{position});try{await interaction.editReply({embeds:[{title:t('Cyro voice'),description:text,color:0x82d9f7}],allowedMentions:{parse:[]}});}finally{acknowledge();}return;}
       else if(name==='addtts'){await this.startTts(interaction.guild,interaction.user.id);text=t('TTS is on for your call’s chat. Use /ttsvoice to choose your voice and /stoptts to leave.');}
-      else if(name.startsWith('ttsvoice')){const voice=name==='ttsvoice'?interaction.options.getString('voice',true):name.slice('tts'.length);await this.setVoice(interaction.guild,interaction.user.id,voice);text=t('Your voice for this server is now {voice}.',{voice:TTS_VOICES.find(v=>v.id===voice)!.name});}
+      else if(name.startsWith('ttsvoice')){const voice=name==='ttsvoice'?interaction.options.getString('voice',true):name.slice('tts'.length);await this.setVoice(interaction.guild,interaction.user.id,voice);text=t('Your voice for this server is now {voice}.',{voice:localizedVoiceName(TTS_VOICES.find(v=>v.id===voice)!,botLocale(interaction.guildId,interaction.locale))});}
       else{
         let cancelledLoads=0;
         if(name==='stopmusic'){const {channel}=await this.memberChannel(interaction.guild,interaction.user.id,name);cancelledLoads=this.cancelMusicLoads(interaction.guildId,channel.id);}
         text=await this.enqueue(interaction.guildId,async()=>{
         const {channel}=await this.memberChannel(interaction.guild,interaction.user.id,name);if(name==='stopmusic'&&cancelledLoads&&!this.sessions.snapshot(interaction.guildId))return t('Cancelled pending music and stopped.');const room=this.sessions.assertChannel(interaction.guildId,channel.id);
-        const expected=name==='stoptts'?'tts':'music';if(room.mode!==expected)throw new Error(t('Cyro is currently in {mode} mode.',{mode:room.mode}));
+        const expected=name==='stoptts'?'tts':'music';if(room.mode!==expected)throw new BotMessageError(room.mode==='music'?'Cyro is currently in music mode.':'Cyro is currently in TTS mode.');
         if(name==='musicqueue')return [room.current?t('Playing: {title}',{title:room.current.title}):t('Waiting for music.'),...room.queue.slice(0,25).map((item,i)=>`${i+1}. ${item.title}`)].join('\n').slice(0,3800);
         if(name==='skipmusic'){this.sessions.skip(interaction.guildId,channel.id);return t('Skipped the current track.');}
         this.sessions.leave(interaction.guildId);return t('Stopped and disconnected from your call.');
@@ -150,7 +150,7 @@ export class VoiceService {
       await interaction.editReply({embeds:[{title:t('Cyro voice'),description:text,color:0x82d9f7}],allowedMentions:{parse:[]}});
     })().catch(async error=>{
       this.logger.warn('Voice command could not complete.',{guildId:interaction.guildId});
-      const text=t(error instanceof Error&&error.name==='Error'?error.message.slice(0,1800):'Voice could not start. Check Cyro’s Connect/Speak permissions and try again.');
+      const text=botError(interaction.guildId,error,interaction.locale,'Voice could not start. Check Cyro’s Connect/Speak permissions and try again.');
       try{if(interaction.deferred)await interaction.editReply({content:text,allowedMentions:{parse:[]}});else if(!interaction.replied)await interaction.reply({content:text,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});}catch{}
     });this.track(task);
   };
@@ -177,7 +177,7 @@ export class VoiceService {
     if(this.speechCooldown.size>=10000)return false;
     this.speechCooldown.set(key,now+2000);
     const speakerName=state.config.announceSpeaker?speechSpeakerName(message.member.displayName,message.author.username):undefined;
-    try{this.sessions.enqueue(message.guildId,session.channelId,{kind:'tts',title:'Spoken chat message',text,voice,speakerName,canPlay:async()=>{
+    try{this.sessions.enqueue(message.guildId,session.channelId,{kind:'tts',title:botText(message.guildId,'Spoken chat message',{},message.guild?.preferredLocale),text,voice,speakerName,canPlay:async()=>{
       if(this.stopped||!message.guild||!this.getConfig(message.guildId!).ttsEnabled)return false;
       try{const current=await this.memberChannel(message.guild,message.author.id,'addtts');return current.channel.id===session.channelId;}catch{return false;}
     }});return true;}catch{return false;}

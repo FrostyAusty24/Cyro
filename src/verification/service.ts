@@ -1,3 +1,4 @@
+import { botError, botText, type TextParams } from '../i18n/index.js';
 import {
   ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, MessageFlags, ModalBuilder,
   PermissionFlagsBits, TextInputBuilder, TextInputStyle,
@@ -6,7 +7,7 @@ import {
 } from 'discord.js';
 import type { Logger } from '../logger.js';
 import type { CommunityStore } from '../community/store.js';
-import type { CommunityConfig, VerificationPanel } from '../community/types.js';
+import { defaultGuild, type CommunityConfig, type VerificationPanel } from '../community/types.js';
 import { assertSafeRole } from '../community/config.js';
 import { VerificationChallenges, type ChallengeBinding } from './challenges.js';
 import { renderVerificationImage } from './image.js';
@@ -48,7 +49,7 @@ export class VerificationService {
     if (this.stopped || !('customId' in interaction) || !interaction.customId.startsWith('verify:') || (!interaction.isButton() && !interaction.isModalSubmit())) return;
     const task = this.handleInteraction(interaction).catch(async error => {
       this.report(error);
-      const content = error instanceof Error ? error.message : 'Verification could not finish. Please try again.';
+      const content = botError(interaction.guildId, error, interaction.locale, 'Verification could not finish. Please try again.');
       try {
         if (interaction.deferred) await interaction.editReply({ content, allowedMentions: { parse: [] } });
         else if (!interaction.replied) await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
@@ -102,9 +103,13 @@ export class VerificationService {
       const channel = await guild.channels.fetch(config.verification.channelId!);
       if (!channel?.isTextBased() || !('send' in channel)) throw new Error('Verification channel is unavailable.');
       const challenge = config.verification.mode === 'challenge';
+      const t = (source: string) => botText(guildId, source, {}, guild.preferredLocale);
+      const defaults = defaultGuild().config.verification;
+      const title = config.verification.title === defaults.title ? t('Verify your membership') : config.verification.title;
+      const description = config.verification.message === defaults.message ? t('Verify to receive access to the server.') : config.verification.message;
       const message = await channel.send({
-        embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle(config.verification.title).setDescription(config.verification.message)],
-        components: challenge ? [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('verify:start').setStyle(ButtonStyle.Primary).setLabel('Verify').setEmoji('🧊'))] : [],
+        embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle(title).setDescription(description)],
+        components: challenge ? [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('verify:start').setStyle(ButtonStyle.Primary).setLabel(t('Verify')).setEmoji('🧊'))] : [],
         allowedMentions: { parse: [] },
       });
       await this.store.mutate(guildId, state => { state.verificationPanel = { channelId: channel.id, messageId: message.id, roleId: config.verification.roleId!, mode: config.verification.mode }; });
@@ -130,17 +135,18 @@ export class VerificationService {
     const member = await guild.members.fetch({ user: binding.userId, force: true });
     if (member.user.bot) throw new Error('Bot accounts cannot use member verification.');
     if (member.pending) throw new Error('Complete Discord membership screening first, then try verification again.');
-    if (!member.roles.cache.has(role.id)) await member.roles.add(role.id, mode === 'challenge' ? 'Completed Cyro image verification' : 'Accepted Cyro reaction verification');
+    if (!member.roles.cache.has(role.id)) await member.roles.add(role.id, botText(guild.id, mode === 'challenge' ? 'Completed Cyro image verification' : 'Accepted Cyro reaction verification', {}, guild.preferredLocale));
   }
   private async handleInteraction(interaction: ButtonInteraction | ModalSubmitInteraction): Promise<void> {
-    if (!interaction.guildId || !interaction.channelId || interaction.user.bot) { await interaction.reply({ content: 'Use verification in its Discord server.', flags: MessageFlags.Ephemeral }); return; }
+    const t = (source: string, params: TextParams = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    if (!interaction.guildId || !interaction.channelId || interaction.user.bot) { await interaction.reply({ content: t('Use verification in its Discord server.'), flags: MessageFlags.Ephemeral }); return; }
     const userBinding = { guildId: interaction.guildId, userId: interaction.user.id };
     if (interaction.isButton() && interaction.customId.startsWith('verify:answer:')) {
       const token = interaction.customId.slice('verify:answer:'.length);
       const binding = this.challenges.lookup(token, userBinding);
       if (!binding || !this.validBinding(binding, 'challenge')) throw new Error('This image expired or was replaced. Select Verify on the server panel for a new one.');
-      await interaction.showModal(new ModalBuilder().setCustomId(`verify:submit:${token}`).setTitle('Enter the image code')
-        .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('code').setLabel('Six characters from your verification image').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(6).setMaxLength(6))));
+      await interaction.showModal(new ModalBuilder().setCustomId(`verify:submit:${token}`).setTitle(t('Enter the image code'))
+        .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('code').setLabel(t('Six characters from your verification image')).setStyle(TextInputStyle.Short).setRequired(true).setMinLength(6).setMaxLength(6))));
       return;
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -151,11 +157,11 @@ export class VerificationService {
         if (!currentVerificationPanel(state.config, panel) || panel.mode !== 'challenge' || panel.messageId !== interaction.message.id || panel.channelId !== interaction.channelId || interaction.message.author.id !== this.client.user?.id) throw new Error('This verification panel is no longer active. Use the latest panel.');
         const member = await guild.members.fetch({ user: interaction.user.id, force: true });
         if (member.pending) throw new Error('Complete Discord membership screening first, then select Verify again.');
-        if (member.roles.cache.has(panel.roleId)) { await interaction.editReply({ content: 'You already have the verified role.' }); return; }
+        if (member.roles.cache.has(panel.roleId)) { await interaction.editReply({ content: t('You already have the verified role.') }); return; }
         const challenge = this.challenges.issue({ ...userBinding, channelId: panel.channelId, panelId: panel.messageId, roleId: panel.roleId });
-        await interaction.editReply({ content: 'Read the six characters in this image, then select **Enter code**. It expires in 5 minutes and allows 3 attempts. Letters are not case-sensitive. If you need help with the image, contact a server moderator.',
-          files: [new AttachmentBuilder(renderVerificationImage(challenge.code), { name: 'verification.png', description: 'Private verification challenge. Contact a moderator if the image is inaccessible.' })],
-          components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`verify:answer:${challenge.token}`).setLabel('Enter code').setStyle(ButtonStyle.Primary))], allowedMentions: { parse: [] } });
+        await interaction.editReply({ content: t('Read the six characters in this image, then select **Enter code**. It expires in 5 minutes and allows 3 attempts. Letters are not case-sensitive. If you need help with the image, contact a server moderator.'),
+          files: [new AttachmentBuilder(renderVerificationImage(challenge.code), { name: 'verification.png', description: t('Private verification challenge. Contact a moderator if the image is inaccessible.') })],
+          components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`verify:answer:${challenge.token}`).setLabel(t('Enter code')).setStyle(ButtonStyle.Primary))], allowedMentions: { parse: [] } });
         return;
       }
       if (interaction.isModalSubmit() && interaction.customId.startsWith('verify:submit:')) {
@@ -165,9 +171,9 @@ export class VerificationService {
         const result = this.challenges.answer(token, userBinding, interaction.fields.getTextInputValue('code'));
         if (result.kind === 'success') {
           await this.grant(guild, result.binding, 'challenge');
-          await interaction.editReply({ content: 'Verified! Your member role has been added.', allowedMentions: { parse: [] } });
-        } else if (result.kind === 'wrong') await interaction.editReply({ content: `That code did not match. You have ${result.remaining} attempt${result.remaining === 1 ? '' : 's'} remaining. Select Enter code beneath your image to try again.` });
-        else if (result.kind === 'locked') await interaction.editReply({ content: 'Too many incorrect answers. Wait 60 seconds, then select Verify on the server panel for a new image.' });
+          await interaction.editReply({ content: t('Verified! Your member role has been added.'), allowedMentions: { parse: [] } });
+        } else if (result.kind === 'wrong') await interaction.editReply({ content: t(result.remaining === 1 ? 'That code did not match. You have 1 attempt remaining. Select Enter code beneath your image to try again.' : 'That code did not match. You have {remaining} attempts remaining. Select Enter code beneath your image to try again.', { remaining: result.remaining }) });
+        else if (result.kind === 'locked') await interaction.editReply({ content: t('Too many incorrect answers. Wait 60 seconds, then select Verify on the server panel for a new image.') });
         else throw new Error('This image expired. Select Verify for a new one.');
         return;
       }

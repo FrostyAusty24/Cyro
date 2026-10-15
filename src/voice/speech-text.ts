@@ -1,4 +1,5 @@
 import type { SpeechLanguage } from './catalog.js';
+import { BotMessageError } from '../i18n/index.js';
 
 export const TTS_MAX_CHARACTERS = 400;
 export const TTS_SPEAKER_MAX_CHARACTERS = 48;
@@ -22,7 +23,7 @@ export function speechSpeakerName(displayName?: string, username?: string): stri
 /** Keep the member's full message allowance separate from the small optional speech label. */
 export function prepareSpeechText(text: string, speakerName?: string, language: SpeechLanguage = 'en'): string {
   const clean = text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim();
-  if (!clean || clean.length > TTS_MAX_CHARACTERS) throw new Error(`Speech must contain 1–${TTS_MAX_CHARACTERS} characters.`);
+  if (!clean || clean.length > TTS_MAX_CHARACTERS) throw new BotMessageError('Speech must contain 1–{max} characters.', { max: TTS_MAX_CHARACTERS });
   if (speakerName === undefined) return clean;
   if (typeof speakerName !== 'string' || !speakerName.trim() || speakerName.length > TTS_SPEAKER_MAX_CHARACTERS) throw new Error('Choose a valid speech speaker name.');
   const labels: Record<SpeechLanguage, { someone: string; said: string }> = {

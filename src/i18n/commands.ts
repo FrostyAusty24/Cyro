@@ -77,7 +77,7 @@ export function commandDescriptionLocalizations(name: string, description: strin
   let translations: readonly [string, string, string, string] | undefined = existing && additional ? [...existing, ...additional] : undefined;
   // Preserve existing voice aliases, including their names and voice IDs.
   if (!translations && /^ttsvoice\d+$/.test(name)) {
-    const voice = /^Use (.+) as your personal TTS voice\.$/.exec(description)?.[1];
+    const voice = /^Use (.+) as your personal TTS voice\.$/.exec(description)?.[1]?.split(' · ')[0];
     if (voice) translations = [`Utiliser ${voice} comme voix de synthèse vocale.`, `Usar ${voice} como tu voz de texto a voz.`, `Nutze ${voice} als deine TTS-Stimme.`, `Usar ${voice} como sua voz de TTS.`];
   }
   if (!translations || translations.some(value => value.length < 1 || value.length > 100)) return undefined;

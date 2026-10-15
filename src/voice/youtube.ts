@@ -1,3 +1,4 @@
+import { BotMessageError } from '../i18n/index.js';
 import { spawn } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -16,8 +17,8 @@ const binaryHashes: Record<string, string> = {
 let verifiedBinary: { key: string; trusted: boolean } | undefined;
 
 /** A user-safe source failure. Raw extractor output and signed URLs must never reach Discord or logs. */
-export class YouTubeSourceError extends Error {}
-export interface YouTubeSource { url: string; id: string; title: string; durationSeconds: number; mediaUrl: string }
+export class YouTubeSourceError extends BotMessageError {}
+export interface YouTubeSource { url: string; id: string; title: string; titleIsFallback?: boolean; durationSeconds: number; mediaUrl: string }
 export interface YouTubeOptions { signal?: AbortSignal; maxDurationSeconds?: number }
 
 /** Only a single explicit video may cross the extractor boundary. All other URL parameters are discarded. */
@@ -64,7 +65,7 @@ export function readYouTubeSource(value: unknown, canonical: URL, options: YouTu
   const duration = Number(info.duration);
   const limit = Math.min(1800, Math.max(1, options.maxDurationSeconds ?? 900));
   if (!Number.isFinite(duration) || duration <= 0) throw new YouTubeSourceError('YouTube did not provide a supported recorded-video duration.');
-  if (duration > limit) throw new YouTubeSourceError(`That YouTube video exceeds this server’s ${Math.ceil(limit / 60)}-minute music limit.`);
+  if (duration > limit) throw new YouTubeSourceError('That YouTube video exceeds this server’s {minutes}-minute music limit.',{minutes:Math.ceil(limit/60)});
   if (info.protocol !== 'https' || info.vcodec !== 'none' || typeof info.acodec !== 'string' || info.acodec === 'none' || typeof info.url !== 'string') {
     throw new YouTubeSourceError('YouTube did not provide a supported direct audio stream for this video.');
   }
@@ -72,7 +73,7 @@ export function readYouTubeSource(value: unknown, canonical: URL, options: YouTu
   let mediaUrl: URL;
   try { mediaUrl = parseYouTubeMediaUrl(info.url); } catch { throw new YouTubeSourceError('YouTube returned an unsupported media source.'); }
   const title = typeof info.title === 'string' ? info.title.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 150) : '';
-  return { url: canonical.href, id: String(info.id), title: title || 'YouTube video', durationSeconds: duration, mediaUrl: mediaUrl.href };
+  return { url: canonical.href, id: String(info.id), title: title || 'YouTube video', ...(!title ? { titleIsFallback: true } : {}), durationSeconds: duration, mediaUrl: mediaUrl.href };
 }
 
 /** Child receives neither bot secrets nor proxy, cookie, Python-path, or user configuration environment. */

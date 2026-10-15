@@ -94,7 +94,7 @@ function renderShell() {
   const title = state.me?.user?.username || 'Your account';
   const topbar = el('header', { className: 'topbar' }, el('div', { className: 'breadcrumb' }, menuButton, icon('grid'), el('span', { className: 'breadcrumb-context' }, state.guilds.find(g => g.id === state.guildId)?.name || ui('Your servers')), icon('chevron'), el('strong', {}, active[1])), el('div', { className: 'topbar-right' }, el('span', { className: 'status-pill' }, DEMO ? ui('Demo session') : ui('Connected to Discord')), el('div', { className: 'user-menu' }, el('span', { className: 'avatar', title }, title.slice(0, 2).toUpperCase()), el('button', { type: 'button', className: 'signout', onClick: logout }, ui('Sign out')))));
   const main = el('main', { id: 'main', className: 'content', tabindex: '-1' });
-  const languageNote = el('p', { className: 'language-scope-note' }, ui('English fallback is used for pages and messages not yet translated.'));
+  const languageNote = el('p', { className: 'language-scope-note' }, ui('Some dashboard pages still use English. Bot messages use your server’s selected language.'));
   const workspace = el('div', { className: 'workspace' }, demoBanner(), topbar, main);
   function setMenuOpen(open, restoreFocus = true) {
     const wasOpen = shell.classList.contains('menu-open');

@@ -1,3 +1,4 @@
+import { BotMessageError } from '../i18n/index.js';
 export interface TempVoiceConfig {
   enabled: boolean;
   lobbyChannelId: string | null;
@@ -34,12 +35,12 @@ export function roomName(template: string, name: string): string {
   return template.replaceAll('{name}', name).replace(/[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 96) || 'Voice room';
 }
 export function parseTempVoiceConfig(input: unknown): TempVoiceConfig {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Choose valid temporary voice settings.');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BotMessageError('Choose valid temporary voice settings.');
   const value = input as TempVoiceConfig;
   if (Object.keys(value).some(key => !Object.hasOwn(defaultTempVoiceConfig(), key)) || typeof value.enabled !== 'boolean' || typeof value.ownerControls !== 'boolean'
     || (value.lobbyChannelId !== null && !snowflake(value.lobbyChannelId)) || (value.categoryId !== null && !snowflake(value.categoryId))
     || typeof value.nameTemplate !== 'string' || !value.nameTemplate.trim() || value.nameTemplate.length > 80
-    || !Number.isInteger(value.userLimit) || value.userLimit < 0 || value.userLimit > 99 || !Number.isInteger(value.maxRooms) || value.maxRooms < 1 || value.maxRooms > 25) throw new Error('Choose a room name up to 80 characters, a member limit from 0–99, and a room limit from 1–25.');
-  if (value.enabled && (!value.lobbyChannelId || !value.categoryId)) throw new Error('Choose a voice lobby and a category before enabling temporary rooms.');
+    || !Number.isInteger(value.userLimit) || value.userLimit < 0 || value.userLimit > 99 || !Number.isInteger(value.maxRooms) || value.maxRooms < 1 || value.maxRooms > 25) throw new BotMessageError('Choose a room name up to 80 characters, a member limit from 0–99, and a room limit from 1–25.');
+  if (value.enabled && (!value.lobbyChannelId || !value.categoryId)) throw new BotMessageError('Choose a voice lobby and a category before enabling temporary rooms.');
   return { ...value, nameTemplate: roomName(value.nameTemplate, '{name}') };
 }

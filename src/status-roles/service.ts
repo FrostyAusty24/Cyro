@@ -1,3 +1,4 @@
+import { botText } from '../i18n/index.js';
 import { Events, PermissionFlagsBits, type Client, type Guild, type GuildMember, type PartialGuildMember, type Presence, type Role } from 'discord.js';
 import { assertSafeRole } from '../community/config.js';
 import { assertNotAccessRole, type AccessService } from '../control/access.js';
@@ -132,7 +133,7 @@ export class StatusRoleService {
       if (!this.operational(guild) || this.observed(guild, memberId, assignment.roleId) !== false) continue;
       const current = await this.mutationMember(guild, memberId, assignment.roleId, false); if (!current || !this.finalCheck(guild, memberId, assignment.roleId, false)) continue;
       // Single-role DELETE is idempotent and never replaces the member's other roles.
-      await current.roles.remove(assignment.roleId, 'Cyro custom status role no longer matches');
+      await current.roles.remove(assignment.roleId, botText(guildId, 'Cyro custom status role no longer matches', {}, guild.preferredLocale));
       await this.forget(guildId, memberId, assignment.roleId);
     }
     const config = this.getConfig(guildId), roleId = config.roleId;
@@ -145,7 +146,7 @@ export class StatusRoleService {
     if (!this.operational(guild) || this.observed(guild, memberId, roleId) !== true) return;
     const current = await this.mutationMember(guild, memberId, roleId, true); if (!current || !this.finalCheck(guild, memberId, roleId, true)) return;
     // Single-role PUT is idempotent; a persisted uncertain receipt can safely reconcile on restart.
-    await current.roles.add(roleId, 'Cyro custom status role matched');
+    await current.roles.add(roleId, botText(guildId, 'Cyro custom status role matched', {}, guild.preferredLocale));
     await this.receipt(guildId, memberId, roleId, 'assigned');
   }
   private async withCapacity(operation: () => Promise<void>): Promise<void> {

@@ -1,8 +1,9 @@
+import { botText, type TextParams } from '../i18n/index.js';
 import type { AccessService } from '../control/access.js';
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, escapeMarkdown, Events, MessageFlags, PermissionFlagsBits, type Client, type Guild, type GuildMember, type PartialGuildMember, type Message, type Invite, type Interaction, type ChatInputCommandInteraction, type ButtonInteraction } from 'discord.js';
 import type { Logger } from '../logger.js';
 import { CommunityStore } from './store.js';
-import { levelForXp, type CommunityConfig, type CommunitySnapshot, type InviteAuditEntry } from './types.js';
+import { defaultGuild, levelForXp, type CommunityConfig, type CommunitySnapshot, type InviteAuditEntry } from './types.js';
 import { assertSafeRole, mergeConfig } from './config.js';
 import { applyCount, applyInviteJoin, applyInviteLeave, awardMessageXp, MAX_MEMBERS_PER_GUILD, type InviteUse } from './logic.js';
 import { appendInviteLog, departureSource, inviteReasonText, resolveInviteSource, unknownInvite } from './invite-log.js';
@@ -92,7 +93,7 @@ export class CommunityService {
     if (!command && !button) return;
     const run = async () => {
       if (!interaction.inCachedGuild()) {
-        if (interaction.isRepliable()) await interaction.reply({ content: 'Use this in a Discord server.', flags: MessageFlags.Ephemeral });
+        if (interaction.isRepliable()) await interaction.reply({ content: botText(interaction.guildId, 'Use this in a Discord server.', {}, interaction.locale), flags: MessageFlags.Ephemeral });
         return;
       }
       if (interaction.isChatInputCommand()) await this.command(interaction);
@@ -101,7 +102,7 @@ export class CommunityService {
     const task = run().catch(async error => {
       this.report(error);
       if (!interaction.isRepliable() || interaction.replied) return;
-      const content = 'I could not complete that action. Check the bot permissions and configured roles, then try again.';
+      const content = botText(interaction.guildId, 'I could not complete that action. Check the bot permissions and configured roles, then try again.', {}, interaction.locale);
       try { if (interaction.deferred) await interaction.editReply({ content }); else await interaction.reply({ content, flags: MessageFlags.Ephemeral }); } catch (replyError) { this.report(replyError); }
     });
     this.active.add(task);
@@ -204,7 +205,7 @@ export class CommunityService {
     if (result.kind === 'correct') await message.react('✅');
     else if (result.kind === 'wrong') {
       await message.react('❌');
-      await message.reply({ content: result.reason === 'same-user' ? 'Take turns! The count resets. Start again at **1**.' : `The next number was **${result.expected}**. The count resets. Start again at **1**.`, allowedMentions: { parse: [], repliedUser: false } });
+      await message.reply({ content: result.reason === 'same-user' ? botText(guildId, 'Take turns! The count resets. Start again at **1**.', {}, message.guild?.preferredLocale) : botText(guildId, 'The next number was **{expected}**. The count resets. Start again at **1**.', { expected: result.expected }, message.guild?.preferredLocale), allowedMentions: { parse: [], repliedUser: false } });
     }
   }
   private async fetchInvites(guild: Guild): Promise<InviteUse[]> {
@@ -271,7 +272,7 @@ export class CommunityService {
         const role = await member.guild.roles.fetch(roleId, { force: true });
         if (!role) continue;
         assertSafeRole(role);
-        await member.roles.add(role, 'Configured welcome role');
+        await member.roles.add(role, botText(member.guild.id, 'Configured welcome role', {}, member.guild.preferredLocale));
       } catch (error) { this.report(error); }
     }
   }
@@ -299,11 +300,15 @@ export class CommunityService {
       const channel = await guild.channels.fetch(config.logChannelId);
       const bot = await guild.members.fetchMe();
       if (!channel || channel.guildId !== guild.id || channel.type !== ChannelType.GuildText || !channel.permissionsFor(bot)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) throw new Error('The invite log channel is missing or the bot cannot send embeds there.');
-      const embed = new EmbedBuilder().setColor(entry.event === 'joined' ? 0x63D7FF : 0x8CA2B8).setTitle(entry.event === 'joined' ? 'Member joined' : 'Member left')
+      const t = (source: string, params: TextParams = {}) => botText(guild.id, source, params, guild.preferredLocale);
+      const source = entry.source === 'invite'
+        ? t('Invite code: {code}\nCreated by: {inviter}{channel}', { code: escapeMarkdown(entry.inviteCode!), inviter: entry.inviterId ? `<@${entry.inviterId}> (${entry.inviterId})` : t('Unknown'), channel: entry.inviteChannelId ? t('\nInvite channel: <#{channelId}>', { channelId: entry.inviteChannelId }) : '' })
+        : t('Unknown');
+      const embed = new EmbedBuilder().setColor(entry.event === 'joined' ? 0x63D7FF : 0x8CA2B8).setTitle(t(entry.event === 'joined' ? 'Member joined' : 'Member left'))
         .setDescription(`${escapeMarkdown(entry.memberName)} (<@${entry.memberId}>)`).setTimestamp(entry.at)
-        .addFields({ name: 'Member ID', value: entry.memberId }, { name: entry.event === 'left' ? 'Last observed join source' : 'Join source', value: entry.source === 'invite' ? `Invite code: ${escapeMarkdown(entry.inviteCode!)}\nCreated by: ${entry.inviterId ? `<@${entry.inviterId}> (${entry.inviterId})` : 'Unknown'}${entry.inviteChannelId ? `\nInvite channel: <#${entry.inviteChannelId}>` : ''}` : 'Unknown' }, { name: 'Attribution', value: inviteReasonText[entry.reason] })
-        .setFooter({ text: 'Invite attribution is best effort. No new challenge credit is awarded by logging.' });
-      if (entry.referralInviterId && entry.referralInviterId !== entry.inviterId) embed.addFields({ name: 'Original challenge referral', value: `<@${entry.referralInviterId}> (separate from this join source)` });
+        .addFields({ name: t('Member ID'), value: entry.memberId }, { name: t(entry.event === 'left' ? 'Last observed join source' : 'Join source'), value: source }, { name: t('Attribution'), value: t(inviteReasonText[entry.reason]) })
+        .setFooter({ text: t('Invite attribution is best effort. No new challenge credit is awarded by logging.') });
+      if (entry.referralInviterId && entry.referralInviterId !== entry.inviterId) embed.addFields({ name: t('Original challenge referral'), value: t('<@{inviterId}> (separate from this join source)', { inviterId: entry.referralInviterId }) });
       await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
     } catch (error) { this.report(error); }
   }
@@ -315,16 +320,19 @@ export class CommunityService {
     if (!channel?.isTextBased() || channel.guildId !== member.guild.id || !('send' in channel)) return;
     const format = ping ? config.joinFormat : config.goodbyeFormat;
     if (format === 'off') return;
-    const template = (ping ? config.message : config.goodbyeMessage) || (ping ? 'Welcome {user} to {server}!' : '{user} has left {server}.');
-    const content = template.replaceAll('{user}', `<@${member.id}>`).replaceAll('{server}', member.guild.name).replaceAll('{count}', String(member.guild.memberCount)).slice(0, 2000);
+    const t = (source: string, params: TextParams = {}) => botText(member.guild.id, source, params, member.guild.preferredLocale);
+    const saved = ping ? config.message : config.goodbyeMessage;
+    const template = !saved ? t(ping ? 'Welcome {user} to {server}!' : '{user} has left {server}.') : ping && saved === defaultGuild().config.welcome.message ? t('Welcome {user} to {server}! You are member {count}.') : saved;
+    const values: Record<string, string> = { user: `<@${member.id}>`, server: member.guild.name, count: String(member.guild.memberCount) };
+    const content = template.replace(/\{(user|server|count)\}/g, (_, key: string) => values[key]!).slice(0, 2000);
     let attachment: AttachmentBuilder | undefined;
     if (format === 'card' || format === 'both') {
       try {
         const bot = await member.guild.members.fetchMe();
         if (!channel.permissionsFor(bot)?.has(PermissionFlagsBits.AttachFiles)) throw new Error('Attach Files permission is missing.');
-        const displayName = member.displayName || member.user.globalName || member.user.username || 'A community member';
-        const image = await renderMemberCard({ kind: ping ? 'join' : 'leave', displayName, serverName: member.guild.name, memberCount: member.guild.memberCount, avatarUrl: member.displayAvatarURL?.({ extension: 'png', size: 256, forceStatic: true }), settings: config.card });
-        attachment = new AttachmentBuilder(image, { name: ping ? 'cyro-welcome.png' : 'cyro-goodbye.png', description: `${displayName} ${ping ? 'joined' : 'left'} ${member.guild.name}. ${member.guild.memberCount} members.`.slice(0, 1000) });
+        const displayName = member.displayName || member.user.globalName || member.user.username || t('A community member');
+        const image = await renderMemberCard({ guildId: member.guild.id, locale: member.guild.preferredLocale, kind: ping ? 'join' : 'leave', displayName, serverName: member.guild.name, memberCount: member.guild.memberCount, avatarUrl: member.displayAvatarURL?.({ extension: 'png', size: 256, forceStatic: true }), settings: config.card });
+        attachment = new AttachmentBuilder(image, { name: ping ? 'cyro-welcome.png' : 'cyro-goodbye.png', description: t(ping ? '{member} joined {server}. {count} members.' : '{member} left {server}. {count} members.', { member: displayName, server: member.guild.name, count: member.guild.memberCount }).slice(0, 1000) });
       } catch (error) {
         this.logger.warn('Member image card unavailable; sending the text greeting.', { guildId: member.guild.id, reason: error instanceof Error ? error.message : 'Rendering failed' });
       }
@@ -333,15 +341,17 @@ export class CommunityService {
     await channel.send({ ...(format !== 'card' || !attachment ? { content } : {}), ...(attachment ? { files: [attachment] } : {}), allowedMentions: { parse: [], users: ping ? [member.id] : [] } });
   }
   private async command(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
+    const t = (source: string, params: TextParams = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = (source: string) => botText(interaction.guildId, source, {}, interaction.guild.preferredLocale);
     await interaction.deferReply(interaction.commandName === 'roles-panel' ? {} : { flags: MessageFlags.Ephemeral });
     await this.access?.command(interaction.guild, interaction.user.id, interaction.commandName, interaction.commandName !== 'roles-panel' || interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild));
     const state = this.store.get(interaction.guildId);
     if (interaction.commandName === 'roles-panel') {
-      if (!this.access && !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) { await interaction.editReply({ content: 'You need Manage Server permission to publish a roles panel.' }); return; }
-      if (!state.config.selfRoles.roles.length) { await interaction.editReply({ content: 'Configure self roles in the dashboard first.' }); return; }
+      if (!this.access && !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) { await interaction.editReply({ content: t('You need Manage Server permission to publish a roles panel.') }); return; }
+      if (!state.config.selfRoles.roles.length) { await interaction.editReply({ content: t('Configure self roles in the dashboard first.') }); return; }
       const channel = await interaction.guild.channels.fetch(interaction.channelId);
       const bot = await interaction.guild.members.fetchMe();
-      if (!channel?.permissionsFor(bot)?.has(PermissionFlagsBits.EmbedLinks)) { await interaction.editReply({ content: 'The bot needs Embed Links in this channel to publish a roles panel.' }); return; }
+      if (!channel?.permissionsFor(bot)?.has(PermissionFlagsBits.EmbedLinks)) { await interaction.editReply({ content: t('The bot needs Embed Links in this channel to publish a roles panel.') }); return; }
       const roles = await interaction.guild.roles.fetch();
       const rows: ActionRowBuilder<ButtonBuilder>[] = [];
       for (const [index, configured] of state.config.selfRoles.roles.entries()) {
@@ -351,41 +361,43 @@ export class CommunityService {
         if (index % 5 === 0) rows.push(new ActionRowBuilder<ButtonBuilder>());
         rows.at(-1)!.addComponents(new ButtonBuilder().setCustomId(`community:role:${interaction.guildId}:${configured.roleId}`).setLabel(configured.label).setStyle(ButtonStyle.Secondary));
       }
-      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle('Choose your roles').setDescription('Click a button to add its role. Click it again to remove the role.')], components: rows, allowedMentions: { parse: [] } });
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle(shared('Choose your roles')).setDescription(shared('Click a button to add its role. Click it again to remove the role.'))], components: rows, allowedMentions: { parse: [] } });
       return;
     }
     let content: string;
     if (interaction.commandName === 'counting') {
-      content = state.config.counting.enabled ? `Counting in <#${state.config.counting.channelId}>\nCurrent: **${state.counting.current}** · Record: **${state.counting.best}**\nNext number: **${state.counting.current + 1}**. Send only a whole number, take turns, and keep the chain going. A wrong number or two turns in a row resets to 1. Edits do not count.` : 'Counting is disabled. A server manager can enable it in the dashboard.';
+      content = state.config.counting.enabled ? t('Counting in <#{channelId}>\nCurrent: **{current}** · Record: **{best}**\nNext number: **{next}**. Send only a whole number, take turns, and keep the chain going. A wrong number or two turns in a row resets to 1. Edits do not count.', { channelId: state.config.counting.channelId!, current: state.counting.current, best: state.counting.best, next: state.counting.current + 1 }) : t('Counting is disabled. A server manager can enable it in the dashboard.');
     } else if (interaction.commandName === 'invites') {
       const score = state.inviteScores[interaction.user.id] ?? { active: 0, total: 0 };
       const leaders = (await this.snapshot(interaction.guildId)).inviteLeaderboard.slice(0, 10);
-      content = state.config.invites.enabled ? `**${state.config.invites.challengeName}**\nYour progress: **${score.active}/${state.config.invites.challengeTarget}** active unique members ${score.active >= state.config.invites.challengeTarget ? '🏆' : ''}\nTotal unique referrals: **${score.total}**\n\n${leaders.map((entry, index) => `${index + 1}. <@${entry.userId}> — ${entry.active} active`).join('\n') || 'No attributed invites yet.'}\n\nExisting, ambiguous, vanity, and expired invite joins receive no new credit. Departures reduce active referrals; rejoining never increases total referrals.` : state.config.invites.loggingEnabled ? 'Invite challenges are disabled. Staff invite logging is active; authorized staff can view it in the dashboard or configured log channel.' : 'Invite challenges are disabled. A server manager can enable challenges or separate staff invite logging in the dashboard.';
+      const challenge = state.config.invites.challengeName === defaultGuild().config.invites.challengeName ? t('Community invite challenge') : state.config.invites.challengeName;
+      content = state.config.invites.enabled ? t('**{challenge}**\nYour progress: **{active}/{target}** active unique members {trophy}\nTotal unique referrals: **{total}**\n\n{leaders}\n\nExisting, ambiguous, vanity, and expired invite joins receive no new credit. Departures reduce active referrals; rejoining never increases total referrals.', { challenge, active: score.active, target: state.config.invites.challengeTarget, trophy: score.active >= state.config.invites.challengeTarget ? '🏆' : '', total: score.total, leaders: leaders.map((entry, index) => t('{position}. <@{userId}> — {active} active', { position: index + 1, userId: entry.userId, active: entry.active })).join('\n') || t('No attributed invites yet.') }) : state.config.invites.loggingEnabled ? t('Invite challenges are disabled. Staff invite logging is active; authorized staff can view it in the dashboard or configured log channel.') : t('Invite challenges are disabled. A server manager can enable challenges or separate staff invite logging in the dashboard.');
     } else if (interaction.commandName === 'rank') {
       const xp = state.levels[interaction.user.id]?.xp ?? 0;
-      content = state.config.levels.enabled ? `Your level: **${levelForXp(xp)}** · XP: **${xp}**\nNext level at **${100 * (levelForXp(xp) + 1) ** 2} XP**. Chat naturally: eligible messages earn 10 XP at most once each minute.` : 'Chat levels are disabled. A server manager can enable them in the dashboard.';
+      content = state.config.levels.enabled ? t('Your level: **{level}** · XP: **{xp}**\nNext level at **{next} XP**. Chat naturally: eligible messages earn 10 XP at most once each minute.', { level: levelForXp(xp), xp, next: 100 * (levelForXp(xp) + 1) ** 2 }) : t('Chat levels are disabled. A server manager can enable them in the dashboard.');
     } else {
       const leaders = (await this.snapshot(interaction.guildId)).levelLeaderboard.slice(0, 10);
-      content = state.config.levels.enabled ? `**Community activity**\n${leaders.map((entry, index) => `${index + 1}. <@${entry.userId}> — level ${entry.level} · ${entry.xp} XP`).join('\n') || 'No activity recorded yet.'}` : 'Chat levels are disabled. A server manager can enable them in the dashboard.';
+      content = state.config.levels.enabled ? t('**Community activity**\n{leaders}', { leaders: leaders.map((entry, index) => t('{position}. <@{userId}> — level {level} · {xp} XP', { position: index + 1, userId: entry.userId, level: entry.level, xp: entry.xp })).join('\n') || t('No activity recorded yet.') }) : t('Chat levels are disabled. A server manager can enable them in the dashboard.');
     }
     await interaction.editReply({ content, allowedMentions: { parse: [] } });
   }
   private async roleButton(interaction: ButtonInteraction<'cached'>): Promise<void> {
+    const t = (source: string, params: TextParams = {}) => botText(interaction.guildId, source, params, interaction.locale);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await this.enqueue(interaction.guildId, async () => {
       const [, , guildId, roleId] = interaction.customId.split(':');
       const config = this.store.config(interaction.guildId);
-      if (guildId !== interaction.guildId || !roleId || !config.selfRoles.roles.some(role => role.roleId === roleId) || (config.verification.enabled && config.verification.roleId === roleId)) { await interaction.editReply({ content: 'This role is no longer available. Ask a server manager to publish a new panel.' }); return; }
+      if (guildId !== interaction.guildId || !roleId || !config.selfRoles.roles.some(role => role.roleId === roleId) || (config.verification.enabled && config.verification.roleId === roleId)) { await interaction.editReply({ content: t('This role is no longer available. Ask a server manager to publish a new panel.') }); return; }
       await interaction.guild.members.fetchMe();
       const role = await interaction.guild.roles.fetch(roleId, { force: true });
       if (!role) throw new Error('Role no longer exists.');
       assertSafeRole(role);
       const member = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
-      if (member.pending) { await interaction.editReply({ content: 'Complete the server membership screening before choosing roles.' }); return; }
+      if (member.pending) { await interaction.editReply({ content: t('Complete the server membership screening before choosing roles.') }); return; }
       const remove = member.roles.cache.has(roleId);
-      if (remove) await member.roles.remove(roleId, 'Self-role panel');
-      else await member.roles.add(roleId, 'Self-role panel');
-      await interaction.editReply({ content: `${remove ? 'Removed' : 'Added'} <@&${roleId}>.`, allowedMentions: { parse: [] } });
+      if (remove) await member.roles.remove(roleId, botText(interaction.guildId, 'Self-role panel', {}, interaction.guild.preferredLocale));
+      else await member.roles.add(roleId, botText(interaction.guildId, 'Self-role panel', {}, interaction.guild.preferredLocale));
+      await interaction.editReply({ content: t(remove ? 'Removed <@&{roleId}>.' : 'Added <@&{roleId}>.', { roleId }), allowedMentions: { parse: [] } });
     });
   }
   async getConfig(guildId: string): Promise<CommunityConfig> { return this.store.config(guildId); }

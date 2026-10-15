@@ -10,7 +10,7 @@ export class VoiceSessions {
   async join(guildId:string,channelId:string,mode:VoiceMode,config:VoiceConfig):Promise<void>{
     if(this.stopped)throw new Error('Voice features are stopping. Try again shortly.');
     const existing=this.rooms.get(guildId);
-    if(existing){if(existing.channelId!==channelId)throw new Error('Cyro is already in another voice channel. Stop that session there first.');if(existing.mode!==mode)throw new Error(`Cyro is currently in ${existing.mode} mode. Stop it before switching modes.`);return existing.connection;}
+    if(existing){if(existing.channelId!==channelId)throw new Error('Cyro is already in another voice channel. Stop that session there first.');if(existing.mode!==mode)throw new Error(existing.mode==='music'?'Cyro is currently in music mode. Stop it before switching modes.':'Cyro is currently in tts mode. Stop it before switching modes.');return existing.connection;}
     if(this.rooms.size>=20)throw new Error('Cyro is at its current voice capacity. Please try again later.');
     const room:Room={guildId,channelId,mode,config:{...config},queue:[],controller:new AbortController(),connection:Promise.resolve(),startedAt:Date.now()};this.rooms.set(guildId,room);
     room.connection=this.track((async()=>{try{const output=await this.connect(guildId,channelId,room.controller.signal);if(room.controller.signal.aborted){output.close();throw new Error('Voice session cancelled.');}room.output=output;this.armIdle(room);}catch(error){this.leave(guildId,room);throw error;}})());

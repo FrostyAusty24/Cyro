@@ -28,7 +28,7 @@ import type { StreamMonitor } from '../services/monitor.js';
 import { assertSafeRole } from '../community/config.js';
 import type { StreamAnalytics } from '../streaming/analytics.js';
 import type { CreatorAnalyticsSnapshot } from '../streaming/creators.js';
-import { botText } from '../i18n/index.js';
+import { botText, botError, botNumber, BotMessageError, type TextParams } from '../i18n/index.js';
 
 export class CommandHandler {
   private attached = false;
@@ -80,7 +80,7 @@ export class CommandHandler {
     } catch (error) {
       this.logger.error('Command handler failed.', error instanceof Error ? error.message : error);
       if (interaction.isRepliable() && !interaction.replied) {
-        const content = `❌ ${botText(interaction.guildId, error instanceof Error ? error.message : 'Something went wrong.', {}, interaction.locale)}`;
+        const content = `❌ ${botError(interaction.guildId, error, interaction.locale)}`;
         if (interaction.deferred) await interaction.editReply({ content });
         else await interaction.reply({ content, flags: MessageFlags.Ephemeral });
       }
@@ -170,7 +170,12 @@ export class CommandHandler {
     else if (subcommand === 'check') await this.check(interaction, platform);
   }
 
+  private translator(interaction: ChatInputCommandInteraction<'cached'>, shared = false) {
+    return (source: string, params: TextParams = {}) => botText(interaction.guildId, source, params, shared ? interaction.guild.preferredLocale : interaction.locale);
+  }
+
   private async streamerLeaderboard(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
+    const t = this.translator(interaction, true);
     if (!this.analytics) throw new Error('Streamer statistics are not available yet.');
     const period = interaction.options.getString('period') ?? '7d';
     const sort = interaction.options.getString('sort') ?? 'time';
@@ -179,16 +184,16 @@ export class CommandHandler {
     const rows = [...(data.creatorLeaderboards??data.leaderboards)[period as '7d' | '30d' | 'all']];
     const metric = (entry: typeof rows[number]) => sort === 'viewers' ? entry.averageViewers : sort === 'followers' ? entry.followersGained : entry.trackedMilliseconds;
     rows.sort((a,b) => (metric(b) ?? -Infinity) - (metric(a) ?? -Infinity) || b.trackedMilliseconds-a.trackedMilliseconds || a.streamerId.localeCompare(b.streamerId));
-    const number = (value: number | null) => value === null ? 'Unavailable' : value.toLocaleString('en-US',{maximumFractionDigits:1});
+    const number = (value: number | null) => value === null ? t('Unavailable') : botNumber(interaction.guildId,value,interaction.guild.preferredLocale,{maximumFractionDigits:1});
     const lines = rows.slice(0,10).map((entry,index) => {
       const minutes = Math.floor(entry.trackedMilliseconds/60_000);
       const platforms='platforms' in entry?(entry as {platforms:string[]}).platforms.join(', '):entry.platform;
-      return `**${index+1}. ${escapeMarkdown(entry.displayName).slice(0,80)}** · ${platforms}\n${Math.floor(minutes/60)}h ${minutes%60}m platform time · Avg viewers: ${number(entry.averageViewers)} · Peak: ${number(entry.peakViewers)} · Net followers: ${entry.followersGained !== null && entry.followersGained > 0 ? '+' : ''}${number(entry.followersGained)}`;
+      return t('**{rank}. {name}** · {platforms}\n{hours}h {minutes}m platform time · Avg viewers: {average} · Peak: {peak} · Net followers: {followers}', {rank:index+1,name:escapeMarkdown(entry.displayName).slice(0,80),platforms,hours:Math.floor(minutes/60),minutes:minutes%60,average:number(entry.averageViewers),peak:number(entry.peakViewers),followers:(entry.followersGained !== null && entry.followersGained > 0 ? '+' : '')+number(entry.followersGained)});
     });
-    const label = period === 'all' ? 'Retained 90-day history' : `Last ${period === '7d' ? '7' : '30'} UTC days`;
-    const embed = new EmbedBuilder().setColor(0x36c98f).setTitle(`Streamer leaderboard · ${label}`)
-      .setDescription(lines.length ? lines.join('\n\n').slice(0,4096) : 'No measured announced streams yet. Statistics begin after a real announcement and two confirmed live checks.')
-      .setFooter({text:'Time adds linked accounts, including simulcasts. Weighted average; peak is the highest single-platform sample. Coverage and breakdown in dashboard.'});
+    const label = period === 'all' ? t('Retained 90-day history') : t('Last {days} UTC days',{days:period === '7d' ? 7 : 30});
+    const embed = new EmbedBuilder().setColor(0x36c98f).setTitle(t('Streamer leaderboard · {period}',{period:label}))
+      .setDescription(lines.length ? lines.join('\n\n').slice(0,4096) : t('No measured announced streams yet. Statistics begin after a real announcement and two confirmed live checks.'))
+      .setFooter({text:t('Time adds linked accounts, including simulcasts. Weighted average; peak is the highest single-platform sample. Coverage and breakdown in dashboard.')});
     await interaction.editReply({embeds:[embed],allowedMentions:{parse:[]}});
   }
 
@@ -198,11 +203,11 @@ export class CommandHandler {
     const username = normalizeUsername(platform, interaction.options.getString('username', true));
     const existing = await this.store.forGuild(interaction.guildId, platform);
     if (existing.some((record) => record.username.toLowerCase() === username)) {
-      throw new Error(`${username} is already configured. Use /${platform} edit instead.`);
+      throw new BotMessageError('{name} is already configured. Use /{platform} edit instead.',{name:username,platform});
     }
     const resolved = await provider.resolve(username);
     if (resolved.platformUserId && existing.some((record) => record.platformUserId === resolved.platformUserId)) {
-      throw new Error(`${resolved.displayName} is already configured. Use /${platform} edit instead.`);
+      throw new BotMessageError('{name} is already configured. Use /{platform} edit instead.',{name:resolved.displayName,platform});
     }
     const now = new Date().toISOString();
     const record: StreamerRecord = {
@@ -227,7 +232,7 @@ export class CommandHandler {
     if(creatorId){const creator=await this.selectedCreator(interaction.guildId,creatorId);record.creatorId=creator.id;record.discordMemberId=creator.discordMemberId;}
     await this.validateConfiguration(interaction.guild, record);
     const saved = await this.store.add(record);
-    await interaction.editReply({ embeds: [this.savedEmbed(saved, 'Added')] });
+    await interaction.editReply({ embeds: [this.savedEmbed(saved, 'Added {name}', interaction.locale)] });
   }
 
   private async edit(interaction: ChatInputCommandInteraction<'cached'>, platform: Platform): Promise<void> {
@@ -258,7 +263,7 @@ export class CommandHandler {
     await this.validateConfiguration(interaction.guild, candidate);
     const after = await this.store.update(before.id, patch);
     await this.alerts.reconcileEdit(before, after);
-    await interaction.editReply({ embeds: [this.savedEmbed(after, 'Updated')] });
+    await interaction.editReply({ embeds: [this.savedEmbed(after, 'Updated {name}', interaction.locale)] });
   }
 
   private async clear(interaction: ChatInputCommandInteraction<'cached'>, platform: Platform): Promise<void> {
@@ -272,7 +277,7 @@ export class CommandHandler {
     else if (setting === 'message') patch.messageTemplate = DEFAULT_MESSAGE_TEMPLATE;
     const after = await this.store.update(before.id, patch);
     await this.alerts.reconcileEdit(before, after);
-    await interaction.editReply({ embeds: [this.savedEmbed(after, 'Cleared setting for')] });
+    await interaction.editReply({ embeds: [this.savedEmbed(after, 'Cleared setting for {name}', interaction.locale)] });
   }
 
   private async toggle(interaction: ChatInputCommandInteraction<'cached'>, platform: Platform): Promise<void> {
@@ -281,75 +286,77 @@ export class CommandHandler {
     if (enabled) await this.validateConfiguration(interaction.guild, before);
     if (!enabled && before.state === 'live') await this.alerts.markOffline(before);
     const after = await this.store.update(before.id, { enabled, ...(enabled ? {} : { state: 'offline' as const }) });
-    await interaction.editReply({ content: `${enabled ? '✅ Enabled' : '⏸️ Paused'} **${after.displayName}**.` });
+    await interaction.editReply({ content: this.translator(interaction)(enabled ? '✅ Enabled **{name}**.' : '⏸️ Paused **{name}**.',{name:after.displayName}) });
   }
 
   private async remove(interaction: ChatInputCommandInteraction<'cached'>, platform: Platform): Promise<void> {
     const record = await this.selected(interaction, platform);
     await this.alerts.retire(record);
     await this.store.remove(record.id);
-    await interaction.editReply({ content: `🗑️ Removed **${record.displayName}** from ${platform} alerts.` });
+    await interaction.editReply({ content: this.translator(interaction)('🗑️ Removed **{name}** from {platform} alerts.',{name:record.displayName,platform}) });
   }
 
   private async list(interaction: ChatInputCommandInteraction<'cached'>, platform: Platform): Promise<void> {
+    const t = this.translator(interaction);
     const records = await this.store.forGuild(interaction.guildId, platform);
     if (!records.length) {
-      await interaction.editReply({ content: `No ${platform} streamers are configured. Use **/${platform} add** to add one.` });
+      await interaction.editReply({ content: t('No {platform} streamers are configured. Use **/{platform} add** to add one.',{platform}) });
       return;
     }
     const shown = records.slice(0, 50);
     const lines = shown.map((record) => {
       const status = !record.enabled ? '⏸️' : record.state === 'live' ? '🔴' : record.state === 'offline' ? '⚫' : '❔';
-      const roles = [record.pingRoleId ? `ping <@&${record.pingRoleId}>` : '', record.liveRoleId ? `live <@&${record.liveRoleId}>` : ''].filter(Boolean).join(' • ');
-      return `${status} **${record.displayName}** → <#${record.alertChannelId}>\n${roles || 'No roles'} • cleanup: \`${record.cleanupMode}\` • cooldown: ${record.cooldownSeconds / 60}m`;
+      const roles = [record.pingRoleId ? t('ping <@&{role}>',{role:record.pingRoleId}) : '', record.liveRoleId ? t('live <@&{role}>',{role:record.liveRoleId}) : ''].filter(Boolean).join(' • ');
+      return t('{status} **{name}** → <#{channel}>\n{roles} • cleanup: `{cleanup}` • cooldown: {minutes}m',{status,name:record.displayName,channel:record.alertChannelId,roles:roles||t('No roles'),cleanup:t(record.cleanupMode),minutes:record.cooldownSeconds/60});
     });
     const embed = new EmbedBuilder()
       .setColor(0x2b8cff)
-      .setTitle(`${platform[0]!.toUpperCase() + platform.slice(1)} streamers (${records.length})`)
+      .setTitle(t('{platform} streamers ({count})',{platform:platform[0]!.toUpperCase()+platform.slice(1),count:records.length}))
       .setDescription(lines.join('\n\n').slice(0, 4096))
-      .setFooter({ text: records.length > shown.length ? `Showing first ${shown.length}` : '🔴 live • ⚫ offline • ❔ not checked • ⏸️ paused' });
+      .setFooter({ text: records.length > shown.length ? t('Showing first {count}',{count:shown.length}) : t('🔴 live • ⚫ offline • ❔ not checked • ⏸️ paused') });
     await interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } });
   }
 
   private async test(interaction: ChatInputCommandInteraction<'cached'>, platform: Platform): Promise<void> {
     const record = await this.selected(interaction, platform);
     const message = await this.alerts.testAlert(record);
-    await interaction.editReply({ content: `✅ Test alert posted in <#${record.alertChannelId}>: ${message.url}` });
+    await interaction.editReply({ content: this.translator(interaction)('✅ Test alert posted in <#{channel}>: {url}',{channel:record.alertChannelId,url:message.url}) });
   }
 
   private async check(interaction: ChatInputCommandInteraction<'cached'>, platform: Platform): Promise<void> {
     const id = interaction.options.getString('streamer') || undefined;
     if (id) await this.assertRecord(id, interaction.guildId, platform);
     const summary = await this.monitor.check({ guildId: interaction.guildId, platform, recordId: id, includeDisabled: Boolean(id) });
-    await interaction.editReply({ content: this.summaryText(summary) });
+    await interaction.editReply({ content: this.summaryText(summary,interaction) });
   }
 
   private async streamAlerts(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
+    const t = this.translator(interaction);
     const subcommand = interaction.options.getSubcommand();
     if (subcommand === 'check') {
       const summary = await this.monitor.check({ guildId: interaction.guildId });
-      await interaction.editReply({ content: this.summaryText(summary) });
+      await interaction.editReply({ content: this.summaryText(summary,interaction) });
       return;
     }
     const records = await this.store.forGuild(interaction.guildId);
     const counts = PLATFORMS.map((platform) => {
       const provider = this.providers[platform];
       const count = records.filter((record) => record.platform === platform).length;
-      const state = provider.isConfigured() ? '✅ ready' : `❌ ${provider.configurationHint()}`;
-      const caveat = platform === 'tiktok' ? ' (best effort)' : '';
-      return `**${platform[0]!.toUpperCase() + platform.slice(1)}:** ${state}${caveat} • ${count} configured`;
+      const state = provider.isConfigured() ? t('✅ ready') : `❌ ${t(provider.configurationHint())}`;
+      const caveat = platform === 'tiktok' ? t(' (best effort)') : '';
+      return t('**{platform}:** {state}{caveat} • {count} configured',{platform:platform[0]!.toUpperCase()+platform.slice(1),state,caveat,count});
     });
     const live = records.filter((record) => record.enabled && record.state === 'live').length;
     const embed = new EmbedBuilder()
       .setColor(0x2b8cff)
-      .setTitle('Stream Alerts status')
+      .setTitle(t('Stream Alerts status'))
       .setDescription(counts.join('\n'))
       .addFields(
-        { name: 'Tracked', value: String(records.length), inline: true },
-        { name: 'Live now', value: String(live), inline: true },
-        { name: 'Paused', value: String(records.filter((record) => !record.enabled).length), inline: true },
+        { name: t('Tracked'), value: String(records.length), inline: true },
+        { name: t('Live now'), value: String(live), inline: true },
+        { name: t('Paused'), value: String(records.filter((record) => !record.enabled).length), inline: true },
       )
-      .setFooter({ text: `Message placeholders: ${supportedPlaceholders()}` });
+      .setFooter({ text: t('Message placeholders: {placeholders}',{placeholders:supportedPlaceholders()}) });
     await interaction.editReply({ embeds: [embed] });
   }
 
@@ -407,7 +414,7 @@ export class CommandHandler {
       const pingRole = await guild.roles.fetch(record.pingRoleId);
       if (!pingRole) throw new Error('The selected ping role no longer exists.');
       if (!pingRole.mentionable && !me.permissions.has(PermissionFlagsBits.MentionEveryone)) {
-        throw new Error(`Make ${pingRole.name} mentionable, or give the bot permission to mention all roles.`);
+        throw new BotMessageError('Make {role} mentionable, or give the bot permission to mention all roles.',{role:pingRole.name});
       }
     }
     if (record.discordMemberId) await guild.members.fetch(record.discordMemberId);
@@ -418,29 +425,31 @@ export class CommandHandler {
       assertSafeRole(role);
       if (role.managed) throw new Error('The selected live role is managed by an integration and cannot be assigned.');
       if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('The bot needs Manage Roles to use a live role.');
-      if (me.roles.highest.comparePositionTo(role) <= 0) throw new Error(`Move the bot’s role above ${role.name} in Server Settings → Roles.`);
+      if (me.roles.highest.comparePositionTo(role) <= 0) throw new BotMessageError('Move the bot’s role above {role} in Server Settings → Roles.',{role:role.name});
     }
   }
 
-  private savedEmbed(record: StreamerRecord, verb: string): EmbedBuilder {
+  private savedEmbed(record: StreamerRecord, title: string, locale?: string): EmbedBuilder {
+    const t = (source:string,params:TextParams={})=>botText(record.guildId,source,params,locale);
     return new EmbedBuilder()
       .setColor(0x36c98f)
-      .setTitle(`${verb} ${record.displayName}`)
-      .setDescription(`Alerts will post in <#${record.alertChannelId}>.`)
+      .setTitle(t(title,{name:record.displayName}))
+      .setDescription(t('Alerts will post in <#{channel}>.',{channel:record.alertChannelId}))
       .addFields(
-        { name: 'Platform', value: record.platform, inline: true },
-        { name: 'Cleanup', value: record.cleanupMode, inline: true },
-        { name: 'Cooldown', value: `${record.cooldownSeconds / 60} minutes`, inline: true },
-        { name: 'Ping role', value: record.pingRoleId ? `<@&${record.pingRoleId}>` : 'None', inline: true },
-        { name: 'Live role', value: record.liveRoleId ? `<@&${record.liveRoleId}>` : 'None', inline: true },
-        { name: 'Linked member', value: record.discordMemberId ? `<@${record.discordMemberId}>` : 'None', inline: true },
-        { name: 'Title filter', value: record.titleFilter || 'None', inline: false },
+        { name: t('Platform'), value: record.platform, inline: true },
+        { name: t('Cleanup'), value: t(record.cleanupMode), inline: true },
+        { name: t('Cooldown'), value: t('{minutes} minutes',{minutes:record.cooldownSeconds/60}), inline: true },
+        { name: t('Ping role'), value: record.pingRoleId ? `<@&${record.pingRoleId}>` : t('None'), inline: true },
+        { name: t('Live role'), value: record.liveRoleId ? `<@&${record.liveRoleId}>` : t('None'), inline: true },
+        { name: t('Linked member'), value: record.discordMemberId ? `<@${record.discordMemberId}>` : t('None'), inline: true },
+        { name: t('Title filter'), value: record.titleFilter || t('None'), inline: false },
       )
-      .setFooter({ text: `Use /${record.platform} edit, clear, test, toggle, or remove any time.` });
+      .setFooter({ text: t('Use /{platform} edit, clear, test, toggle, or remove any time.',{platform:record.platform}) });
   }
 
-  private summaryText(summary: { checked: number; live: number; offline: number; errors: number }): string {
-    if (summary.checked === 0) return 'ℹ️ No matching enabled streamers were found, or another check is already running.';
-    return `✅ Checked **${summary.checked}** • 🔴 Live: **${summary.live}** • ⚫ Offline: **${summary.offline}**${summary.errors ? ` • ⚠️ Errors: **${summary.errors}**` : ''}`;
+  private summaryText(summary: { checked: number; live: number; offline: number; errors: number }, interaction:ChatInputCommandInteraction<'cached'>): string {
+    const t=this.translator(interaction);
+    if (summary.checked === 0) return t('ℹ️ No matching enabled streamers were found, or another check is already running.');
+    return t('✅ Checked **{checked}** • 🔴 Live: **{live}** • ⚫ Offline: **{offline}**',{checked:summary.checked,live:summary.live,offline:summary.offline})+(summary.errors?t(' • ⚠️ Errors: **{count}**',{count:summary.errors}):'');
   }
 }

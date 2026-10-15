@@ -71,10 +71,10 @@ it('routes all numbered shortcuts including 10–12 to their full stable voice I
 it('uses the shared voice permission for choices and new aliases without changing a denied preference', async () => {
   const f = await fixture(), userId = '323456789012345678';
   await f.invoke('ttsvoice', userId, 'voice10');
-  f.access.command.mockRejectedValue(new Error('Your roles cannot use this command.'));
+  f.access.command.mockRejectedValue(new Error('Your roles cannot use this command. Ask the server owner to review Access & commands.'));
   const denied = await f.invoke('ttsvoice12', userId);
   expect(f.access.command).toHaveBeenLastCalledWith(f.guild, userId, 'ttsvoice', true);
-  expect(denied.editReply).toHaveBeenLastCalledWith(expect.objectContaining({ content: 'Your roles cannot use this command.' }));
+  expect(denied.editReply).toHaveBeenLastCalledWith(expect.objectContaining({ content: 'Your roles cannot use this command. Ask the server owner to review Access & commands.' }));
   const stored = new VoiceStore(f.folder); await stored.init();
   expect(stored.get(guildId).voices[userId]).toBe('voice10');
   const invalid = await f.invoke('ttsvoice13', userId);

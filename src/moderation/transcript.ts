@@ -1,3 +1,4 @@
+import { botLocale, botText } from '../i18n/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -5,12 +6,20 @@ import { gzipSync } from 'node:zlib';
 import type { TextChannel } from 'discord.js';
 import type { TicketTranscript } from './store.js';
 
-export interface TranscriptEntry { id?: string; author: string; createdAt: string; content: string; attachments: string[]; editedAt?: string; replyTo?: string }
+export interface TranscriptEntry { id?: string; author: string; createdAt: string; content: string; attachments: string[]; editedAt?: string; replyTo?: string; unsupportedKinds?: string[] }
 export interface TicketSnapshot { entries: TranscriptEntry[]; newestMessageId: string | null; sourceSha256: string; unsupportedContent?: string[] }
 const escape = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
-export function renderTranscript(title: string, entries: TranscriptEntry[], truncated = false): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width"><title>${escape(title)}</title><style>body{font:16px system-ui;background:#0c1421;color:#e8eff9;max-width:900px;margin:40px auto;padding:24px}article{border-top:1px solid #33445c;padding:18px 0}p{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#aabbcf}a{color:#71cfff}</style></head><body><h1>${escape(title)}</h1><p>Private support transcript · ${entries.length} messages. Includes channel messages available when closing, with embed text and attachment links. It does not download original media, recover deleted messages, or include separate threads. Attachment links may expire; save original files separately before deleting a channel.${truncated ? ' This is an incomplete legacy export; retain the original channel.' : ''}</p>${entries.map(entry => `<article${entry.id ? ` id="message-${escape(entry.id)}"` : ''}><b>${escape(entry.author)}</b> <small>${escape(entry.createdAt)}${entry.id ? ` · ${escape(entry.id)}` : ''}${entry.editedAt ? ` · edited ${escape(entry.editedAt)}` : ''}${entry.replyTo ? ` · reply to ${escape(entry.replyTo)}` : ''}</small><p>${escape(entry.content)}</p>${entry.attachments.filter(url => /^https:\/\//i.test(url)).map(url => `<p><a rel="noreferrer noopener" href="${escape(url)}">${escape(url)}</a></p>`).join('')}</article>`).join('')}</body></html>`;
+export function renderTranscript(title: string, entries: TranscriptEntry[], truncated = false, guildId?: string, locale?: string): string {
+  const t = (source: string, params = {}) => botText(guildId, source, params, locale);
+  const introduction = t('Private support transcript · {count} messages. Includes channel messages available when closing, with embed text and attachment links. It does not download original media, recover deleted messages, or include separate threads. Attachment links may expire; save original files separately before deleting a channel.', { count: entries.length }) + (truncated ? t(' This is an incomplete legacy export; retain the original channel.') : '');
+  const articles = entries.map(entry => {
+    // The collection/hash remains language independent; only generated export notes change at rendering.
+    const marker = entry.unsupportedKinds?.length ? `[Not exported: ${entry.unsupportedKinds.join(', ')}. Keep the original ticket channel to preserve this content.]` : '';
+    const content = marker && entry.content.endsWith(marker) ? entry.content.slice(0, -marker.length) + t('[Not exported: {kinds}. Keep the original ticket channel to preserve this content.]', { kinds: entry.unsupportedKinds!.map(kind => t(kind)).join(', ') }) : entry.content;
+    return `<article${entry.id ? ` id="message-${escape(entry.id)}"` : ''}><b>${escape(entry.author)}</b> <small>${escape(entry.createdAt)}${entry.id ? ` · ${escape(entry.id)}` : ''}${entry.editedAt ? ` · ${escape(t('edited {date}', { date: entry.editedAt }))}` : ''}${entry.replyTo ? ` · ${escape(t('reply to {message}', { message: entry.replyTo }))}` : ''}</small><p>${escape(content)}</p>${entry.attachments.filter(url => /^https:\/\//i.test(url)).map(url => `<p><a rel="noreferrer noopener" href="${escape(url)}">${escape(url)}</a></p>`).join('')}</article>`;
+  }).join('');
+  return `<!doctype html><html lang="${botLocale(guildId, locale)}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width"><title>${escape(title)}</title><style>body{font:16px system-ui;background:#0c1421;color:#e8eff9;max-width:900px;margin:40px auto;padding:24px}article{border-top:1px solid #33445c;padding:18px 0}p{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#aabbcf}a{color:#71cfff}</style></head><body><h1>${escape(title)}</h1><p>${escape(introduction)}</p>${articles}</body></html>`;
 }
 
 /** Always prove the end of history; a limit is a failure, never permission to delete. */
@@ -37,7 +46,7 @@ export async function collectTicketTranscript(channel: TextChannel, limits: { ma
       if (message.components?.some(component => component.type !== 1)) unsupported.push('rich message components');
       for (const kind of unsupported) unsupportedContent.add(kind);
       const embedText = (message.embeds ?? []).map(embed => [embed.title, embed.description, ...embed.fields.flatMap(field => [field.name, field.value]), embed.footer?.text, embed.url, embed.image?.url, embed.thumbnail?.url].filter(Boolean).join('\n')).filter(Boolean);
-      const entry: TranscriptEntry = { id: message.id, author: `${message.author.tag} (${message.author.id})`, createdAt: message.createdAt.toISOString(), content: [message.content, ...embedText, ...(unsupported.length ? [`[Not exported: ${unsupported.join(', ')}. Keep the original ticket channel to preserve this content.]`] : [])].filter(Boolean).join('\n\n'), attachments: [...message.attachments.values()].map(a => a.url), ...(message.editedAt ? { editedAt: message.editedAt.toISOString() } : {}), ...(message.reference?.messageId ? { replyTo: message.reference.messageId } : {}) };
+      const entry: TranscriptEntry = { id: message.id, author: `${message.author.tag} (${message.author.id})`, createdAt: message.createdAt.toISOString(), content: [message.content, ...embedText, ...(unsupported.length ? [`[Not exported: ${unsupported.join(', ')}. Keep the original ticket channel to preserve this content.]`] : [])].filter(Boolean).join('\n\n'), attachments: [...message.attachments.values()].map(a => a.url), ...(message.editedAt ? { editedAt: message.editedAt.toISOString() } : {}), ...(message.reference?.messageId ? { replyTo: message.reference.messageId } : {}), ...(unsupported.length ? { unsupportedKinds: unsupported } : {}) };
       bytes += Buffer.byteLength(JSON.stringify(entry), 'utf8');
       if (entries.length >= maxMessages || bytes > maxBytes) throw new Error('This ticket exceeds the automatic transcript limit. The channel was retained; ask staff to export the full history manually.');
       entries.push(entry);
@@ -46,7 +55,7 @@ export async function collectTicketTranscript(channel: TextChannel, limits: { ma
     // Even a short page is followed to its end, so no assumption silently truncates history.
   }
   entries.reverse();
-  return { entries, newestMessageId, sourceSha256: hash(JSON.stringify(entries)), unsupportedContent: [...unsupportedContent] };
+  return { entries, newestMessageId, sourceSha256: hash(JSON.stringify(entries.map(({ unsupportedKinds: _kinds, ...entry }) => entry))), unsupportedContent: [...unsupportedContent] };
 }
 
 export class TicketTranscriptArchive {
@@ -59,9 +68,9 @@ export class TicketTranscriptArchive {
     if (!/^ticket-[a-z0-9-]+\.html(?:\.gz)?$/i.test(filename)) throw new Error('Invalid transcript filename.');
     return path.join(this.directory(guildId), filename);
   }
-  async save(guildId: string, operationId: string, title: string, snapshot: TicketSnapshot, uploadLimit = 8 * 1024 * 1024): Promise<{ receipt: TicketTranscript; data: Buffer }> {
+  async save(guildId: string, operationId: string, title: string, snapshot: TicketSnapshot, uploadLimit = 8 * 1024 * 1024, locale?: string): Promise<{ receipt: TicketTranscript; data: Buffer }> {
     if (!/^[a-z0-9-]+$/i.test(operationId)) throw new Error('Invalid transcript operation.');
-    let data = Buffer.from(renderTranscript(title, snapshot.entries), 'utf8');
+    let data = Buffer.from(renderTranscript(title, snapshot.entries, false, guildId, locale), 'utf8');
     let filename = `ticket-${operationId}.html`;
     if (data.byteLength > uploadLimit) { data = gzipSync(data); filename += '.gz'; }
     if (data.byteLength > uploadLimit) throw new Error('The complete transcript is too large to send safely. The ticket channel was retained; staff must export it manually.');

@@ -1,3 +1,4 @@
+import { BotMessageError } from '../i18n/index.js';
 import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import type { ProviderResult, ResolvedStreamer, StreamerRecord } from '../types.js';
@@ -43,7 +44,7 @@ export class KickProvider implements StreamProvider {
     this.assertConfigured();
     const data = await this.channels([username]);
     const channel = data[0];
-    if (!channel) throw new Error(`Kick channel “${username}” was not found.`);
+    if (!channel) throw new BotMessageError('Kick channel “{username}” was not found.',{username});
     return {
       username: channel.slug.toLowerCase(),
       displayName: channel.slug,
@@ -70,7 +71,7 @@ export class KickProvider implements StreamProvider {
             kind: 'live',
             snapshot: {
               sessionId: stream.id,
-              title: stream.title || 'Untitled stream',
+              title: stream.title || '',
               category: stream.category?.name,
               viewerCount: metricCount(stream.viewer_count),
               // Kick's official public schema exposes no channel follower total.

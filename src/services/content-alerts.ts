@@ -1,3 +1,4 @@
+import { botText } from '../i18n/index.js';
 import { createHash } from 'node:crypto';
 import { EmbedBuilder, escapeMarkdown, type Client } from 'discord.js';
 import type { JsonStore } from '../storage/store.js';
@@ -7,15 +8,16 @@ import { titleMatches } from '../utils/template.js';
 export const DEFAULT_UPLOAD_TEMPLATE = '{role} 🎬 **{creator} uploaded a new video on {platform}!**\n{title}\n{url}';
 const UNCERTAIN_DELIVERY_HINT = 'A video announcement has an uncertain delivery outcome. Check the channel; Cyro will not automatically resend it.';
 
-export function renderUploadMessage(record: StreamerRecord, video: UploadSnapshot): string {
+export function renderUploadMessage(record: StreamerRecord, video: UploadSnapshot, locale?:string): string {
   const values: Record<string, string> = {
     creator: record.creatorName || record.displayName, streamer: record.creatorName || record.displayName,
     member: record.discordMemberId ? `<@${record.discordMemberId}>` : '', username: record.username,
     platform: record.platform === 'youtube' ? 'YouTube' : record.platform === 'tiktok' ? 'TikTok' : record.platform,
-    title: video.title, url: video.url, publishedAt: video.publishedAt,
+    title: video.title || botText(record.guildId,'Untitled video',{},locale), url: video.url, publishedAt: video.publishedAt,
     role: record.uploads?.pingRoleId ? `<@&${record.uploads.pingRoleId}>` : '',
   };
-  return (record.uploads?.messageTemplate || DEFAULT_UPLOAD_TEMPLATE)
+  const source=record.uploads?.messageTemplate || DEFAULT_UPLOAD_TEMPLATE;
+  return (source===DEFAULT_UPLOAD_TEMPLATE?botText(record.guildId,DEFAULT_UPLOAD_TEMPLATE,{},locale):source)
     .replace(/\{(creator|streamer|member|username|platform|title|url|publishedAt|role)\}/g, (_, key: string) => values[key]!).slice(0, 2000);
 }
 
@@ -68,9 +70,9 @@ export async function applyUploadResult(client: Client, store: JsonStore, id: st
       break;
     }
     const embed = new EmbedBuilder().setColor(record.platform === 'youtube' ? 0xff0033 : 0x25f4ee)
-      .setTitle(`${record.creatorName || record.displayName} uploaded a video`.slice(0, 256))
-      .setDescription(escapeMarkdown(video.title).slice(0, 4096)).setURL(video.url).setTimestamp(new Date(video.publishedAt))
-      .setFooter({ text: `New upload • ${record.username}`.slice(0, 2048) });
+      .setTitle(botText(record.guildId,'{name} uploaded a video',{name:record.creatorName||record.displayName},guild?.preferredLocale).slice(0,256))
+      .setDescription(escapeMarkdown(video.title || botText(record.guildId,'Untitled video',{},guild?.preferredLocale)).slice(0, 4096)).setURL(video.url).setTimestamp(new Date(video.publishedAt))
+      .setFooter({ text: botText(record.guildId,'New upload • {username}',{username:record.username},guild?.preferredLocale).slice(0, 2048) });
     if (video.thumbnailUrl?.startsWith('https://')) embed.setImage(video.thumbnailUrl);
     if (record.avatarUrl?.startsWith('https://')) embed.setThumbnail(record.avatarUrl);
     remember(state, video);
@@ -80,7 +82,7 @@ export async function applyUploadResult(client: Client, store: JsonStore, id: st
     await store.update(id, { uploadState: state });
     const receipt = state.deliveries.at(-1)!;
     try {
-      const message = await channel.send({ content: renderUploadMessage(record, video), embeds: [embed],
+      const message = await channel.send({ content: renderUploadMessage(record, video, guild?.preferredLocale), embeds: [embed],
         allowedMentions: record.uploads.pingRoleId ? { parse: [], roles: [record.uploads.pingRoleId] } : { parse: [] },
         nonce: createHash('sha256').update(`${record.guildId}:${record.id}:${video.id}`).digest('hex').slice(0, 24), enforceNonce: true });
       receipt.status = 'sent'; receipt.messageId = message.id;

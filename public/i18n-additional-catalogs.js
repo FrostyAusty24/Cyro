@@ -266,9 +266,9 @@ window.CyroAdditionalTranslations = (() => {
     "A sua escolha de idioma vale apenas para este navegador. As mensagens salvas e as configurações do servidor não são traduzidas."
   ],
   [
-    "English fallback is used for pages and messages not yet translated.",
-    "Noch nicht übersetzte Seiten und Nachrichten werden auf Englisch angezeigt.",
-    "Páginas e mensagens ainda não traduzidas são exibidas em inglês."
+    "Some dashboard pages still use English. Bot messages use your server’s selected language.",
+    "Einige Dashboard-Seiten sind noch auf Englisch. Bot-Nachrichten verwenden die gewählte Serversprache.",
+    "Algumas páginas do painel ainda usam inglês. As mensagens do bot usam o idioma escolhido para o servidor."
   ],
   [
     "Server language",
@@ -276,9 +276,9 @@ window.CyroAdditionalTranslations = (() => {
     "Idioma do servidor"
   ],
   [
-    "Choose the language for supported bot replies. This is separate from your dashboard language and each member’s TTS voice.",
-    "Wähle die Sprache für unterstützte Bot-Antworten. Sie ist unabhängig von deiner Dashboard-Sprache und der TTS-Stimme jedes Mitglieds.",
-    "Escolha o idioma das respostas compatíveis do bot. Ele é independente do idioma do painel e da voz TTS de cada membro."
+    "Choose the language for bot messages. This is separate from your dashboard language and each member’s TTS voice.",
+    "Wähle die Sprache für Bot-Nachrichten. Sie ist unabhängig von deiner Dashboard-Sprache und der TTS-Stimme jedes Mitglieds.",
+    "Escolha o idioma das mensagens do bot. Ele é independente do idioma do painel e da voz TTS de cada membro."
   ],
   [
     "Automatic · Discord language",

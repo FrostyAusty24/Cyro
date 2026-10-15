@@ -11,6 +11,7 @@ import { suggestionPayload } from '../src/suggestions/service.js';
 import { TempVoiceService } from '../src/temp-voice/service.js';
 import { ConfessionsService } from '../src/confessions/service.js';
 import { VoiceService, spokenText } from '../src/voice/service.js';
+import { localizedVoiceName } from '../src/voice/voice-search.js';
 import { TTS_VOICES } from '../src/voice/catalog.js';
 
 afterEach(() => { setBotLocaleResolver(() => 'en'); vi.restoreAllMocks(); });
@@ -159,7 +160,7 @@ it.each([
   const payload = (service as any).panelPayload({ id: '111111111111111111', preferredLocale: locale }, room);
   expect(payload.embeds[0].title).toBe(title);
   expect(payload.embeds[0].description).toContain(`<@${room.ownerId}>`);
-  expect(payload.embeds[0].footer.text).toBe(`Voice room controls · ${room.panel.reference}`);
+  expect(payload.embeds[0].footer.text).toBe(botText('server', 'Voice room controls · {reference}', { reference: room.panel.reference }, locale));
   expect(payload.components[0].toJSON().components.map((button: any) => button.label)).toEqual(primary);
   expect(payload.components[1].toJSON().components.map((button: any) => button.label)).toEqual(members);
 });
@@ -196,7 +197,7 @@ it('keeps voice UI language separate from the chosen speech language and stable 
   try {
     const fr = await invoke('fr-server', 'ttsvoice', 'es-dora');
     expect(setVoice).toHaveBeenLastCalledWith(fr.guild, 'member', 'es-dora');
-    expect(fr.editReply.mock.calls[0][0].embeds[0]).toMatchObject({ title: 'Audio Cyro', description: `Votre voix pour ce serveur est maintenant ${TTS_VOICES.find(voice => voice.id === 'es-dora')!.name}.` });
+    expect(fr.editReply.mock.calls[0][0].embeds[0]).toMatchObject({ title: 'Audio Cyro', description: `Votre voix pour ce serveur est maintenant ${localizedVoiceName(TTS_VOICES.find(voice => voice.id === 'es-dora')!, 'fr')}.` });
     const es = await invoke('es-server', 'ttsvoice1', '');
     expect(setVoice).toHaveBeenLastCalledWith(es.guild, 'member', 'voice1');
     expect(es.editReply.mock.calls[0][0].embeds[0].description).toContain('Tu voz para este servidor ahora es Daniel');
@@ -215,7 +216,7 @@ it('keeps voice UI language separate from the chosen speech language and stable 
     ]) {
       const chosen = await invoke(`${locale}-server`, 'ttsvoice', 'es-dora');
       expect(setVoice).toHaveBeenLastCalledWith(chosen.guild, 'member', 'es-dora');
-      expect(chosen.editReply.mock.calls[0][0].embeds[0]).toMatchObject({ title, description: `${description} ${TTS_VOICES.find(voice => voice.id === 'es-dora')!.name}.` });
+      expect(chosen.editReply.mock.calls[0][0].embeds[0]).toMatchObject({ title, description: `${description} ${localizedVoiceName(TTS_VOICES.find(voice => voice.id === 'es-dora')!, locale)}.` });
       setVoice.mockRejectedValueOnce(new Error('This voice is not installed on this host yet. Choose another voice or ask the bot operator to install it.'));
       expect((await invoke(`${locale}-server`, 'ttsvoice', 'es-dora')).editReply.mock.calls[0][0].content).toContain(missingVoice);
     }

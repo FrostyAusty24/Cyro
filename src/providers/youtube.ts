@@ -1,3 +1,4 @@
+import { BotMessageError } from '../i18n/index.js';
 import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import type { ProviderResult, ResolvedStreamer, StreamerRecord, UploadResult, UploadSnapshot } from '../types.js';
@@ -43,12 +44,12 @@ export class YouTubeProvider implements StreamProvider {
     catch { throw new Error('YouTube API request failed or timed out.'); }
     let body: { items?: T[]; error?: { errors?: { reason?: string }[] } };
     try { body = await response.json() as typeof body; }
-    catch { throw new Error(`YouTube API returned an invalid response (HTTP ${response.status}).`); }
+    catch { throw new BotMessageError('YouTube API returned an invalid response (HTTP {status}).',{status:response.status}); }
     if (!response.ok || body.error) {
       // Never echo raw API messages or request URLs: they may contain the private key.
       const reason = body.error?.errors?.[0]?.reason;
       const detail = reason && ['quotaExceeded', 'dailyLimitExceeded', 'keyInvalid', 'accessNotConfigured', 'forbidden', 'channelNotFound', 'rateLimitExceeded', 'ipRefererBlocked'].includes(reason) ? ` (${reason})` : '';
-      throw new Error(`YouTube API returned HTTP ${response.status}${detail}. Check the host's API key, API enablement and quota.`);
+      throw new BotMessageError('YouTube API returned HTTP {status}{detail}. Check the host’s API key, API enablement and quota.',{status:response.status,detail});
     }
     if (!Array.isArray(body.items)) throw new Error('YouTube API returned an invalid items response.');
     return body.items;
@@ -115,7 +116,7 @@ export class YouTubeProvider implements StreamProvider {
               video.status?.privacyStatus !== 'public' || video.status?.uploadStatus !== 'processed' ||
               video.snippet.liveBroadcastContent !== 'none' || video.liveStreamingDetails ||
               !publishedAt || !Number.isFinite(Date.parse(publishedAt)) || Date.parse(publishedAt) > now) continue;
-          items.push({ id: video.id, title: video.snippet.title || 'Untitled video', publishedAt,
+          items.push({ id: video.id, title: video.snippet.title || '', publishedAt,
             url: `https://www.youtube.com/watch?v=${video.id}`, thumbnailUrl: thumbnail(video.snippet.thumbnails) });
         }
         items.sort((a, b) => Date.parse(a.publishedAt) - Date.parse(b.publishedAt) || a.id.localeCompare(b.id));
@@ -225,7 +226,7 @@ export class YouTubeProvider implements StreamProvider {
     const viewers = video.liveStreamingDetails?.concurrentViewers;
     return { kind: 'live', snapshot: {
       sessionId: video.id,
-      title: video.snippet?.title || 'Untitled stream',
+      title: video.snippet?.title || '',
       viewerCount: metricCount(typeof viewers === 'string' && /^\d+$/.test(viewers) ? Number(viewers) : viewers),
       thumbnailUrl: thumbnail(video.snippet?.thumbnails),
       avatarUrl: record.avatarUrl,

@@ -3,7 +3,7 @@ import type { AccessService } from '../control/access.js';
 import type { Logger } from '../logger.js';
 import { ConfessionsStore } from './store.js';
 import { INTERACTION_MAX_AGE_MS, MAX_RECEIPTS, parseConfessionsConfig, PRIVACY_NOTICE, snowflake, type ConfessionReceipt } from './types.js';
-import { botText } from '../i18n/index.js';
+import { botText, botError, BotMessageError } from '../i18n/index.js';
 
 type ConfessionsChannel = TextChannel | NewsChannel;
 const receiptResult = (guildId: string, receipt: ConfessionReceipt) => ({ number: receipt.number, ...(receipt.messageId ? { messageUrl: `https://discord.com/channels/${guildId}/${receipt.channelId}/${receipt.messageId}` } : {}) });
@@ -31,7 +31,7 @@ export class ConfessionsService {
     void task.finally(() => { if (this.queues.get(guildId) === task) this.queues.delete(guildId); }).catch(() => undefined);
     return task;
   }
-  private assertRunning(): void { if (this.stopped) throw new Error('Confessions are stopping. Please try again shortly.'); }
+  private assertRunning(): void { if (this.stopped) throw new BotMessageError('Confessions are stopping. Please try again shortly.'); }
   async guildIds(): Promise<string[]> { return this.store.guildIds(); }
   async purgeGuild(guildId: string, guard: () => boolean = () => true): Promise<void> {
     await this.enqueue(guildId, async () => { await this.store.purgeGuild(guildId, guard); if (!(await this.store.guildIds()).includes(guildId)) this.cooldowns.delete(guildId); });
@@ -54,7 +54,7 @@ export class ConfessionsService {
       // Never log the interaction, input, author, or raw API/network error.
       this.logger.warn('Confession interaction could not complete.', { guildId: interaction.guildId });
       if (interaction.replied) return;
-      const content = botText(interaction.guildId, error instanceof Error && error.name === 'Error' ? error.message.slice(0, 1800) : 'I could not complete that confession. Please check channel permissions or try again shortly.', {}, interaction.locale);
+      const content = botError(interaction.guildId, error, interaction.locale, 'I could not complete that confession. Please check channel permissions or try again shortly.');
       try {
         if (interaction.deferred) await interaction.editReply({ content, allowedMentions: { parse: [] } });
         else await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
@@ -65,10 +65,10 @@ export class ConfessionsService {
   };
   private async channel(guild: Guild, channelId: string, actor?: GuildMember): Promise<ConfessionsChannel> {
     const channel = await guild.channels.fetch(channelId);
-    if (!channel || channel.id !== channelId || channel.guild.id !== guild.id || ![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) throw new Error('Choose a text or announcement channel in this server.');
-    if (actor && !channel.permissionsFor(actor)?.has(PermissionFlagsBits.ViewChannel)) throw new Error('You cannot view this server\'s confessions channel.');
+    if (!channel || channel.id !== channelId || channel.guild.id !== guild.id || ![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) throw new BotMessageError('Choose a text or announcement channel in this server.');
+    if (actor && !channel.permissionsFor(actor)?.has(PermissionFlagsBits.ViewChannel)) throw new BotMessageError('You cannot view this server\'s confessions channel.');
     const bot = await guild.members.fetchMe();
-    if (!channel.permissionsFor(bot)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) throw new Error('Cyro needs View Channel, Send Messages, and Embed Links in the confessions channel.');
+    if (!channel.permissionsFor(bot)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) throw new BotMessageError('Cyro needs View Channel, Send Messages, and Embed Links in the confessions channel.');
     return channel as ConfessionsChannel;
   }
   async configure(guild: Guild, input: unknown, authorize?: () => Promise<void>) {
@@ -83,38 +83,38 @@ export class ConfessionsService {
   async updateConfig(guildId: string, input: unknown, authorize?: () => Promise<void>) {
     this.assertRunning();
     const guild = await this.client.guilds.fetch(guildId);
-    if (guild.id !== guildId) throw new Error('That server is unavailable.');
+    if (guild.id !== guildId) throw new BotMessageError('That server is unavailable.');
     return this.configure(guild, input, authorize);
   }
   async create(guild: Guild, actorId: string, input: unknown, operationId: string) {
     this.assertRunning();
-    if (!snowflake(guild.id) || !snowflake(actorId) || !snowflake(operationId) || typeof input !== 'string' || !input.trim() || input.length > 1500) throw new Error('A confession must contain 1–1,500 characters.');
+    if (!snowflake(guild.id) || !snowflake(actorId) || !snowflake(operationId) || typeof input !== 'string' || !input.trim() || input.length > 1500) throw new BotMessageError('A confession must contain 1–1,500 characters.');
     const text = input.trim();
     return this.enqueue(guild.id, async () => {
       this.assertRunning();
       const requestAge = Date.now() - interactionTime(operationId);
-      if (requestAge > INTERACTION_MAX_AGE_MS || requestAge < -60_000) throw new Error('This confession request has expired. Run /confess again.');
+      if (requestAge > INTERACTION_MAX_AGE_MS || requestAge < -60_000) throw new BotMessageError('This confession request has expired. Run /confess again.');
       await this.access.command(guild, actorId, 'confess', true);
       const actor = await this.access.member(guild, actorId);
-      if (!actor || actor.guild.id !== guild.id || actor.id !== actorId || actor.user.bot) throw new Error('Only members of this server can send confessions.');
+      if (!actor || actor.guild.id !== guild.id || actor.id !== actorId || actor.user.bot) throw new BotMessageError('Only members of this server can send confessions.');
       const saved = this.store.get(guild.id);
-      if (!saved.config.enabled || !saved.config.channelId) throw new Error('Confessions are not enabled yet. Ask staff to choose a channel in the dashboard.');
+      if (!saved.config.enabled || !saved.config.channelId) throw new BotMessageError('Confessions are not enabled yet. Ask staff to choose a channel in the dashboard.');
       const channel = await this.channel(guild, saved.config.channelId, actor);
       const existing = saved.receipts.find(item => item.id === operationId);
       if (existing) {
-        if (existing.delivery === 'pending') throw new Error('The earlier send has an unknown outcome. Ask staff to check the channel; Cyro will not post it twice.');
+        if (existing.delivery === 'pending') throw new BotMessageError('The earlier send has an unknown outcome. Ask staff to check the channel; Cyro will not post it twice.');
         return receiptResult(guild.id, existing);
       }
       const now = Date.now(), cooldowns = this.cooldowns.get(guild.id) ?? new Map<string, number>();
       for (const [id, expiresAt] of cooldowns) if (expiresAt <= now) cooldowns.delete(id);
       this.cooldowns.set(guild.id, cooldowns);
       const wait = (cooldowns.get(actorId) ?? 0) - now;
-      if (wait > 0) throw new Error(botText(guild.id, 'Please wait {seconds} seconds before sending another confession.', { seconds: Math.ceil(wait / 1000) }, guild.preferredLocale));
-      if (cooldowns.size >= 10000) throw new Error('Confessions are busy. Please try again after a cooldown expires.');
+      if (wait > 0) throw new BotMessageError('Please wait {seconds} seconds before sending another confession.', { seconds: Math.ceil(wait / 1000) });
+      if (cooldowns.size >= 10000) throw new BotMessageError('Confessions are busy. Please try again after a cooldown expires.');
       // Evict only receipts whose Discord interaction can no longer be accepted. Never replay pending sends.
       const evict = saved.receipts.length >= MAX_RECEIPTS ? saved.receipts.find(item => now - interactionTime(item.id) > INTERACTION_MAX_AGE_MS) : undefined;
-      if (saved.receipts.length >= MAX_RECEIPTS && !evict) throw new Error('Confessions are busy. Please try again in 15 minutes.');
-      if (saved.nextNumber >= Number.MAX_SAFE_INTEGER) throw new Error('Confession numbering is full. Contact the bot operator.');
+      if (saved.receipts.length >= MAX_RECEIPTS && !evict) throw new BotMessageError('Confessions are busy. Please try again in 15 minutes.');
+      if (saved.nextNumber >= Number.MAX_SAFE_INTEGER) throw new BotMessageError('Confession numbering is full. Contact the bot operator.');
       const receipt: ConfessionReceipt = { id: operationId, number: saved.nextNumber, channelId: channel.id, createdAt: new Date().toISOString(), delivery: 'pending' };
       this.assertRunning();
       await this.store.mutate(guild.id, state => { if (evict) state.receipts = state.receipts.filter(item => item.id !== evict.id); state.receipts.push(receipt); state.nextNumber++; });
@@ -126,7 +126,7 @@ export class ConfessionsService {
         });
       } catch {
         this.logger.warn('Confession send has an unknown outcome; automatic replay is disabled.', { guildId: guild.id, number: receipt.number });
-        throw new Error('The confession send has an unknown outcome. Ask staff to check the channel before posting again.');
+        throw new BotMessageError('The confession send has an unknown outcome. Ask staff to check the channel before posting again.');
       }
     });
   }

@@ -1,3 +1,5 @@
+import { botText, botError, BotMessageError } from '../i18n/index.js';
+import { supportText, supportName, applicationQuestion, supportAction } from './localization.js';
 import type { AccessService } from '../control/access.js';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -38,7 +40,7 @@ export class ModerationService {
   private readonly onInteraction = (interaction: Interaction) => { if (!this.attached) return; this.track(this.handleInteraction(interaction).catch(async error => {
     this.logger.warn('Moderation interaction failed.', { error: errorText(error), guildId: interaction.guildId });
     if (!interaction.isRepliable()) return;
-    const content = errorText(error).slice(0, 1500);
+    const content = botError(interaction.guildId, error, interaction.locale, 'Cyro could not complete this support action. Please check permissions or try again shortly.').slice(0, 1500);
     try { if (interaction.deferred || interaction.replied) await interaction.editReply({ content, allowedMentions: NONE }); else await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: NONE }); } catch { /* Expired interaction. */ }
   })); };
   private readonly onMessage = (message: Message) => { if (!this.attached) return; this.track(this.automod(message, false).catch(error => this.logger.warn('Automatic moderation failed.', { error: errorText(error), guildId: message.guildId }))); };
@@ -125,7 +127,7 @@ export class ModerationService {
         // Recheck the marker immediately before changing only this tracked channel's name.
         const current = await guild.channels.fetch(channel.id, { force: true });
         if (current?.type !== ChannelType.GuildText || current.guild.id !== guild.id || current.topic !== ticketTopic(ticket.id) || current.name !== oldName) continue;
-        await current.setName(name, 'Use the ticket category and member name');
+        await current.setName(name, botText(guild.id, 'Use the ticket category and member name', {}, guild.preferredLocale));
         names.set(channel.id, name);
       } catch (error) { this.logger.warn('One legacy ticket name could not be refreshed.', { guildId: guild.id, channelId: ticket.channelId, error: errorText(error) }); }
     }
@@ -227,7 +229,7 @@ export class ModerationService {
       const channel = await this.textChannel(guild, channelId);
       const bot = await guild.members.fetchMe();
       if (!channel.permissionsFor(bot).has(PermissionFlagsBits.EmbedLinks)) throw new Error('The bot needs Embed Links in the panel channel.');
-      const message = await channel.send(panelPayload(config, panel));
+      const message = await channel.send(panelPayload(config, panel, guild.id, guild.preferredLocale));
       return { messageId: message.id, channelId: channel.id, url: message.url };
     });
   }
@@ -250,6 +252,9 @@ export class ModerationService {
     return channel;
   }
   private async handleInteraction(interaction: Interaction): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     const ours = (interaction.isChatInputCommand() && moderationNames.has(interaction.commandName)) || ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) && interaction.customId.startsWith('mod:'));
     if (!ours) return;
     if (!interaction.inCachedGuild()) throw new Error('Use this command inside a server.');
@@ -291,7 +296,7 @@ export class ModerationService {
         const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
         if (!actor.permissions.has(PermissionFlagsBits.ManageGuild)) throw new Error('You need Manage Server to post a support panel.');
         const result = await this.publishPanel(interaction.guildId, { panelId: interaction.options.getString('panel'), channelId: interaction.channelId });
-        await interaction.editReply({ content: `Panel posted: ${result.url}`, allowedMentions: NONE });
+        await interaction.editReply({ content: t('Panel posted: {url}', { url: result.url }), allowedMentions: NONE });
       } else await this.ticket(interaction, interaction.options.getSubcommand(), interaction.options.getString('type') ?? undefined);
     }
     else if (interaction.commandName === 'support-recovery') await this.supportRecovery(interaction);
@@ -302,11 +307,14 @@ export class ModerationService {
       if (!isStaff(actor, supportRoles)) throw new Error('Only configured support staff may view the staff leaderboard.');
       const period = (interaction.options.getString('period') ?? '7d') as '7d' | '30d' | 'all';
       const rows = staffStats(state.tickets, period, Date.now(), state.cases, state.applications).slice(0, 10);
-      const lines = rows.map((row, i) => `**${i + 1}. <@${row.userId}>** · ${row.totalActions} actions\n${row.claims} claimed · ${row.closes} closed · ${row.moderationActions} moderation · ${row.applicationsReviewed} reviews\n${row.openAssigned} assigned now · Avg claim ${row.averageClaimSeconds ?? '—'}s · Avg close ${row.averageCloseSeconds ?? '—'}s`);
-      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x6dc9ed).setTitle(`Staff activity · ${period === 'all' ? 'retained history' : period}`).setDescription(lines.join('\n\n') || 'No recorded staff activity yet.').setFooter({text:'Ticket averages run from creation. Assigned tickets are current. Counts show activity, not service quality. More detail in /dashboard.'})], allowedMentions: NONE });
+      const lines = rows.map((row, i) => t('**{rank}. <@{user}>** · {actions} actions\n{claims} claimed · {closes} closed · {moderation} moderation · {reviews} reviews\n{assigned} assigned now · Avg claim {claimTime}s · Avg close {closeTime}s', { rank: i + 1, user: row.userId, actions: row.totalActions, claims: row.claims, closes: row.closes, moderation: row.moderationActions, reviews: row.applicationsReviewed, assigned: row.openAssigned, claimTime: row.averageClaimSeconds ?? '—', closeTime: row.averageCloseSeconds ?? '—' }));
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x6dc9ed).setTitle(t('Staff activity · {period}', { period: t(period === 'all' ? 'Retained history' : period === '30d' ? 'Last 30 days' : 'Last 7 days') })).setDescription(lines.join('\n\n') || t('No recorded staff activity yet.')).setFooter({text:t('Ticket averages run from creation. Assigned tickets are current. Counts show activity, not service quality. More detail in /dashboard.')})], allowedMentions: NONE });
     }
   }
   private async supportRecovery(interaction: Command): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
     await interaction.guild.roles.fetch();
     if (!actor.permissions.has(PermissionFlagsBits.ManageGuild)) throw new Error('You need Manage Server to inspect or release interrupted support operations.');
@@ -314,7 +322,7 @@ export class ModerationService {
       await this.reconcileGuild(interaction.guild);
       if (interaction.options.getSubcommand() === 'list') {
         const issues = (await this.snapshot(interaction.guildId)).recoveryIssues;
-        await interaction.editReply({ content: issues.length ? `${issues.length} interrupted operation(s). Inspect Discord before releasing anything. Full details are in the dashboard.\n\n${issues.slice(0, 5).map(issue => `${issue.kind} · ${issue.operationId}\n${issue.detail.slice(0, 210)}`).join('\n\n')}` : 'All recorded support operations are complete. No uncertain action was replayed.', allowedMentions: NONE });
+        await interaction.editReply({ content: issues.length ? t('{count} interrupted operation(s). Inspect Discord before releasing anything. Full details are in the dashboard.\n\n{details}', { count: issues.length, details: issues.slice(0, 5).map(issue => `${supportAction({ guildId: interaction.guildId, locale: interaction.locale }, issue.kind)} · ${issue.operationId}\n${botError(interaction.guildId, new Error(issue.detail), interaction.locale, 'This support operation needs staff review. Inspect the dashboard and Discord before retrying.').slice(0, 210)}`).join('\n\n') }) : t('All recorded support operations are complete. No uncertain action was replayed.'), allowedMentions: NONE });
         return;
       }
       const id = interaction.options.getString('operation', true);
@@ -331,10 +339,13 @@ export class ModerationService {
         delete record.operation;
         state.cases.push({ id: randomUUID(), action: 'support-recovery-release', userId: ticket?.ownerId ?? application!.userId, actorId: actor.id, reason: `Operation ${id} (${operation.kind}): ${reason}`, createdAt: new Date().toISOString() });
       });
-      await interaction.editReply('The interrupted local operation was released and your reason was recorded. No Discord channel, message, or role was deleted or changed. A new ordinary action can now be started if needed.');
+      await interaction.editReply(t('The interrupted local operation was released and your reason was recorded. No Discord channel, message, or role was deleted or changed. A new ordinary action can now be started if needed.'));
     });
   }
   private async moderate(interaction: Command): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     const config = this.store.read(interaction.guildId).config;
     if (!config.enabled) throw new Error('Enable moderation in the dashboard first.');
     const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
@@ -346,8 +357,8 @@ export class ModerationService {
       if (!channel || channel.type !== ChannelType.GuildText) throw new Error('Use purge in a server text channel.');
       if (!channel.permissionsFor(actor).has(PermissionFlagsBits.ManageMessages) || !channel.permissionsFor(bot).has([PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory])) throw new Error('You and the bot need Manage Messages; the bot also needs Read Message History.');
       const deleted = await channel.bulkDelete(interaction.options.getInteger('count', true), true);
-      await this.recordCase(interaction.guild, { action: 'purge', actorId: actor.id, userId: channel.id, reason: `${deleted.size} messages: ${reason}` });
-      await interaction.editReply({ content: `Deleted ${deleted.size} recent messages. Messages older than 14 days were skipped.`, allowedMentions: NONE });
+      await this.recordCase(interaction.guild, { action: 'purge', actorId: actor.id, userId: channel.id, reason: g('{count} messages: {reason}', { count: deleted.size, reason }) });
+      await interaction.editReply({ content: t('Deleted {count} recent messages. Messages older than 14 days were skipped.', { count: deleted.size }), allowedMentions: NONE });
       return;
     }
     const target = await interaction.guild.members.fetch({ user: interaction.options.getUser('member', true).id, force: true });
@@ -358,9 +369,11 @@ export class ModerationService {
     else if (action === 'ban') await target.ban({ reason: auditReason });
     else if (action === 'timeout') { if (!target.moderatable) throw new Error('This member cannot be timed out.'); await target.timeout(interaction.options.getInteger('minutes', true) * 60000, auditReason); }
     await this.recordCase(interaction.guild, { action, actorId: actor.id, userId: target.id, reason });
-    await interaction.editReply({ content: `${action === 'warn' ? 'Warning recorded for' : `${action} completed for`} ${target.user.tag}.`, allowedMentions: NONE });
+    await interaction.editReply({ content: t(action === 'warn' ? 'Warning recorded for {member}.' : action === 'kick' ? 'Kick completed for {member}.' : action === 'ban' ? 'Ban completed for {member}.' : 'Timeout completed for {member}.', { member: target.user.tag }), allowedMentions: NONE });
   }
   private async recordCase(guild: Guild, details: Omit<ModCase, 'id' | 'createdAt'>): Promise<void> {
+    const context = { guildId: guild.id, locale: guild.preferredLocale };
+    const g = (source: string, params = {}) => supportText(context, source, params);
     const record = { ...details, id: randomUUID(), createdAt: new Date().toISOString() };
     try { await this.store.update(guild.id, state => { state.cases.push(record); }); }
     catch (error) { this.logger.error('Moderation action happened but saving its case failed.', { guildId: guild.id, action: details.action, error: errorText(error) }); throw new Error('The action completed, but its case could not be saved. Check the host storage before retrying.'); }
@@ -368,7 +381,7 @@ export class ModerationService {
     if (!config.modLogChannelId) return;
     try {
       const channel = await this.textChannel(guild, config.modLogChannelId);
-      await channel.send({ embeds: [new EmbedBuilder().setColor(0x619cec).setTitle(`Moderation · ${record.action}`).setDescription(record.reason).addFields({ name: 'Member / channel', value: record.userId }, { name: 'Moderator', value: record.actorId }, { name: 'Case', value: record.id }).setTimestamp()], allowedMentions: NONE });
+      await channel.send({ embeds: [new EmbedBuilder().setColor(0x619cec).setTitle(g('Moderation · {action}', { action: supportAction(context, record.action) })).setDescription(record.reason).addFields({ name: g('Member / channel'), value: record.userId }, { name: g('Moderator'), value: record.actorId }, { name: g('Case'), value: record.id }).setTimestamp()], allowedMentions: NONE });
     } catch (error) { this.logger.warn('Moderation case saved, but its Discord log could not be sent.', { guildId: guild.id, error: errorText(error) }); }
   }
   private async automod(input: Message | PartialMessage, edited: boolean): Promise<void> {
@@ -395,11 +408,15 @@ export class ModerationService {
     if ((this.automodCooldown.get(key) ?? 0) > now - 10000) return;
     this.automodCooldown.set(key, now);
     if (this.automodCooldown.size > 10000) this.automodCooldown.delete(this.automodCooldown.keys().next().value!);
-    let result = message.deletable ? 'Message removed.' : 'Bot lacked permission to remove the message.';
-    if (spam && member.moderatable && bot.permissions.has(PermissionFlagsBits.ModerateMembers)) { await member.timeout(config.antiSpam.timeoutMinutes * 60000, 'Automatic spam protection'); result += ` Timed out for ${config.antiSpam.timeoutMinutes} minutes.`; }
+    const g = (source: string, params = {}) => botText(message.guildId, source, params, message.guild!.preferredLocale);
+    let result = g(message.deletable ? 'Message removed.' : 'Bot lacked permission to remove the message.');
+    if (spam && member.moderatable && bot.permissions.has(PermissionFlagsBits.ModerateMembers)) { await member.timeout(config.antiSpam.timeoutMinutes * 60000, g('Automatic spam protection')); result += g(' Timed out for {minutes} minutes.', { minutes: config.antiSpam.timeoutMinutes }); }
     await this.recordCase(message.guild, { action: blocked ? 'blocked-word' : 'anti-spam', userId: member.id, actorId: bot.id, reason: result });
   }
   private async ticket(interaction: TicketInteraction, action: string, typeId?: string): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     await this.exclusive(interaction.guildId, async () => {
       const state = this.store.read(interaction.guildId);
       if ((action === 'open' || action === 'panel') && !state.config.tickets.enabled) throw new Error('Support tickets are disabled.');
@@ -411,11 +428,11 @@ export class ModerationService {
         const channel = await this.textChannel(interaction.guild, interaction.channelId);
         const bot = await interaction.guild.members.fetchMe();
         if (!channel.permissionsFor(bot)?.has(PermissionFlagsBits.EmbedLinks)) throw new Error('The bot needs Embed Links in the panel channel.');
-        await channel.send({ embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle('Need a hand?').setDescription('Choose a category to open a ticket.')], components: [this.choiceMenu('mod:ticket:choose', available)], allowedMentions: NONE });
-        await interaction.editReply('Ticket panel posted.'); return;
+        await channel.send({ embeds: [new EmbedBuilder().setColor(0x82d9f7).setTitle(g('Need a hand?')).setDescription(g('Choose a category to open a ticket.'))], components: [this.choiceMenu('mod:ticket:choose', available, shared)], allowedMentions: NONE });
+        await interaction.editReply(t('Ticket panel posted.')); return;
       }
       if (action === 'open') {
-        if (!typeId && available.length > 1) { await interaction.editReply({ content: 'Choose a ticket category.', components: [this.choiceMenu('mod:ticket:choose', available)], allowedMentions: NONE }); return; }
+        if (!typeId && available.length > 1) { await interaction.editReply({ content: t('Choose a ticket category.'), components: [this.choiceMenu('mod:ticket:choose', available, { guildId: interaction.guildId, locale: interaction.locale })], allowedMentions: NONE }); return; }
         const config = available.find(type => type.id === (typeId ?? available[0]?.id));
         if (!config) throw new Error('This ticket type is no longer available. Ask staff for an updated panel.');
         if (!config.categoryId || !config.logChannelId || !config.staffRoleIds.length) throw new Error('An administrator must finish ticket setup in the dashboard.');
@@ -436,12 +453,12 @@ export class ModerationService {
         await this.store.update(interaction.guildId, data => { data.tickets.push(record); });
         let channel: TextChannel;
         try {
-          channel = await interaction.guild.channels.create({ name, topic: ticketTopic(record.id), type: ChannelType.GuildText, parent: config.categoryId, permissionOverwrites, reason: `Support ticket ${record.id} opened by ${actor.id}` });
+          channel = await interaction.guild.channels.create({ name, topic: ticketTopic(record.id), type: ChannelType.GuildText, parent: config.categoryId, permissionOverwrites, reason: g('Support ticket {id} opened by {actor}', { id: record.id, actor: actor.id }) });
           await this.store.update(interaction.guildId, data => { const saved = data.tickets.find(ticket => ticket.id === record.id)!; saved.channelId = channel.id; delete saved.operation; });
         } catch (error) { await this.markIssue(interaction.guildId, 'ticket', record.id, 'Ticket creation was interrupted. Its channel may exist; an administrator must run /support-recovery list and inspect it before retrying.'); throw error; }
-        try { await channel.send({ content: `**${config.name}** · ticket for <@${actor.id}>. ${config.visibility === 'inherit' ? 'This ticket copied the category permissions when it opened.' : 'Visible to you and the configured support team.'} Describe what you need help with. Staff can claim the ticket; staff or the ticket owner can close it. Closing automatically saves a transcript to the configured transcript channel.${config.closeAction === 'delete' ? ' This category then deletes the ticket channel. Download any original attachments you want to keep before closing; the transcript stores links that can expire.' : ' The channel remains as a read-only archive.'}`, components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('mod:ticket:claim').setLabel('Claim ticket').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('mod:ticket:close').setLabel(config.closeAction === 'delete' ? 'Close, save & delete' : 'Close & save transcript').setStyle(ButtonStyle.Secondary))], allowedMentions: NONE }); }
+        try { await channel.send({ content: g('**{category}** · ticket for <@{owner}>. {visibility} Describe what you need help with. Staff can claim the ticket; staff or the ticket owner can close it. Closing automatically saves a transcript to the configured transcript channel.{closure}', { category: supportName(shared, config), owner: actor.id, visibility: g(config.visibility === 'inherit' ? 'This ticket copied the category permissions when it opened.' : 'Visible to you and the configured support team.'), closure: g(config.closeAction === 'delete' ? ' This category then deletes the ticket channel. Download any original attachments you want to keep before closing; the transcript stores links that can expire.' : ' The channel remains as a read-only archive.') }), components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('mod:ticket:claim').setLabel(g('Claim ticket')).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('mod:ticket:close').setLabel(g(config.closeAction === 'delete' ? 'Close, save & delete' : 'Close & save transcript')).setStyle(ButtonStyle.Secondary))], allowedMentions: NONE }); }
         catch (error) { this.logger.warn('Ticket created but welcome message failed.', { guildId: interaction.guildId, error: errorText(error) }); }
-        await interaction.editReply({ content: `Your ticket is ready: <#${channel.id}>.`, allowedMentions: NONE }); return;
+        await interaction.editReply({ content: t('Your ticket is ready: <#{channel}>.', { channel: channel.id }), allowedMentions: NONE }); return;
       }
       const record = state.tickets.find(t => t.channelId === interaction.channelId);
       if (!record || record.status !== 'open') throw new Error('Use this inside an open ticket created by this bot.');
@@ -453,8 +470,8 @@ export class ModerationService {
         if (record.claimedBy) throw new Error('This ticket has already been claimed.');
         await this.store.update(interaction.guildId, data => { const ticket = data.tickets.find(t => t.id === record.id)!; ticket.claimedBy = actor.id; ticket.claimedAt = new Date().toISOString(); });
         const channel = await this.textChannel(interaction.guild, record.channelId);
-        await channel.send({ content: `Ticket claimed by <@${actor.id}>.`, allowedMentions: NONE });
-        await interaction.editReply('Ticket claimed.'); return;
+        await channel.send({ content: g('Ticket claimed by <@{member}>.', { member: actor.id }), allowedMentions: NONE });
+        await interaction.editReply(t('Ticket claimed.')); return;
       }
       if (action !== 'close') throw new Error('Unknown ticket action.');
       if (!staff && record.ownerId !== actor.id) throw new Error('Only the ticket owner and configured support staff may close this ticket.');
@@ -463,8 +480,8 @@ export class ModerationService {
       await this.closeTicket(interaction, record, actor, staff, keepChannel);
     });
   }
-  private choiceMenu(customId: string, options: { id: string; name: string }[]): ActionRowBuilder<StringSelectMenuBuilder> {
-    return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder('Choose an option').setMinValues(1).setMaxValues(1).addOptions(options.map(option => ({ label: option.name, value: option.id }))));
+  private choiceMenu(customId: string, options: { id: string; name: string }[], context: { guildId: string; locale?: string }): ActionRowBuilder<StringSelectMenuBuilder> {
+    return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(supportText(context, 'Choose an option')).setMinValues(1).setMaxValues(1).addOptions(options.map(option => ({ label: supportName(context, option), value: option.id }))));
   }
   private async findOperationMessage(channel: TextChannel, matches: (message: Message) => boolean, knownId?: string): Promise<Message | null> {
     if (knownId) {
@@ -486,6 +503,9 @@ export class ModerationService {
     return message.content.startsWith(exportMarker(operation.id) + '\n') && (!operation.transcript || [...message.attachments.values()].some(attachment => attachment.name === operation.transcript!.filename && attachment.size > 0));
   }
   private async closeTicket(interaction: TicketInteraction, record: Ticket, actor: GuildMember, staff: boolean, keepChannel = false): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     const config = record.ticketType ?? this.store.read(interaction.guildId).config.tickets;
     if (record.operation && record.operation.kind !== 'ticket-close') throw new Error('This ticket has an unfinished creation request. Ask an administrator to run /support-recovery list.');
     let operation = record.operation;
@@ -509,19 +529,19 @@ export class ModerationService {
       // Catch setup problems before locking an otherwise usable ticket; recheck before deletion too.
       if (op.closeAction === 'delete') await assertTicketCanBeDeleted(channel, bot);
       // Freeze ordinary participants before collecting history; administrators must leave it unchanged during closure.
-      await freezeTicketChannel(channel, bot, `Ticket ${record.id} closing by ${actor.id}`);
+      await freezeTicketChannel(channel, bot, g('Ticket {id} closing by {actor}', { id: record.id, actor: actor.id }));
       if (op.externalAttempted || op.transcriptMessageId) {
         const existing = await this.findOperationMessage(log, message => this.matchesTranscript(message, op), op.transcriptMessageId);
         if (!existing) throw new Error('The previous transcript send could not be verified. It was not repeated. An administrator must inspect the transcript channel and /support-recovery list.');
         op.transcriptMessageId = existing.id;
       } else {
         const snapshot = await collectTicketTranscript(channel);
-        if (op.closeAction === 'delete' && snapshot.unsupportedContent?.length) throw new Error(`This ticket contains ${snapshot.unsupportedContent.join(', ')} that cannot be fully exported. The channel was retained. Staff can use /ticket close keep_channel:true to save a text transcript and retain the original content.`);
-        const archived = await this.transcripts.save(interaction.guildId, op.id, `Ticket ${record.id}`, snapshot);
+        if (op.closeAction === 'delete' && snapshot.unsupportedContent?.length) throw new BotMessageError('This ticket contains content that cannot be fully exported. The channel was retained. Staff can use /ticket close keep_channel:true to save a text transcript and retain the original content.');
+        const archived = await this.transcripts.save(interaction.guildId, op.id, g('Ticket {id}', { id: record.id }), snapshot, undefined, interaction.guild.preferredLocale);
         op.transcript = archived.receipt;
         await this.store.update(interaction.guildId, data => { const saved = data.tickets.find(ticket => ticket.id === record.id)!.operation!; saved.transcript = archived.receipt; saved.stage = 'sending'; saved.externalAttempted = true; });
         op.externalAttempted = true;
-        const message = await log.send({ content: `${exportMarker(op.id)}\nTicket ${record.id} · owner ${record.ownerId} · closed by ${op.actorId}\n${snapshot.entries.length} channel messages saved automatically. Download the transcript to retain it; original attachment links may expire.${archived.receipt.filename.endsWith('.gz') ? ' Extract the .gz file to open its HTML transcript.' : ''}`, files: [new AttachmentBuilder(archived.data, { name: archived.receipt.filename })], allowedMentions: NONE });
+        const message = await log.send({ content: `${exportMarker(op.id)}\n${g('Ticket {id} · owner {owner} · closed by {actor}\n{count} channel messages saved automatically. Download the transcript to retain it; original attachment links may expire.', { id: record.id, owner: record.ownerId, actor: op.actorId, count: snapshot.entries.length })}${archived.receipt.filename.endsWith('.gz') ? g(' Extract the .gz file to open its HTML transcript.') : ''}`, files: [new AttachmentBuilder(archived.data, { name: archived.receipt.filename })], allowedMentions: NONE });
         if (!this.matchesTranscript(message, op)) throw new Error('Discord did not confirm the transcript attachment. The channel was retained; inspect the support log before retrying.');
         op.transcriptMessageId = message.id;
       }
@@ -537,10 +557,10 @@ export class ModerationService {
         // Recheck the latest message after the durable write, immediately before the destructive request.
         const latest = await channel.messages.fetch({ limit: 1, cache: false });
         if ((latest.first()?.id ?? null) !== op.transcript.newestMessageId) throw new Error('A new message arrived while closing. The saved transcript is retained, and the ticket channel was not deleted. A manager must release this operation before exporting again.');
-        await channel.delete(`Ticket ${record.id}: complete transcript saved in ${log.id}/${op.transcriptMessageId}`);
+        await channel.delete(g('Ticket {id}: complete transcript saved in {channel}/{message}', { id: record.id, channel: log.id, message: op.transcriptMessageId }));
       } else {
         await this.store.update(interaction.guildId, data => { const saved = data.tickets.find(ticket => ticket.id === record.id)!.operation!; saved.stage = 'archiving'; saved.archiveCategoryId = config.archiveCategoryId; });
-        await archiveTicketChannel(channel, bot, config.archiveCategoryId, `Ticket ${record.id} archived by ${actor.id}`);
+        await archiveTicketChannel(channel, bot, config.archiveCategoryId, g('Ticket {id} archived by {actor}', { id: record.id, actor: actor.id }));
       }
       await this.store.update(interaction.guildId, data => { const ticket = data.tickets.find(item => item.id === record.id)!; if (op.transcript) ticket.transcript = { ...op.transcript, channelId: log.id, messageId: op.transcriptMessageId }; ticket.status = 'closed'; ticket.closedBy = op.staffClose ? op.actorId : null; ticket.closedAt = new Date().toISOString(); delete ticket.operation; });
     } catch (error) {
@@ -548,22 +568,28 @@ export class ModerationService {
       throw error;
     }
     // A deleted channel can invalidate the interaction reply; that must not turn successful closure into a failed operation.
-    await interaction.editReply(op.closeAction === 'delete' ? `Transcript saved automatically in <#${log.id}>; the ticket channel was deleted.` : `Transcript saved automatically in <#${log.id}>; the ticket is now a read-only archive.`).catch(error => this.logger.warn('Ticket closed but its interaction reply was unavailable.', { guildId: interaction.guildId, error: errorText(error) }));
+    await interaction.editReply(t(op.closeAction === 'delete' ? 'Transcript saved automatically in <#{channel}>; the ticket channel was deleted.' : 'Transcript saved automatically in <#{channel}>; the ticket is now a read-only archive.', { channel: log.id })).catch(error => this.logger.warn('Ticket closed but its interaction reply was unavailable.', { guildId: interaction.guildId, error: errorText(error) }));
   }
   private async showApplication(interaction: TicketInteraction, formId?: string): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     const state = this.store.read(interaction.guildId);
     if (!state.config.applications.enabled) throw new Error('Applications are disabled.');
     const available = applicationForms(state.config).filter(form => form.enabled);
-    if (!formId && available.length > 1) { await interaction.reply({ content: 'Choose an application form.', components: [this.choiceMenu('mod:application:choose', available)], flags: MessageFlags.Ephemeral, allowedMentions: NONE }); return; }
+    if (!formId && available.length > 1) { await interaction.reply({ content: t('Choose an application form.'), components: [this.choiceMenu('mod:application:choose', available, { guildId: interaction.guildId, locale: interaction.locale })], flags: MessageFlags.Ephemeral, allowedMentions: NONE }); return; }
     const config = available.find(form => form.id === (formId ?? available[0]?.id));
     if (!config) throw new Error('This application form is no longer available. Ask staff for an updated panel.');
     if (state.applications.some(a => a.userId === interaction.user.id && a.status === 'pending' && (a.applicationForm?.id ?? 'default') === config.id)) throw new Error('You already have this application waiting for review.');
     const version = formVersion([JSON.stringify(config)]);
-    const modal = new ModalBuilder().setCustomId(`mod:application:submit:${config.id}:${version}`).setTitle(config.name.slice(0, 45));
-    config.questions.forEach((question, index) => modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(`answer-${index}`).setLabel(question.slice(0, 45)).setPlaceholder(question.slice(0, 100)).setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(800))));
+    const modal = new ModalBuilder().setCustomId(`mod:application:submit:${config.id}:${version}`).setTitle(supportName({ guildId: interaction.guildId, locale: interaction.locale }, config).slice(0, 45));
+    config.questions.forEach((question, index) => modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(`answer-${index}`).setLabel(applicationQuestion({ guildId: interaction.guildId, locale: interaction.locale }, config, question).slice(0, 45)).setPlaceholder(applicationQuestion({ guildId: interaction.guildId, locale: interaction.locale }, config, question).slice(0, 100)).setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(800))));
     await interaction.showModal(modal);
   }
   private async submitApplication(interaction: ModalSubmitInteraction<'cached'>): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     if (!interaction.customId.startsWith('mod:application:submit:')) throw new Error('This application form has expired.');
     await this.exclusive(interaction.guildId, async () => {
       const state = this.store.read(interaction.guildId);
@@ -587,13 +613,16 @@ export class ModerationService {
       const record: Application = { id, userId: interaction.user.id, status: 'pending', createdAt: new Date().toISOString(), reviewedBy: null, reviewedAt: null, answers, questions: [...config.questions], messageId: null, channelId: channel.id, applicationForm: structuredClone(config), operation: { id: randomUUID(), kind: 'application-submit', stage: 'sending', actorId: interaction.user.id, startedAt: new Date().toISOString(), externalAttempted: true } };
       await this.store.update(interaction.guildId, data => { data.applications.push(record); });
       try {
-        const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x619cec).setTitle(config.name).setDescription(`Applicant: <@${interaction.user.id}> (${interaction.user.id})`).addFields(config.questions.map((q, index) => ({ name: q, value: answers[index]! }))).setFooter({ text: id }).setTimestamp()], components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`mod:application:accept:${id}`).setLabel('Accept').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`mod:application:deny:${id}`).setLabel('Decline').setStyle(ButtonStyle.Danger))], allowedMentions: NONE });
+        const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x619cec).setTitle(supportName(shared, config)).setDescription(g('Applicant: <@{user}> ({user})', { user: interaction.user.id })).addFields(config.questions.map((q, index) => ({ name: applicationQuestion(shared, config, q), value: answers[index]! }))).setFooter({ text: id }).setTimestamp()], components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`mod:application:accept:${id}`).setLabel(g('Accept')).setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`mod:application:deny:${id}`).setLabel(g('Decline')).setStyle(ButtonStyle.Danger))], allowedMentions: NONE });
         await this.store.update(interaction.guildId, data => { const saved = data.applications.find(application => application.id === id)!; saved.messageId = message.id; delete saved.operation; });
       } catch (error) { await this.markIssue(interaction.guildId, 'application', id, 'Application delivery was interrupted. Its review message may already exist; a server manager must inspect /support-recovery list. The message was not deleted or sent again.'); throw error; }
-      await interaction.editReply('Your application was sent to the configured review channel. Authorized reviewers can now review your answers.');
+      await interaction.editReply(t('Your application was sent to the configured review channel. Authorized reviewers can now review your answers.'));
     });
   }
   private async reviewApplication(interaction: ButtonInteraction<'cached'>): Promise<void> {
+    const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
+    const shared = { guildId: interaction.guildId, locale: interaction.guild?.preferredLocale };
+    const g = (source: string, params = {}) => supportText(shared, source, params);
     const [, , action, id] = interaction.customId.split(':');
     if ((action !== 'accept' && action !== 'deny') || !id) throw new Error('Invalid application action.');
     await this.exclusive(interaction.guildId, async () => {
@@ -620,11 +649,11 @@ export class ModerationService {
       }
       if (action === 'accept') await this.store.update(interaction.guildId, data => { data.applications.find(application => application.id === id)!.operation = { id: randomUUID(), kind: 'application-accept', stage: 'role-changing', actorId: actor.id, startedAt: new Date().toISOString(), roleId: acceptedRole?.id ?? null, roleAlreadyPresent: acceptedRole ? applicant!.roles.cache.has(acceptedRole.id) : false, externalAttempted: Boolean(acceptedRole && !applicant!.roles.cache.has(acceptedRole.id)) }; });
       try {
-        if (acceptedRole && applicant && !applicant.roles.cache.has(acceptedRole.id)) { await applicant.roles.add(acceptedRole, `Application ${id} accepted by ${actor.id}`); assignedRole = acceptedRole.id; }
+        if (acceptedRole && applicant && !applicant.roles.cache.has(acceptedRole.id)) { await applicant.roles.add(acceptedRole, g('Application {id} accepted by {actor}', { id, actor: actor.id })); assignedRole = acceptedRole.id; }
         await this.store.update(interaction.guildId, data => { const application = data.applications.find(a => a.id === id)!; application.status = action === 'accept' ? 'accepted' : 'denied'; application.reviewedBy = actor.id; application.reviewedAt = new Date().toISOString(); application.answers = []; delete application.operation; });
       } catch (error) { if (action === 'accept') await this.markIssue(interaction.guildId, 'application', id, 'Acceptance was interrupted. The role may already have been assigned; it was not removed or granted again. A server manager must inspect /support-recovery list.'); throw error; }
-      await interaction.message.edit({ components: [], content: `${action === 'accept' ? 'Accepted' : 'Declined'} by <@${actor.id}>.`, allowedMentions: NONE }).catch(error => this.logger.warn('Application decision saved, but review message update failed.', { error: errorText(error) }));
-      await interaction.editReply(`Application ${action === 'accept' ? 'accepted' : 'declined'}.${assignedRole ? ' The configured role was assigned.' : ''}`);
+      await interaction.message.edit({ components: [], content: g(action === 'accept' ? 'Accepted by <@{member}>.' : 'Declined by <@{member}>.', { member: actor.id }), allowedMentions: NONE }).catch(error => this.logger.warn('Application decision saved, but review message update failed.', { error: errorText(error) }));
+      await interaction.editReply(t(action === 'accept' ? 'Application accepted.' : 'Application declined.') + (assignedRole ? t(' The configured role was assigned.') : ''));
     });
   }
 }

@@ -303,7 +303,7 @@ describe('temporary voice room panels', () => {
   it('rechecks command access and membership on submit after a form was opened', async () => {
     const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'm'); await f.service.handleInteraction(button);
     f.access.commandMember.mockImplementation(() => { throw new Error('Command access revoked'); });
-    const denied = modalSubmission(button, '3'); await f.service.handleInteraction(denied); expect(denied.editReply.mock.calls[0][0].content).toContain('revoked'); expect(f.channels.get(channelId).setUserLimit).not.toHaveBeenCalled();
+    const denied = modalSubmission(button, '3'); await f.service.handleInteraction(denied); expect(denied.editReply.mock.calls[0][0].content).toBe('Cyro could not change this room. Check its channel permissions and try again.'); expect(f.channels.get(channelId).setUserLimit).not.toHaveBeenCalled();
     f.access.commandMember.mockReset(); f.owner.voice.channelId = lobbyId;
     const left = modalSubmission(button, '3'); await f.service.handleInteraction(left); expect(left.editReply.mock.calls[0][0].content).toContain('Join your temporary'); expect(f.channels.get(channelId).setUserLimit).not.toHaveBeenCalled();
   });
@@ -411,7 +411,7 @@ describe('room member picker controls', () => {
     for (const loss of ['leave', 'command']) {
       const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId; const button = panelButton(f, 'r'); await f.service.handleInteraction(button);
       f.guild.voiceStates.fetch.mockImplementation(async () => { if (loss === 'leave') f.owner.voice.channelId = lobbyId; else f.access.commandMember.mockImplementation(() => { throw new Error('Command access revoked'); }); return f.other.voice; });
-      const selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toMatch(/access changed|revoked/); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+      const selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toBe(loss === 'leave' ? 'Your room access changed. Rejoin your room and try again.' : 'Cyro could not change this room. Check its channel permissions and try again.'); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
     }
   });
   it('refuses removals after owner controls are disabled or the owner switches to another room', async () => {

@@ -42,7 +42,7 @@ function serverLanguagePanel() {
     save.disabled = busy || !state.dirty;
     window.CyroI18n.setContent(status, ui(state.dirty ? 'You have unsaved changes.' : 'Your settings are up to date.'));
   } }, [...window.CyroI18n.languages, { id: 'auto', name: ui('Automatic · Discord language') }].map(language => el('option', { value: language.id, selected: saved === language.id }, language.name)));
-  form.append(field(ui('Server language'), input, ui('Choose the language for supported bot replies. This is separate from your dashboard language and each member’s TTS voice.')),
+  form.append(field(ui('Server language'), input, ui('Choose the language for bot messages. This is separate from your dashboard language and each member’s TTS voice.')),
     el('p', { className: 'field-hint' }, ui('Automatic uses each member’s Discord language for private replies and the server’s preferred language for shared messages.')),
     el('p', { className: 'field-hint' }, ui('Custom messages and member-written content stay in their original language.')),
     el('div', { className: 'save-bar' }, status, save));
