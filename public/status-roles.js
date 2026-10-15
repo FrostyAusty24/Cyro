@@ -155,7 +155,7 @@ async function renderStatusRoles(main) {
   });
 
   const previewPanel = panel('Try your rule', el('div', { className: 'form-section stack' }, field('Example custom status', sampleInput, 'Try the text a member might use.'), preview, previewResult, previewNote));
-  const ownership = contextCard('A role for supporters', 'Create a role just for this reward. Cyro removes only roles that this feature gave out. Roles members already had are left alone.', 'award', el('p', {}, 'Disabling the rule or choosing a different role removes its earlier assignments in the background.'));
+  const ownership = contextCard('A role for supporters', 'Create a role just for this reward. Cyro removes only roles that this feature gave out. Roles members already had are left alone.', 'sparkles', el('p', {}, 'Disabling the rule or choosing a different role removes its earlier assignments in the background.'));
   const activity = panel('Role activity', el('div', {}, counts, warnings, el('div', { className: 'status-role-activity-footer' }, activityStatus, refresh)), null, 'Totals for roles managed by this feature in this server.');
   loading.replaceWith(availability, el('div', { className: 'settings-grid status-roles-grid' }, form, el('aside', { className: 'stack' }, previewPanel, ownership)), activity);
   drawStatus();

@@ -55,15 +55,7 @@ window.CyroHome = (() => {
     ]]
   ];
 
-  // Same-origin Lucide sprite: decorative icons inherit each component's text colour.
-  function hIcon(name) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    for (const [key, value] of Object.entries({ viewBox: '0 0 24 24', class: 'icon home-icon', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' })) svg.setAttribute(key, value);
-    const use = document.createElementNS(svg.namespaceURI, 'use');
-    use.setAttribute('href', `/home-icons.svg#${name}`);
-    svg.append(use);
-    return svg;
-  }
+  function hIcon(name) { return window.CyroIcons.create(name, 'home-icon'); }
 
   function render({ app, el, brand, login, setup, error }) {
     const brandLink = brand();

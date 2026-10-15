@@ -109,6 +109,7 @@ function harness(initial: { name: string; id: string; selected?: boolean; disabl
     disconnect() { this.entry.active = false; }
   }
   const window = Object.assign(new Target(), { innerWidth: 1200, innerHeight: 900, CyroSearchSelect: undefined as any });
+  runInNewContext(readFileSync(new URL('../public/icons.js', import.meta.url), 'utf8'), { document, window });
   runInNewContext(readFileSync(new URL('../public/search-select.js', import.meta.url), 'utf8'), { document, window, MutationObserver: Observer, Event: UiEvent, queueMicrotask });
   const select = document.createElement('select'); select.id = 'test-select'; select.multiple = multiple; select.dataset.searchKind = 'roles';
   select.setAttribute('aria-describedby', 'role-help');

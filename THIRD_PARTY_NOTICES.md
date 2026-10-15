@@ -49,7 +49,7 @@ The installer fetches the official yt-dlp 2026.08.19 binary and verifies its SHA
 
 ## Lucide icons
 
-The homepage bundles selected icons from `lucide-static` 1.57.0 in `public/home-icons.svg`. Source: https://github.com/lucide-icons/lucide and https://lucide.dev.
+The dashboard and public pages bundle selected icons from `lucide-static` 1.57.0 in `public/icons.svg`. Source: https://github.com/lucide-icons/lucide and https://lucide.dev.
 
 The icons are redistributed under the following upstream license, also preserved in the SVG sprite:
 

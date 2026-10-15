@@ -17,13 +17,6 @@ window.CyroSearchSelect = (() => {
     if (text !== undefined) result.textContent = text;
     return result;
   }
-  function lineIcon(path) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    for (const [key, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.65', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(key, value);
-    const shape = document.createElementNS(svg.namespaceURI, 'path');
-    shape.setAttribute('d', path); svg.append(shape);
-    return svg;
-  }
   function enhance(select, label) {
     if (controls.has(select)) return controls.get(select).wrapper;
     // Older browsers keep their working native control instead of a clipped popup.
@@ -38,7 +31,7 @@ window.CyroSearchSelect = (() => {
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
     trigger.setAttribute('aria-controls', `${id}-options`);
-    trigger.append(value, lineIcon('m6 9 6 6 6-6'));
+    trigger.append(value, window.CyroIcons.create('chevron-down'));
     select.classList.add('search-select-native');
     select.tabIndex = -1; select.hidden = true; select.setAttribute('aria-hidden', 'true');
     wrapper.append(select, trigger);
@@ -103,7 +96,7 @@ window.CyroSearchSelect = (() => {
         row.id = `${id}-option-${index}`;
         row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(option.selected));
         if (optionDisabled(option)) row.setAttribute('aria-disabled', 'true');
-        row.append(node('span', 'search-select-option-label', option.label), lineIcon('m5 12 4 4L19 6'));
+        row.append(node('span', 'search-select-option-label', option.label), window.CyroIcons.create('check'));
         row.addEventListener('pointerdown', event => event.preventDefault());
         row.addEventListener('click', () => choose(option));
         row.addEventListener('pointermove', () => { if (!optionDisabled(option)) highlight(index, false); });

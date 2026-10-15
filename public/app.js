@@ -6,40 +6,11 @@ const app = document.getElementById('app');
 const navigation = [
   ['overview', 'Overview', 'grid'], ['help', 'Getting started', 'help'], ['streams', 'Creators & alerts', 'radio'],
   ['streamer-leaderboard', 'Streamer leaderboard', 'chart'],
-  ['counting', 'Counting', 'hash'], ['suggestions', 'Suggestions', 'spark'], ['polls', 'Polls', 'chart'], ['confessions', 'Anonymous confessions', 'confession'], ['voice', 'Music & TTS', 'music'], ['temp-voice', 'Temporary voice', 'voice'], ['welcome', 'Welcome & roles', 'wave'], ['status-roles', 'Status roles', 'award'], ['verification', 'Verification', 'lock'],
-  ['invites', 'Invites & levels', 'gift'], ['moderation', 'Moderation', 'shield'], ['identity', 'Bot appearance', 'edit'],
+  ['counting', 'Counting', 'hash'], ['suggestions', 'Suggestions', 'lightbulb'], ['polls', 'Polls', 'vote'], ['confessions', 'Anonymous confessions', 'confession'], ['voice', 'Music & TTS', 'headphones'], ['temp-voice', 'Temporary voice', 'voice'], ['welcome', 'Welcome & roles', 'wave'], ['status-roles', 'Status roles', 'sparkles'], ['verification', 'Verification', 'lock'],
+  ['invites', 'Invites & levels', 'gift'], ['moderation', 'Moderation', 'shield'], ['identity', 'Bot appearance', 'paintbrush'],
   ['tickets', 'Support tickets', 'ticket'], ['applications', 'Applications', 'file'], ['bug-reports', 'Bug reports', 'bug'],
-  ['staff', 'Staff leaderboard', 'award'], ['messages', 'Channel messages', 'file'], ['sticky', 'Sticky messages', 'pin'], ['access', 'Access & commands', 'lock']
+  ['staff', 'Staff leaderboard', 'award'], ['messages', 'Channel messages', 'message'], ['sticky', 'Sticky messages', 'pin'], ['access', 'Access & commands', 'key-round']
 ];
-const iconPaths = {
-  grid: ['M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z'],
-  radio: ['M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14M8 8a6 6 0 0 0 0 8M16 8a6 6 0 0 1 0 8', 'M12 11v2'],
-  hash: ['M5 9h14M4 15h14M11 3 7 21M17 3l-4 18'],
-  wave: ['M8 13V6a2 2 0 0 1 4 0v6M12 11V4a2 2 0 0 1 4 0v8M16 11V7a2 2 0 0 1 4 0v9c0 4-3 6-7 6-3 0-5-2-7-5l-3-4a2 2 0 0 1 3-2l2 2M4 3l-2 2M1 8h2'],
-  gift: ['M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9H8a3 3 0 1 1 3-3l1 3ZM12 9h4a3 3 0 1 0-3-3l-1 3Z'],
-  shield: ['M12 3 3 7v5c0 5 9 10 9 10s9-5 9-10V7l-9-4Z', 'm8 12 3 3 5-6'],
-  ticket: ['M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4V5ZM15 5v3M15 11v2M15 16v3'],
-  file: ['M14 2H5v20h14V7l-5-5ZM14 2v6h5M8 12h8M8 16h5'],
-  award: ['M8 15 6 22l6-3 6 3-2-7', 'M19 9a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z'],
-  users: ['M16 21v-3a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v3M16 4a4 4 0 0 1 0 8M22 21v-3a4 4 0 0 0-3-4', 'M13 6a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z'],
-  plus: ['M12 5v14M5 12h14'], chevron: ['m9 5 7 7-7 7'], arrow: ['M4 12h16m-6-6 6 6-6 6'],
-  check: ['m5 12 4 4L19 6'], menu: ['M3 6h18M3 12h18M3 18h18'],
-  clock: ['M12 7v5l3 2', 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z'],
-  link: ['m10 13 4-4M8 15l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 9l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0'],
-  trash: ['M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7'],
-  edit: ['m15 4 5 5M3 21l5-1L21 7a2 2 0 0 0-5-5L3 15v6Z'],
-  lock: ['M5 10h14v11H5zM8 10V6a4 4 0 0 1 8 0v4M12 14v3'],
-  logout: ['M9 4H3v16h6M9 12h12m-4-4 4 4-4 4'],
-  spark: ['m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8L12 3Z'],
-  help: ['M9 9a3 3 0 0 1 6 0c0 2-3 2-3 5M12 17h.01', 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z'],
-  chart: ['M4 21V10M10 21V3M16 21v-7M22 21V7'],
-  music: ['M9 18V5l12-2v13M9 9l12-2', 'M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3ZM21 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3Z'],
-  voice: ['M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14'],
-  bug: ['M8 9h8v7a4 4 0 0 1-8 0V9ZM9 9V7a3 3 0 0 1 6 0v2M5 6l3 3M19 6l-3 3M3 12h5M16 12h5M3 18l5-2M16 16l5 2M12 9v11'],
-  pin: ['m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v7'],
-  confession: ['M21 11a8 8 0 0 1-8 8H7l-4 3V5a3 3 0 0 1 3-3h7a8 8 0 0 1 8 9Z', 'M8 8h8M8 12h5'],
-  discord: ['M8 5 4 6c-2 4-3 8-2 12l5 2 1-2M16 5l4 1c2 4 3 8 2 12l-5 2-1-2M7 17c3 2 7 2 10 0M8 11v2M16 11v2M8 7c3-1 5-1 8 0']
-};
 const state = { me: null, guilds: [], guildId: null, detail: null, page: 'overview', dirty: false, staffPeriod: '7d', staffSort: 'totalActions', staffQuery: '', staffActivity: 'all', streamerPeriod: '7d', streamerSort: 'trackedMilliseconds', streamerView: 'creators', status: null, streamEditor: null, creatorEditor: null, loading: false, saving: false, loadSequence: 0 };
 let toastTimer;
 let closeNavigation = null;
@@ -60,12 +31,7 @@ function el(tag, attrs = {}, ...children) {
   }
   return node;
 }
-function icon(name, extra = '') {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.65', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', class: `icon ${extra}` })) svg.setAttribute(k, v);
-  for (const d of iconPaths[name] || iconPaths.grid) { const p = document.createElementNS(svg.namespaceURI, 'path'); p.setAttribute('d', d); svg.append(p); }
-  return svg;
-}
+function icon(name, extra = '') { return window.CyroIcons.create(name, extra); }
 const clone = value => JSON.parse(JSON.stringify(value));
 const format = value => Number(value || 0).toLocaleString();
 const safeId = value => encodeURIComponent(String(value));
@@ -175,8 +141,8 @@ function renderOverview(main) {
   right.append(panel('Server modules', el('div', { className: 'module-list' }, [
     ['shield', 'green', 'Moderation', 'Filters, warnings & your mod log', 'moderation', mc.enabled],
     ['wave', 'purple', 'Welcome & roles', 'Greetings and automatic roles', 'welcome', cc.welcome.enabled],
-    ['award', 'purple', 'Status roles', 'A reward for showing your community', 'status-roles', state.detail.statusRoles?.config.enabled],
-    ['music', 'purple', 'Music & TTS', 'Audio queues and a voice for your chat', 'voice', state.detail.voice?.config.musicEnabled || state.detail.voice?.config.ttsEnabled],
+    ['sparkles', 'purple', 'Status roles', 'A reward for showing your community', 'status-roles', state.detail.statusRoles?.config.enabled],
+    ['headphones', 'purple', 'Music & TTS', 'Audio queues and a voice for your chat', 'voice', state.detail.voice?.config.musicEnabled || state.detail.voice?.config.ttsEnabled],
     ['confession', '', 'Anonymous confessions', 'A space to share without a name', 'confessions', state.detail.confessions?.config.enabled],
     ['gift', 'orange', 'Invites', cc.invites.loggingEnabled ? 'Staff invite history and join sources' : cc.invites.enabled ? cc.invites.challengeName : 'Logs and community challenges', 'invites', cc.invites.enabled || cc.invites.loggingEnabled],
     ['ticket', '', 'Support tickets', 'Support channels your way', 'tickets', mc.tickets.enabled],

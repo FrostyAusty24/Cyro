@@ -73,7 +73,7 @@ async function renderVoice(main) {
       ? el('div', { className: 'stack' }, tag(current.mode === 'tts' ? 'Reading chat' : 'Music session', 'green'), el('h3', {}, channel ? channel.name : 'Connected to a voice channel'),
         el('p', { className: 'form-intro' }, current.mode === 'tts' ? 'New eligible messages in this call’s chat are read aloud.' : current.currentTitle || 'Waiting for a track.'),
         el('p', { className: 'field-hint' }, `${format(current.queueLength)} ${current.mode === 'tts' ? 'messages' : 'tracks'} waiting in the queue.`))
-      : empty('No active voice session', 'Join a voice channel in Discord, then use /playmusic or /addtts to bring Cyro in.', 'music'));
+      : empty('No active voice session', 'Join a voice channel in Discord, then use /playmusic or /addtts to bring Cyro in.', 'headphones'));
     availability.replaceChildren(...[
       !snapshot.available?.music && el('div', { className: 'alert info' }, 'Music is unavailable on this host. The bot operator needs to finish the audio setup.'),
       snapshot.available?.youtube === false && el('div', { className: 'alert info' }, 'YouTube links are unavailable on this host. Direct audio and radio links can still be used.'),
@@ -122,7 +122,7 @@ async function renderVoice(main) {
       if (active()) { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); refresh.disabled = false; save.replaceChildren(icon('check'), 'Save changes'); updateDirty(); }
     }
   });
-  const commands = contextCard('Bring Cyro into a call', 'Join a normal voice channel first. Commands use the call you are in, even when sent from another text channel.', 'music', el('div', { className: 'stack' },
+  const commands = contextCard('Bring Cyro into a call', 'Join a normal voice channel first. Commands use the call you are in, even when sent from another text channel.', 'headphones', el('div', { className: 'stack' },
     el('p', {}, el('code', {}, '/playmusic link'), ' adds audio to the queue. Use ', el('code', {}, '/musicqueue'), ' to see what’s next.'),
     el('p', {}, el('code', {}, '/skipmusic'), ' skips a track. ', el('code', {}, '/stopmusic'), ' clears music and leaves the call.'),
     el('p', {}, el('code', {}, '/addtts'), ' starts reading this call’s chat. ', el('code', {}, '/stoptts'), ' stops it.'),

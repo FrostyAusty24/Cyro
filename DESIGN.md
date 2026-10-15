@@ -8,6 +8,8 @@ colors:
   panel-hover: "#202b39"
   input: "#101720"
   border: "#303b4a"
+  control-border: "#465568"
+  control-hover: "#75879b"
   text: "#edf2f8"
   muted: "#bdc8d5"
   subtle: "#a1b0c2"
@@ -36,52 +38,53 @@ colors:
   danger-text: "#ffd4d4"
 typography:
   headline:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
     fontSize: "30px"
     fontWeight: 650
     lineHeight: 1.25
     letterSpacing: "-0.025em"
   section:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
     fontSize: "17px"
     fontWeight: 620
     lineHeight: 1.35
     letterSpacing: "-0.3px"
   panel-title:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
-    fontSize: "17px"
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontSize: "18px"
     fontWeight: 600
-    lineHeight: 1.35
-    letterSpacing: "-0.3px"
+    lineHeight: 1.4
+    letterSpacing: "-0.015em"
   body:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.6
   field:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.55
   label:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
     fontSize: "14px"
     fontWeight: 600
     lineHeight: 1.55
   control:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
     fontSize: "14px"
     fontWeight: 600
     lineHeight: 1.4
   metric:
-    fontFamily: '"Segoe UI Variable", "Segoe UI", Arial, sans-serif'
+    fontFamily: '"Bahnschrift", "Segoe UI Variable", "Segoe UI", Arial, sans-serif'
     fontSize: "30px"
     fontWeight: 650
     lineHeight: 1.2
     letterSpacing: "-0.025em"
 rounded:
   tag: "5px"
-  field: "7px"
+  field: "8px"
+  navigation: "7px"
   control: "8px"
   panel: "12px"
 spacing:
@@ -126,7 +129,7 @@ components:
     padding: "10px 12px"
   navigation:
     textColor: "{colors.muted}"
-    rounded: "{rounded.field}"
+    rounded: "{rounded.navigation}"
     padding: "9px 12px"
   navigation-selected:
     backgroundColor: "{colors.nav-selected}"
@@ -153,7 +156,7 @@ components:
 
 Cyro's approved icy blue logo anchors a dark administration interface. Solid navy layers separate navigation, working surfaces, and fields; cyan identifies actions and selection. The layout stays familiar while larger labels, plain language and predictable spacing make repeated configuration work easier to read. This is a refinement of the existing dashboard, not a replacement layout.
 
-This record describes the finished dashboard in `public/styles.css` and its components in `public/app.js`. The existing logo remains the identity source. Typography is the incumbent system UI stack; no separate display typeface or newly approved visual comp is implied.
+This record describes the dashboard in `public/styles.css`, the creator portal in `public/creator.css`, and their native JavaScript components. The existing logo remains the identity source. Bahnschrift is the requested UI typeface throughout the dashboard, public homepage, creator connections and legal pages. The font is used from the viewer's installed fonts; Cyro does not bundle or download a Microsoft font file.
 
 **Key Characteristics:**
 - Icy cyan actions against dark navy surfaces.
@@ -191,6 +194,7 @@ The palette extends the approved logo's icy blue character through cyan primary 
 - **Raised navy** (`panel-hover`): interactive row and secondary-control hover.
 - **Field navy** (`input`): editable control surfaces.
 - **Slate boundary** (`border`): panel edges, dividers, and secondary-control strokes.
+- **Control boundary** (`control-border`) and **hover boundary** (`control-hover`): visible outlines on inputs, searchable pickers and secondary actions. The quieter `border` token separates content rows.
 - **Ice white**, **secondary slate**, and **hint slate** (`text`, `muted`, `subtle`): the three principal text roles.
 - `secondary-bg` and `secondary-text` provide the resting secondary-button treatment.
 
@@ -205,8 +209,10 @@ The palette extends the approved logo's icy blue character through cyan primary 
 
 ## Typography
 
-**UI Font:** Segoe UI Variable, Segoe UI, Arial, sans-serif.
+**UI Font:** Bahnschrift, Segoe UI Variable, Segoe UI, Arial, sans-serif.
 **Identifier Font:** Consolas, monospace, for code and technical identifiers.
+
+Bahnschrift is selected when installed on the viewer's device. Other devices use the system fallbacks in order; no web font request or font redistribution is introduced. Discord message/embed and welcome-image previews deliberately retain their Segoe UI/Arial preview stack, while their surrounding controls use Bahnschrift.
 
 **Character:** A compact system UI hierarchy uses weight and scale to support scanning. Tabular numerals align metrics, counts, and table values.
 
@@ -214,7 +220,7 @@ The palette extends the approved logo's icy blue character through cyan primary 
 
 - **Headline:** `headline` identifies the current dashboard page; it becomes 27px at the mobile breakpoint.
 - **Section:** `section` is the default secondary heading.
-- **Panel title:** `panel-title` is the denser container heading.
+- **Panel title:** `panel-title` matches the homepage card heading scale at 18px and reduces to 16px on small screens.
 - **Body:** `body` is the base reading style.
 - **Field:** `field` is the shared editable-control text.
 - **Label:** `label` supports form labels; contextual text uses the same compact size with its own weight and color.
@@ -250,7 +256,7 @@ Resting panels use tonal layering and thin borders. They do not use card shadows
 
 ## Shapes
 
-Panels share the `panel` radius. Fields and navigation use `field`; buttons and the guild selector use `control`; compact tags use `tag`. The logo and user avatar are circular. Repeated one-pixel borders separate rows and define containers without additional decoration.
+Panels share the `panel` radius. Fields use `field`, navigation uses `navigation`, buttons and the guild selector use `control`, and compact tags use `tag`. The logo and user avatar are circular. Repeated one-pixel borders separate rows and define containers without additional decoration.
 
 The stream editor footer is a flat continuation of its panel: a top divider, transparent background, and no independent corner radius. The general settings save bar remains a distinct softly rounded surface.
 
@@ -264,15 +270,15 @@ Hover changes the fill. Pressing an enabled button shifts it down 1px. Disabled 
 
 ### Chips
 
-Tags are compact, noninteractive status labels with a thin border. The base treatment is blue; green, muted, and amber variants express state. Preserve the text label so meaning is not carried by color alone.
+Tags are compact, noninteractive status labels with a thin border, 12px type and 4px by 8px padding. The base treatment is blue; green, muted, and amber variants express state. Preserve the text label so meaning is not carried by color alone. Tags reduce to 11px on small screens.
 
 ### Cards / Containers
 
-Panels use the shared solid navy fill, border, and corner radius. Headers divide from their contents with a rule, and body padding follows the documented spacing. Creator cards group one identity with separate platform account rows. Interactive rows adopt the shared panel-hover fill. Reserve shadows for transient popovers, toast feedback and dialogs; ordinary cards do not use blur or shadows.
+Panels use the homepage's solid navy fill, border, and 12px corner radius. Headers divide from their contents with a rule; creator-card headers share the card background. Body padding is 24px, and footers use the sidebar surface with a top divider. Creator cards group one identity with separate platform account rows. Public creator connections use the same card treatment and a 16px gap. Interactive rows adopt the shared panel-hover fill. Reserve shadows for transient popovers, toast feedback and dialogs; ordinary cards do not use blur or shadows.
 
 ### Inputs / Fields
 
-Native inputs, selects, and textareas use the field surface, a slate stroke, and the field radius. Default controls have 43px minimum height. Hover strengthens the stroke; keyboard focus uses a two-pixel cyan outline with three-pixel offset. Textareas can resize vertically.
+Native inputs, selects, and textareas use the field surface, a shared control stroke, and an 8px radius. Default controls have 43px minimum height. Searchable pickers use the same stroke and radius with a 44px minimum height. Hover strengthens the stroke; keyboard focus uses a two-pixel cyan outline with three-pixel offset. Invalid inputs have an explicit red border and existing error text. Textareas can resize vertically.
 
 Labels remain outside the control, hints sit below, and errors use the semantic error color. Disabled fields use reduced opacity and a not-allowed cursor. Server, channel and role selectors expose search by name or ID while retaining a native backing select; their popover escapes clipping containers and supports keyboard selection. Multiple-role selections remain selected while filtering.
 
@@ -304,7 +310,7 @@ The refinement uses the field grouping, restrained controls and filterable table
 
 The homepage adapts [shadcn/ui Card](https://ui.shadcn.com/docs/components/base/card), [Item](https://ui.shadcn.com/docs/components/base/item), [Badge](https://ui.shadcn.com/docs/components/base/badge) and [Button](https://ui.shadcn.com/docs/components/base/button) composition and spacing as design references. Each feature has a distinct icon, title, short introduction and readable list. Cards use the shared navy surface and a one-pixel border; the grid has 16px gaps, cards have 26–28px padding, titles are 18px, and body copy is 15px. Mobile cards use 20–23px padding and 14px body copy. This is authored vanilla HTML/JavaScript/CSS, not an installed shadcn or React component layer.
 
-Homepage icons use the locally served Lucide symbol sprite `public/home-icons.svg`, with `currentColor`, a consistent two-pixel stroke and decorative accessibility attributes. Cyan, lavender, mint and gold remain restrained icon accents. The dashboard's existing icon implementation stays independent. Native `details` and `summary` elements provide the FAQ's keyboard interaction; a downward chevron rotates when open. Focus remains visible, icons carry no independent accessible name, and reduced motion disables transitions.
+The homepage and dashboard use the same locally served Lucide icon family, with `currentColor`, a consistent two-pixel stroke and decorative accessibility attributes. Cyan, lavender, mint and gold remain restrained icon accents. Dashboard feature icons use 40px square containers with 9px corners and 20px glyphs; metric icons sit in a smaller cyan-tinted container. Buttons use 17px icons and navigation uses 18px icons. Native `details` and `summary` elements provide the FAQ's keyboard interaction; a downward chevron rotates when open. Focus remains visible, icons carry no independent accessible name, and reduced motion disables transitions.
 
 Feature descriptions distinguish disconnecting a room member from banning them, explain individual access to locked rooms, identify bug report authors, and retain music and streaming provider limitations. The free-hosting position, creator connections, support, privacy, terms and public source links stay available.
 
