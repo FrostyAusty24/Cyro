@@ -76,5 +76,5 @@ it('keeps reports behind dashboard authorization and never includes them in publ
 });
 it('returns service validation errors without accepting cross-guild report IDs', async () => {
   const f = await fixture(); f.communityTools.decide.mockRejectedValueOnce(new Error('That report does not belong to this server or message.'));
-  const response = await fetch(`${f.base}/api/guilds/${guildId}/bug-reports/${reportId}/status`, { method: 'POST', headers: f.headers, body: '{"status":"resolved"}' }); expect(response.status).toBe(400); expect(await response.json()).toEqual({ error: 'That report does not belong to this server or message.' });
+  const response = await fetch(`${f.base}/api/guilds/${guildId}/bug-reports/${reportId}/status`, { method: 'POST', headers: f.headers, body: '{"status":"resolved"}' }); expect(response.status).toBe(400); expect(await response.json()).toEqual({ error: 'That report does not belong to this server or message.', i18n: { key: 'That report does not belong to this server or message.', params: {} } });
 });

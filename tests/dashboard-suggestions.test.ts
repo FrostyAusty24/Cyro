@@ -103,18 +103,18 @@ it('includes the same guild suggestions snapshot in the main dashboard payload',
 
 it('returns validation errors without accepting unsupported settings or cross-guild decisions', async () => {
   const f = await fixture();
-  f.suggestions.updateConfig.mockRejectedValueOnce(new Error('Choose a text channel in this server.'));
+  f.suggestions.updateConfig.mockRejectedValueOnce(new Error('Choose a text or announcement channel in this server.'));
   const configResponse = await fetch(`${f.base}/api/guilds/${guildId}/suggestions`, {
     method: 'PATCH', headers: f.headers, body: JSON.stringify({ enabled: true, channelId: 'foreign-channel' }),
   });
   expect(configResponse.status).toBe(400);
-  expect(await configResponse.json()).toEqual({ error: 'Choose a text channel in this server.' });
-  f.suggestions.decide.mockRejectedValueOnce(new Error('Suggestion not found in this server.'));
+  expect(await configResponse.json()).toEqual({ error: 'Choose a text or announcement channel in this server.', i18n: { key: 'Choose a text or announcement channel in this server.', params: {} } });
+  f.suggestions.decide.mockRejectedValueOnce(new Error('That suggestion does not belong to this server.'));
   const decisionResponse = await fetch(`${f.base}/api/guilds/${guildId}/suggestions/other-guild-item`, {
     method: 'POST', headers: f.headers, body: JSON.stringify({ status: 'accepted' }),
   });
   expect(decisionResponse.status).toBe(400);
-  expect(await decisionResponse.json()).toEqual({ error: 'Suggestion not found in this server.' });
+  expect(await decisionResponse.json()).toEqual({ error: 'That suggestion does not belong to this server.', i18n: { key: 'That suggestion does not belong to this server.', params: {} } });
   expect(f.suggestions.decide).toHaveBeenCalledExactlyOnceWith(f.guild, userId, 'other-guild-item', { status: 'accepted' });
 });
 

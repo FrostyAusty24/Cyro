@@ -34,13 +34,13 @@ function el(tag, attrs = {}, ...children) {
 }
 function icon(name, extra = '') { return window.CyroIcons.create(name, extra); }
 const clone = value => JSON.parse(JSON.stringify(value));
-const format = value => Number(value || 0).toLocaleString(window.CyroI18n.locale);
+const format = value => window.CyroI18n.computedText(locale => Number(value || 0).toLocaleString(locale === 'pt' ? 'pt-BR' : locale));
 const safeId = value => encodeURIComponent(String(value));
 const guildPath = () => `/api/guilds/${safeId(state.guildId)}`;
 function byPath(obj, path) { return path.split('.').reduce((value, key) => value?.[key], obj); }
 function putPath(obj, path, value) { const keys = path.split('.'); const key = keys.pop(); let target = obj; for (const part of keys) target = target[part] ||= {}; target[key] = value; }
-function channelName(id) { return state.detail?.channels?.find(channel => channel.id === id)?.name || id || 'No channel selected'; }
-function userLabel(id) { return state.detail?.members?.find(member => member.id === id)?.displayName || `User ${id}`; }
+function channelName(id) { return state.detail?.channels?.find(channel => channel.id === id)?.name || id || ui('No channel selected'); }
+function userLabel(id) { return state.detail?.members?.find(member => member.id === id)?.displayName || ui('User {id}', { id }); }
 function platformName(platform) { return ({ twitch: 'Twitch', kick: 'Kick', tiktok: 'TikTok', youtube: 'YouTube' })[platform] || capitalize(platform); }
 function tag(text, color = '') { return el('span', { className: `tag ${color}` }, text); }
 function link(text, page) { return el('a', { className: 'text-link', href: `#${page}` }, text, icon('arrow')); }
@@ -50,7 +50,7 @@ function toast(message, isError = false) { clearTimeout(toastTimer); const box =
 async function api(path, method = 'GET', body) {
   const response = await fetch(path, { method, credentials: 'same-origin', signal: AbortSignal.timeout(25000), headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(method === 'GET' ? {} : { 'X-CSRF-Token': state.me?.csrfToken || '' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   let data; try { data = await response.json(); } catch { data = {}; }
-  if (!response.ok) { const error = new Error(typeof data.error === 'string' ? data.error : data.error?.message || data.message || `Request failed (${response.status}). Please try again.`); error.status = response.status; throw error; }
+  if (!response.ok) { const error = new Error(typeof data.error === 'string' ? data.error : data.error?.message || data.message || `Request failed (${response.status}). Please try again.`); error.status = response.status; error.i18n = data.i18n; throw error; }
   return data;
 }
 function brand() { return el('a', { className: 'brand', href: '#overview', 'aria-label': ui('Cyro overview') }, el('span', { className: 'brand-mark' }, el('img', { src: '/cyro-logo.png', alt: '', width: 48, height: 48 })), el('span', { className: 'brand-name' }, ui('Cyro'), el('small', {}, ui('by Headache Development')))); }
@@ -84,17 +84,16 @@ function renderShell() {
   closeNavigation?.(false);
   state.page = navigation.some(item => item[0] === location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
   const active = navigation.find(item => item[0] === state.page);
-  const select = el('select', { id: 'guild-select', 'data-search-kind': 'servers', onChange: event => selectGuild(event.target.value) }, state.guilds.map(g => el('option', { value: g.id, selected: g.id === state.guildId }, g.name + (g.installed ? '' : ' · Add bot'))));
+  const select = el('select', { id: 'guild-select', 'data-search-kind': 'servers', onChange: event => selectGuild(event.target.value) }, state.guilds.map(g => el('option', { value: g.id, selected: g.id === state.guildId }, g.installed ? g.name : ui('{name} · Add bot', { name: g.name }))));
   const guildPicker = window.CyroSearchSelect.enhance(select, ui('Your server'));
   const nav = el('nav', { className: 'nav', 'aria-label': ui('Community settings') }, navigation.map(([key, label, iconName]) => [({ overview: ui('Workspace'), streams: ui('Creators'), counting: ui('Community'), moderation: ui('Server management') })[key] && el('p', { className: 'nav-label' }, ({ overview: ui('Workspace'), streams: ui('Creators'), counting: ui('Community'), moderation: ui('Server management') })[key]), el('a', { href: `#${key}`, ...(key === state.page ? { 'aria-current': 'page' } : {}) }, icon(iconName), label)]));
   const shell = el('div', { className: 'shell' });
   const toggleMenu = () => setMenuOpen(!shell.classList.contains('menu-open'));
   const menuButton = el('button', { type: 'button', className: 'menu-toggle', 'aria-label': ui('Toggle navigation'), 'aria-controls': 'server-navigation', 'aria-expanded': 'false', onClick: toggleMenu }, icon('menu'));
   const sidebar = el('aside', { id: 'server-navigation', className: 'sidebar', 'aria-label': ui('Server navigation') }, brand(), el('div', { className: 'guild-control' }, el('label', { for: guildPicker === select ? 'guild-select' : 'guild-select-trigger' }, ui('Your server')), guildPicker), languagePicker(), nav, el('div', { className: 'sidebar-foot' }, el('a', { className: 'install-link', href: '/invite' }, icon('plus'), ui('Add to another server')), el('a', { className: 'community-link', href: 'https://discord.gg/dAZheerkkD', target: '_blank', rel: 'noopener noreferrer', 'aria-label': ui('Headache Development community and support (opens in a new tab)') }, icon('discord'), el('span', {}, ui('Headache Development'), el('small', {}, ui('Community & support'))), icon('arrow')), el('nav', { className: 'dashboard-public-links', 'aria-label': ui('Creator and legal links') }, el('a', { href: '/?home=1' }, ui('About Cyro')), el('a', { href: '/connections' }, ui('My connections')), el('a', { href: '/privacy' }, ui('Privacy')), el('a', { href: '/terms' }, ui('Terms')))));
-  const title = state.me?.user?.username || 'Your account';
-  const topbar = el('header', { className: 'topbar' }, el('div', { className: 'breadcrumb' }, menuButton, icon('grid'), el('span', { className: 'breadcrumb-context' }, state.guilds.find(g => g.id === state.guildId)?.name || ui('Your servers')), icon('chevron'), el('strong', {}, active[1])), el('div', { className: 'topbar-right' }, el('span', { className: 'status-pill' }, DEMO ? ui('Demo session') : ui('Connected to Discord')), el('div', { className: 'user-menu' }, el('span', { className: 'avatar', title }, title.slice(0, 2).toUpperCase()), el('button', { type: 'button', className: 'signout', onClick: logout }, ui('Sign out')))));
+  const title = state.me?.user?.username || ui('Your account');
+  const topbar = el('header', { className: 'topbar' }, el('div', { className: 'breadcrumb' }, menuButton, icon('grid'), el('span', { className: 'breadcrumb-context' }, state.guilds.find(g => g.id === state.guildId)?.name || ui('Your servers')), icon('chevron'), el('strong', {}, active[1])), el('div', { className: 'topbar-right' }, el('span', { className: 'status-pill' }, DEMO ? ui('Demo session') : ui('Connected to Discord')), el('div', { className: 'user-menu' }, el('span', { className: 'avatar', title }, String(title).slice(0, 2).toUpperCase()), el('button', { type: 'button', className: 'signout', onClick: logout }, ui('Sign out')))));
   const main = el('main', { id: 'main', className: 'content', tabindex: '-1' });
-  const languageNote = el('p', { className: 'language-scope-note' }, ui('Some dashboard pages still use English. Bot messages use your server’s selected language.'));
   const workspace = el('div', { className: 'workspace' }, demoBanner(), topbar, main);
   function setMenuOpen(open, restoreFocus = true) {
     const wasOpen = shell.classList.contains('menu-open');
@@ -134,8 +133,6 @@ function renderShell() {
   if (!state.detail) { main.append(el('div', { className: 'alert' }, state.loadError || ui('Could not load this server.'), button(ui('Try again'), () => selectGuild(state.guildId, true), 'secondary small'))); return; }
   const pages = { overview: renderOverview, help: renderHelp, streams: renderStreams, 'streamer-leaderboard': renderStreamerLeaderboard, counting: renderCounting, suggestions: renderSuggestions, confessions: renderConfessions, voice: renderVoice, 'temp-voice': renderTempVoice, 'bug-reports': renderBugReports, sticky: renderStickyMessages, welcome: renderWelcome, 'status-roles': renderStatusRoles, verification: renderVerification, invites: renderInvites, moderation: renderModeration, identity: renderIdentity, tickets: main => renderSupportSetup(main, 'tickets'), applications: main => renderSupportSetup(main, 'applications'), staff: renderStaff, messages: main => renderPublishing(main, 'message'), polls: main => renderPublishing(main, 'poll'), access: renderAccess };
   pages[state.page](main);
-  // This is visible in every language so switching does not recreate the page.
-  main.prepend(languageNote);
 }
 
 function renderOverview(main) {
@@ -149,7 +146,7 @@ function renderOverview(main) {
   const left = el('div', { className: 'stack' });
   const right = el('div', { className: 'stack' });
   left.append(panel(ui('Community counting'), el('div', { className: 'counter-showcase' }, el('div', { className: 'counter-label' }, tag(cc.counting.channelId ? `# ${channelName(cc.counting.channelId)}` : ui('Counting channel')), enabledTag(cc.counting.enabled)), el('div', { className: 'count-big' }, format(cs.counting?.current)), el('p', { className: 'count-caption' }, cc.counting.enabled ? ui("Someone's next move is {p0}. Keep it going together.", { p0: format((cs.counting?.current || 0) + 1) }) : ui('Set a channel and let your members build something together.')), el('progress', { className: 'counter-progress', value: cs.counting?.current || 0, max: Math.max(1, cs.counting?.best || 1), 'aria-label': ui('Current count compared with server record') }), el('div', { className: 'counter-foot' }, el('span', {}, ui('CURRENT STREAK')), el('span', {}, ui("BEST · {p0}", { p0: format(cs.counting?.best) })))), link(ui('Configure'), 'counting')));
-  left.append(panel(ui('Creator watchlist'), streams.length ? el('div', { className: 'stream-list' }, streams.slice(0, 4).map(stream => el('div', { className: 'module-row' }, el('div', { className: 'stream-avatar' }, (stream.displayName || stream.username).slice(0, 2).toUpperCase()), el('div', { className: 'module-text' }, el('div', { className: 'module-name' }, stream.displayName || stream.username), el('div', { className: 'module-copy' }, `${capitalize(stream.platform)} · #${channelName(stream.alertChannelId)}`)), tag(!stream.enabled ? ui('Live off') : stream.state === 'live' ? ui('Live now') : ui('Watching'), !stream.enabled ? 'muted' : stream.state === 'live' ? 'green' : '')))) : empty(ui('Put your creators in the spotlight.'), ui('Connect a streamer and let the community know when they go live.'), 'radio', link(ui('Add a streamer'), 'streams')), link(ui('Manage alerts'), 'streams')));
+  left.append(panel(ui('Creator watchlist'), streams.length ? el('div', { className: 'stream-list' }, streams.slice(0, 4).map(stream => el('div', { className: 'module-row' }, el('div', { className: 'stream-avatar' }, (stream.displayName || stream.username).slice(0, 2).toUpperCase()), el('div', { className: 'module-text' }, el('div', { className: 'module-name' }, stream.displayName || stream.username), el('div', { className: 'module-copy' }, window.CyroI18n.computedText(() => `${capitalize(stream.platform)} · #${channelName(stream.alertChannelId)}`))), tag(!stream.enabled ? ui('Live off') : stream.state === 'live' ? ui('Live now') : ui('Watching'), !stream.enabled ? 'muted' : stream.state === 'live' ? 'green' : '')))) : empty(ui('Put your creators in the spotlight.'), ui('Connect a streamer and let the community know when they go live.'), 'radio', link(ui('Add a streamer'), 'streams')), link(ui('Manage alerts'), 'streams')));
   right.append(panel(ui('Server modules'), el('div', { className: 'module-list' }, [
     ['shield', 'green', 'Moderation', 'Filters, warnings & your mod log', 'moderation', mc.enabled],
     ['wave', 'purple', 'Welcome & roles', 'Greetings and automatic roles', 'welcome', cc.welcome.enabled],
@@ -160,13 +157,14 @@ function renderOverview(main) {
     ['ticket', '', 'Support tickets', 'Support channels your way', 'tickets', mc.tickets.enabled],
     ['file', '', 'Applications', 'Staff and role applications', 'applications', mc.applications.enabled]
   ].map(([ic, color, title, copy, page, enabled]) => el('a', { href: `#${page}`, className: 'module-row' }, el('span', { className: `module-icon ${color}` }, icon(ic)), el('div', { className: 'module-text' }, el('div', { className: 'module-name' }, ui(title)), el('div', { className: 'module-copy' }, page === 'invites' && cc.invites.enabled && !cc.invites.loggingEnabled ? copy : ui(copy))), tag(enabled ? ui('On') : ui('Set up'), enabled ? 'green' : 'muted'))))));
-  const recent = [...(ms.moderationCases || []).map(c => ({ text: `${capitalize(c.action)} · ${userLabel(c.userId)}`, at: c.createdAt })), ...(ms.tickets || []).map(t => ({ text: `Ticket ${t.status === 'closed' ? 'closed' : 'opened'} · ${userLabel(t.ownerId)}`, at: t.closedAt || t.createdAt }))].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 3);
+  const recent = [...(ms.moderationCases || []).map(c => ({ text: ui('{action} · {member}', { action: moderationAction(c.action), member: userLabel(c.userId) }), at: c.createdAt })), ...(ms.tickets || []).map(t => ({ text: ui(t.status === 'closed' ? 'Ticket closed · {member}' : 'Ticket opened · {member}', { member: userLabel(t.ownerId) }), at: t.closedAt || t.createdAt }))].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 3);
   right.append(panel(ui('Recent activity'), recent.length ? el('div', { className: 'activity-list' }, recent.map(item => el('div', { className: 'activity-item' }, el('span', { className: 'activity-dot' }), el('div', {}, el('p', {}, item.text), el('time', { datetime: item.at }, dateLabel(item.at)))))) : empty(ui('A fresh start.'), ui('Moderation actions and ticket activity will appear here as your community gets going.'), 'clock')));
   main.append(el('div', { className: 'dashboard-columns' }, left, right), el('footer', { className: 'overview-bottom' }, el('span', {}, icon('lock'), ui('Settings are private to your server admins.')), el('span', {}, DEMO ? ui('Sample activity · Demo workspace') : ui('Server data loaded when you opened this page'))));
 }
 
 function capitalize(value) { const text = String(value || ''); return text ? text[0].toUpperCase() + text.slice(1) : ''; }
-function dateLabel(value) { const d = new Date(value); return Number.isNaN(d.getTime()) ? 'Date unavailable' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+function dateLabel(value) { const d = new Date(value); return Number.isNaN(d.getTime()) ? ui('Date unavailable') : window.CyroI18n.computedText(locale => d.toLocaleString(locale === 'pt' ? 'pt-BR' : locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })); }
+function moderationAction(action) { return ui(({ warn: 'Warning', timeout: 'Timeout', kick: 'Kick', ban: 'Ban', purge: 'Message cleanup', automod: 'Automatic moderation', unban: 'Unban' })[action] || 'Moderation action'); }
 function getConfig(type) { return clone(state.detail[type].config); }
 function toggleControl(label, checked, onChange) { return el('label', { className: 'toggle' }, el('input', { type: 'checkbox', checked, 'aria-label': label, onChange: event => onChange(event.target.checked) }), el('span', { className: 'toggle-track' })); }
 function formSession(type) {
@@ -188,7 +186,7 @@ function formSession(type) {
       window.CyroI18n.setContent(message, DEMO ? ui('Saved for this demo session.') : ui('Changes saved. Your server is up to date.')); message.className = 'save-status success';
       toast(DEMO ? ui('Demo settings saved in this session.') : ui('Server settings saved.'));
       completed = true;
-    } catch (error) { window.CyroI18n.setContent(message, error.message); message.className = 'save-status error'; }
+    } catch (error) { window.CyroI18n.setContent(message, uiError(error)); message.className = 'save-status error'; }
     finally { busy = false; state.saving = false; controls.forEach(([control, wasDisabled]) => { control.disabled = wasDisabled; }); save.disabled = !state.dirty; save.replaceChildren(icon('check'), window.CyroI18n.node(ui('Save changes'))); if (completed) afterSave?.(); }
   });
   return { config, change, form, onSaved(callback) { afterSave = callback; }, finish() { form.append(el('div', { className: 'save-bar' }, message, save)); return form; } };
@@ -200,9 +198,18 @@ function textField(session, label, path, hint = '', options = {}) {
   return field(label, input, hint);
 }
 function linesField(session, label, path, hint, maxLines = 20, maxLength = 200) {
-  const input = el('textarea', { rows: 4, value: (byPath(session.config, path) || []).join('\n'), onInput: event => { const values = event.target.value.split('\n').map(s => s.trim()).filter(Boolean); event.target.setCustomValidity(values.length > maxLines ? `Use at most ${maxLines} entries.` : values.some(value => value.length > maxLength) ? `Each entry must be ${maxLength} characters or fewer.` : ''); session.change(path, values); } });
+  const entries = control => control.value.split('\n').map(value => value.trim()).filter(Boolean);
+  const validate = control => {
+    const values = entries(control);
+    control.setCustomValidity(String(values.length > maxLines ? ui('Use at most {count} entries.', { count: maxLines }) : values.some(value => value.length > maxLength) ? ui('Each entry must be {count} characters or fewer.', { count: maxLength }) : ''));
+  };
+  const input = el('textarea', { rows: 4, value: (byPath(session.config, path) || []).join('\n'), onInput: event => { validate(event.target); session.change(path, entries(event.target)); }, onInvalid: event => validate(event.target) });
+  // Reword validation without changing the draft or retaining discarded pages.
+  const reference = new WeakRef(input);
+  const unsubscribe = window.CyroI18n.subscribe(() => { const control = reference.deref(); if (!control?.isConnected) { unsubscribe(); return; } validate(control); });
   return field(label, input, hint);
 }
+
 function channelField(session, label, path, hint, category = false, emptyLabel = null, textOnly = false, allowedTypes = null) {
   const current = byPath(session.config, path);
   const typeId = value => typeof value === 'number' ? value : ({ GuildText: 0, GuildVoice: 2, GuildCategory: 4, GuildAnnouncement: 5 })[value];
@@ -240,11 +247,11 @@ function renderWelcome(main) {
     const settings = session.config.welcome, joining = previewKind === 'join';
     const mode = joining ? settings.joinFormat : settings.goodbyeFormat;
     const template = joining ? settings.message : settings.goodbyeMessage;
-    window.CyroI18n.setContent(preview, mode === 'off' ? ui('Goodbye announcements are turned off.') : mode === 'card' ? ui('Your image card is sent on its own.') : mode === 'text' && !template ? ui('No goodbye message is set, so no announcement is sent.') : replacePreview(template || (joining ? 'Welcome {user} to {server}!' : '{user} has left {server}.')));
+    window.CyroI18n.setContent(preview, mode === 'off' ? ui('Goodbye announcements are turned off.') : mode === 'card' ? ui('Your image card is sent on its own.') : mode === 'text' && !template ? ui('No goodbye message is set, so no announcement is sent.') : template ? replacePreview(template) : ui(joining ? 'Welcome {user} to {server}!' : '{user} has left {server}.', { user: '@new-member', server: state.detail.guild.name }));
     cardPreview.className = `member-card-preview theme-${settings.card.background}`;
     cardPreview.style.setProperty('--card-accent', /^#[0-9a-f]{6}$/i.test(settings.card.accentColor) ? settings.card.accentColor : '#63D7FF');
     renderCardPreview(cardPreview, settings.card, joining, replacePreview);
-    window.CyroI18n.setContent(previewNote, 'Sample member. The sent image uses their Discord name and avatar. ' + (mode === 'card' || mode === 'both' ? `Image cards are selected for ${joining ? 'joins' : 'leaves'}.` : `Choose an image format above to send this card on ${joining ? 'joins' : 'leaves'}.`));
+    window.CyroI18n.setContent(previewNote, ui('Sample member. The sent image uses their Discord name and avatar. {note}', { note: mode === 'card' || mode === 'both' ? ui(joining ? 'Image cards are selected for joins.' : 'Image cards are selected for leaves.') : ui(joining ? 'Choose an image format above to send this card on joins.' : 'Choose an image format above to send this card on leaves.') }));
   };
   const selectSetting = (label, path, choices, hint) => field(ui(label), el('select', { onChange: event => { session.change(path, event.target.value); updatePreview(); } }, choices.map(([value, text]) => el('option', { value, selected: byPath(session.config, path) === value }, ui(text)))), ui(hint));
   updatePreview();
@@ -269,7 +276,7 @@ function renderInvites(main) {
   const session = formSession('community'), snapshot = state.detail.community.snapshot;
   main.append(heading(ui('Invites & levels'), ui('See where members came from, run optional challenges, and recognize their activity.'), null));
   const ready = snapshot.inviteTracking?.ready;
-  if ((session.config.invites.enabled || session.config.invites.loggingEnabled) && !ready) main.append(el('div', { className: 'alert info' }, snapshot.inviteTracking?.note || ui('Invite tracking is waiting for a baseline. The bot needs Manage Server to read invite counts.')));
+  if ((session.config.invites.enabled || session.config.invites.loggingEnabled) && !ready) main.append(el('div', { className: 'alert info' }, snapshot.inviteTracking?.note ? uiError({ message: snapshot.inviteTracking.note, i18n: snapshot.inviteTracking.noteI18n }) : ui('Invite tracking is waiting for a baseline. The bot needs Manage Server to read invite counts.')));
   settingsLayout(main, session, [
     panel(ui('Staff invite logger'), [toggleSection(session, ui('Log joins and departures'), ui('Keep a staff history of members and the invite used. Works with challenges switched off.'), 'invites.loggingEnabled'), el('div', { className: 'form-section' }, channelField(session, ui('Invite log channel'), 'invites.logChannelId', ui('Optional: copy future entries to a text channel. Discord permissions decide who can read it. Leave empty for dashboard-only logs.'), false, ui('Dashboard only'), true), el('p', { className: 'form-intro' }, ui('Logging begins after you save. Existing members and earlier joins are not backfilled. Cyro needs Manage Server to read invite use counts.')))]),
     panel(ui('Invite challenge'), [toggleSection(session, ui('Run an invite challenge'), ui('Count attributed joins and show members their progress with /invites. This is separate from the staff log.'), 'invites.enabled'), el('div', { className: 'form-section' }, textField(session, ui('Challenge name'), 'invites.challengeName', ui('Give your members a reason to bring someone along.'), { maxlength: 80, placeholder: ui('Bring a friend') }), textField(session, ui('Invites to reach the goal'), 'invites.challengeTarget', ui('The target shown alongside each member’s invite progress.'), { type: 'number', min: 1, max: 100000 }))]),
@@ -300,8 +307,8 @@ function renderInviteHistory(container, initialRows) {
     const filtered = rows.filter(row => (!eventKind || row.event === eventKind) && (!query || [row.memberId, row.memberName, row.inviterId, row.inviteCode, row.inviteChannelId, row.reason, row.source, row.inviterId && userLabel(row.inviterId)].join(' ').toLowerCase().includes(query)));
     window.CyroI18n.setContent(summary, ui("{p0} shown · {p1} recent entries loaded. Up to 1,000 retained per server; the newest 250 appear here. Refresh to load new events.", { p0: filtered.length, p1: rows.length }));
     results.replaceChildren(filtered.length ? table(['Event', 'Member', 'Invited by', 'Invite source', 'When'], filtered.map(row => [
-      tag(row.event === 'left' ? ui('Left') : ui('Joined'), row.event === 'left' ? 'muted' : 'green'), identity(row.memberId, row.memberName), row.inviterId ? identity(row.inviterId) : 'Unknown',
-      el('div', { className: 'invite-source' }, row.inviteCode ? el('code', {}, row.inviteCode) : el('strong', {}, ui('Unknown')), row.inviteChannelId && el('span', {}, `# ${channelName(row.inviteChannelId)}`), el('small', {}, row.event === 'left' && row.inviteCode ? ui('Last recorded join source.') : reasons[row.reason] || ui('Source unavailable.'))), dateLabel(row.at)
+      tag(row.event === 'left' ? ui('Left') : ui('Joined'), row.event === 'left' ? 'muted' : 'green'), identity(row.memberId, row.memberName), row.inviterId ? identity(row.inviterId) : ui('Unknown'),
+      el('div', { className: 'invite-source' }, row.inviteCode ? el('code', {}, row.inviteCode) : el('strong', {}, ui('Unknown')), row.inviteChannelId && el('span', {}, `# ${channelName(row.inviteChannelId)}`), el('small', {}, row.event === 'left' && row.inviteCode ? ui('Last recorded join source.') : ui(reasons[row.reason] || 'Source unavailable.'))), dateLabel(row.at)
     ])) : empty(rows.length ? ui('No matching invite entries.') : ui('No invite events recorded yet.'), rows.length ? ui('Try another member, inviter or invite code.') : ui('Turn on Log joins and departures and save. Future joins and departures will appear here, even without a challenge.'), 'gift'));
   };
   const refresh = button(ui('Refresh history'), async () => {
@@ -309,7 +316,7 @@ function renderInviteHistory(container, initialRows) {
     if (state.dirty) { toast(ui('Save your settings before refreshing history.')); return; }
     busy = true; refresh.disabled = true;
     try { if (!DEMO) { const latest = await api(guildPath()); if (latest.guild.id !== state.guildId) return; state.detail.community.snapshot = latest.community.snapshot; state.detail.members = latest.members; rows = latest.community.snapshot.inviteLog || []; } draw(); }
-    catch (error) { toast(error.message); }
+    catch (error) { toast(uiError(error)); }
     finally { busy = false; refresh.disabled = false; }
   }, 'secondary');
   container.replaceChildren(panel(ui('Invite history'), [el('div', { className: 'form-section' }, el('div', { className: 'field-row' }, field(ui('Search invite history'), el('input', { type: 'search', placeholder: ui('Member, inviter or invite code'), onInput: e => { query = e.target.value.trim().toLowerCase(); draw(); } })), field(ui('Event type'), el('select', { onChange: e => { eventKind = e.target.value; draw(); } }, el('option', { value: '' }, ui('All events')), el('option', { value: 'joined' }, ui('Joins')), el('option', { value: 'left' }, ui('Departures'))))), summary), results], refresh));
@@ -321,17 +328,20 @@ function renderModeration(main) {
   main.append(heading(ui('Moderation'), ui('Set clear boundaries and keep a useful record of moderation decisions.'), null));
   settingsLayout(main, session, [panel(ui('Moderation & filters'), [toggleSection(session, ui('Enable moderation'), ui('Allow moderation tools and configured message filters.'), 'enabled'), el('div', { className: 'form-section' }, channelField(session, ui('Moderation log channel'), 'modLogChannelId', ui('Choose a text channel for moderation records. Its Discord permissions decide who can read them.')), linesField(session, ui('Blocked words & phrases'), 'blockedWords', ui('One entry per line. The filter checks new messages and edits. Keep your list specific. Up to 100 entries, 80 characters each.'), 100, 80))]), panel(ui('Anti-spam'), [toggleSection(session, ui('Automatically handle message floods'), ui('Time out members who exceed your message limit.'), 'antiSpam.enabled'), el('div', { className: 'form-section' }, el('div', { className: 'field-row' }, textField(session, ui('Message limit'), 'antiSpam.maxMessages', ui('Messages in one time window.'), { type: 'number', min: 3, max: 30 }), textField(session, ui('Time window (seconds)'), 'antiSpam.windowSeconds', ui('How long to watch for a flood.'), { type: 'number', min: 3, max: 60 })), textField(session, ui('Timeout length (minutes)'), 'antiSpam.timeoutMinutes', ui('How long a spam timeout lasts.'), { type: 'number', min: 1, max: 1440 }))])], [contextCard(ui('Tools for your moderators'), ui('Use /moderate warn, /moderate timeout, /moderate kick, /moderate ban, and /moderate purge in Discord. Actions require the corresponding Discord permission and respect role hierarchy.'), 'shield'), contextCard(ui('Give the bot the right access'), ui('Filters need Message Content intent. Timeouts need Moderate Members. Logging needs access to the selected channel.'), 'lock')]);
   const cases = state.detail.moderation.snapshot.moderationCases || [];
-  main.append(el('div', { className: 'section-gap' }, panel(ui('Recent moderation cases'), cases.length ? table(['Action', 'Member', 'Reason', 'Date'], cases.slice(0, 15).map(c => [tag(capitalize(c.action), 'muted'), el('span', { className: 'leaderboard-identity' }, userLabel(c.userId)), c.reason || 'No reason recorded', dateLabel(c.createdAt)])) : empty(ui('No moderation cases yet.'), ui('Actions handled by the bot will appear here.'), 'shield'))));
+  main.append(el('div', { className: 'section-gap' }, panel(ui('Recent moderation cases'), cases.length ? table(['Action', 'Member', 'Reason', 'Date'], cases.slice(0, 15).map(c => [tag(moderationAction(c.action), 'muted'), el('span', { className: 'leaderboard-identity' }, userLabel(c.userId)), c.reason || ui('No reason recorded'), dateLabel(c.createdAt)])) : empty(ui('No moderation cases yet.'), ui('Actions handled by the bot will appear here.'), 'shield'))));
 }
+
+function recoveryKind(kind) { return ui(({ 'ticket-create': 'Ticket creation', 'ticket-close': 'Ticket closure', 'application-submit': 'Application submission', 'application-accept': 'Application acceptance' })[kind] || 'Interrupted operation'); }
+function recoveryStage(stage) { return ui(({ prepared: 'Prepared', sending: 'Sending', 'transcript-saved': 'Transcript saved', archiving: 'Archiving', deleting: 'Deleting', 'role-changing': 'Changing role', 'needs-review': 'Needs review' })[stage] || 'Needs review'); }
 
 function renderRecoveryIssues(main, recordType) {
   const issues = (state.detail.moderation.snapshot.recoveryIssues || []).filter(issue => issue.recordType === recordType);
   if (!issues.length) return;
-  main.append(el('section', { className: 'recovery-notice', 'aria-label': ui('Interrupted operations') }, panel(ui('Needs staff review'), el('div', { className: 'panel-body' }, el('p', { className: 'form-intro' }, ui('An operation was interrupted. Check the Discord channel or review message and the bot log before repeating it; a step may already have completed.')), el('ul', { className: 'recovery-list' }, issues.map(issue => el('li', {}, el('strong', {}, `${capitalize(String(issue.kind).replaceAll('-', ' '))} · ${issue.id}`), el('span', {}, ui("Stage: {p0}", { p0: issue.stage })), issue.operationId && el('p', {}, ui('Operation: '), el('code', {}, issue.operationId)), el('p', {}, issue.detail)))), el('div', { className: 'hint-box' }, ui('Use '), el('code', {}, '/support-recovery list'), ui(' in Discord to recheck. After inspecting the outcome, an administrator can use '), el('code', {}, '/support-recovery release'), ui(' with the operation ID and a review reason. Releasing clears stalled local state; it does not change or delete anything in Discord.'))), tag(ui("{p0} to review", { p0: issues.length }), 'orange'))));
+  main.append(el('section', { className: 'recovery-notice', 'aria-label': ui('Interrupted operations') }, panel(ui('Needs staff review'), el('div', { className: 'panel-body' }, el('p', { className: 'form-intro' }, ui('An operation was interrupted. Check the Discord channel or review message and the bot log before repeating it; a step may already have completed.')), el('ul', { className: 'recovery-list' }, issues.map(issue => el('li', {}, el('strong', {}, ui('{kind} · {id}', { kind: recoveryKind(issue.kind), id: issue.id })), el('span', {}, ui("Stage: {p0}", { p0: recoveryStage(issue.stage) })), issue.operationId && el('p', {}, ui('Operation: '), el('code', {}, issue.operationId)), el('p', {}, uiError({ message: issue.detail, i18n: issue.detailI18n }))))), el('div', { className: 'hint-box' }, ui('Use '), el('code', {}, '/support-recovery list'), ui(' in Discord to recheck. After inspecting the outcome, an administrator can use '), el('code', {}, '/support-recovery release'), ui(' with the operation ID and a review reason. Releasing clears stalled local state; it does not change or delete anything in Discord.'))), tag(ui("{p0} to review", { p0: issues.length }), 'orange'))));
 }
 function table(headers, rows) { return el('div', { className: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, headers.map(header => el('th', { scope: 'col' }, ui(header))))), el('tbody', {}, rows.map(row => el('tr', {}, row.map(cell => el('td', {}, cell))))))); }
 function simpleLeaderboard(rows, headings, cells, emptyCopy) {
-  return rows.length ? table(['#', 'Member', ...headings], rows.slice(0, 10).map((row, i) => [el('span', { className: `rank${i === 0 ? ' first' : ''}` }, String(i + 1).padStart(2, '0')), el('span', { className: 'leaderboard-identity' }, userLabel(row.userId)), ...cells(row)])) : empty(ui('The leaderboard starts with your members.'), emptyCopy, 'award');
+  return rows.length ? table(['#', 'Member', ...headings], rows.slice(0, 10).map((row, i) => [el('span', { className: `rank${i === 0 ? ' first' : ''}` }, String(i + 1).padStart(2, '0')), el('span', { className: 'leaderboard-identity' }, userLabel(row.userId)), ...cells(row)])) : empty(ui('The leaderboard starts with your members.'), ui(emptyCopy), 'award');
 }
 function staffLeaderboardRows(rows, sort, query, activity, labelForId = userLabel) {
   const number = value => Number.isFinite(value) ? value : 0;
@@ -368,7 +378,7 @@ function renderStaff(main) {
   const time = value => value == null ? '—' : duration(value);
   function drawRows() {
     const visible = staffLeaderboardRows(rows, state.staffSort, state.staffQuery, state.staffActivity);
-    window.CyroI18n.setContent(summary, ui("{p0} of {p1} staff shown · {p2}.", { p0: visible.length, p1: allRows.length, p2: sort.selectedOptions[0]?.textContent || 'Most total actions' }));
+    window.CyroI18n.setContent(summary, ui("{p0} of {p1} staff shown · {p2}.", { p0: visible.length, p1: allRows.length, p2: ui(sorts.find(([value]) => value === state.staffSort)?.[1] || 'Most total actions') }));
     if (!visible.length) {
       ranking.replaceChildren(empty(allRows.length ? ui('No staff match these filters.') : ui('No staff activity recorded yet.'), allRows.length ? ui('Try a different name or choose All staff activity.') : ui('Claim or close a ticket, take a moderation action, or review an application through Cyro to start recording activity.'), 'award', allRows.length ? button(ui('Clear filters'), () => { search.value = ''; activity.value = 'all'; state.staffQuery = ''; state.staffActivity = 'all'; drawRows(); }, 'secondary') : link(ui('Set up support tickets'), 'tickets')));
       return;
@@ -378,7 +388,7 @@ function renderStaff(main) {
       el('thead', {}, el('tr', {}, headers.map(label => el('th', { scope: 'col' }, ui(label))))),
       el('tbody', {}, visible.map(row => {
         const name = userLabel(row.userId);
-        const cells = [el('span', { className: 'rank' }, String(row.rank)), el('div', { className: 'table-name' }, el('span', { className: 'avatar', 'aria-hidden': 'true' }, name.slice(0, 2).toUpperCase()), el('span', { className: 'staff-name' }, name)), el('strong', {}, format(row.totalActions)), format(row.claims), format(row.closes), format(row.moderationActions), format(row.applicationsReviewed), format(row.openAssigned), time(row.averageClaimSeconds), time(row.averageCloseSeconds)];
+        const cells = [el('span', { className: 'rank' }, String(row.rank)), el('div', { className: 'table-name' }, el('span', { className: 'avatar', 'aria-hidden': 'true' }, String(name).slice(0, 2).toUpperCase()), el('span', { className: 'staff-name' }, name)), el('strong', {}, format(row.totalActions)), format(row.claims), format(row.closes), format(row.moderationActions), format(row.applicationsReviewed), format(row.openAssigned), time(row.averageClaimSeconds), time(row.averageCloseSeconds)];
         return el('tr', {}, cells.map((cell, index) => el('td', { 'data-label': ui(headers[index]) }, cell)));
       })))));
   }
@@ -391,23 +401,22 @@ function renderStaff(main) {
   drawRows();
 }
 
-function duration(seconds) { if (seconds < 60) return `${Math.round(seconds)} sec`; if (seconds < 3600) return `${Math.round(seconds / 60)} min`; return `${(seconds / 3600).toFixed(1)} hr`; }
+function duration(seconds) { if (seconds < 60) return ui('{value} sec', { value: format(Math.round(seconds)) }); if (seconds < 3600) return ui('{value} min', { value: format(Math.round(seconds / 60)) }); return ui('{value} hr', { value: window.CyroI18n.computedText(locale => (seconds / 3600).toLocaleString(locale === 'pt' ? 'pt-BR' : locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })) }); }
 
 function trackedTime(milliseconds) {
   const minutes = Math.floor(Math.max(0, Number(milliseconds) || 0) / 60000);
-  if (minutes === 0) return milliseconds > 0 ? '<1m' : '0m';
-  if (minutes < 60) return `${minutes}m`;
-  return `${format(Math.floor(minutes / 60))}h${minutes % 60 ? ` ${minutes % 60}m` : ''}`;
+  if (minutes === 0) return milliseconds > 0 ? ui('<1 min') : ui('{value} min', { value: format(0) });
+  if (minutes < 60) return ui('{value} min', { value: format(minutes) });
+  return minutes % 60 ? ui('{hours} hr {minutes} min', { hours: format(Math.floor(minutes / 60)), minutes: format(minutes % 60) }) : ui('{value} hr', { value: format(Math.floor(minutes / 60)) });
 }
 function streamMetric(value, signed = false) {
-  if (!Number.isFinite(value)) return 'Unavailable';
-  const formatted = value.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  return signed && value > 0 ? `+${formatted}` : formatted;
+  if (!Number.isFinite(value)) return ui('Unavailable');
+  return window.CyroI18n.computedText(locale => value.toLocaleString(locale === 'pt' ? 'pt-BR' : locale, { maximumFractionDigits: 1, signDisplay: signed && value > 0 ? 'always' : 'auto' }));
 }
 function streamCoverage(row, key) {
   const covered = Math.max(0, Number(row[key]) || 0), total = Math.max(0, Number(row.trackedMilliseconds) || 0);
   const percent = total > 0 ? Math.min(100, Math.round(covered / total * 100)) : 0;
-  return el('small', { className: 'stream-metric-note', title: `${trackedTime(covered)} of ${trackedTime(total)} confirmed time has this metric.` }, ui("{p0}% coverage", { p0: percent }));
+  return el('small', { className: 'stream-metric-note', title: ui('{covered} of {total} confirmed time has this metric.', { covered: trackedTime(covered), total: trackedTime(total) }) }, ui("{p0}% coverage", { p0: percent }));
 }
 function sortedStreamStats(entries, key) {
   return [...entries].sort((a, b) => {
@@ -424,10 +433,10 @@ function renderStreamerLeaderboard(main) {
   const retentionDays = stats?.retentionDays || 90;
   const source = (grouped ? stats?.creatorLeaderboards : stats?.leaderboards)?.[state.streamerPeriod] || [];
   const entries = sortedStreamStats(source, state.streamerSort);
-  const rangeNote = state.streamerPeriod === '7d' ? 'Today and the previous 6 calendar days, in UTC.' : state.streamerPeriod === '30d' ? 'Today and the previous 29 calendar days, in UTC.' : `Up to ${retentionDays} days of retained history.`;
+  const rangeNote = state.streamerPeriod === '7d' ? ui('Today and the previous 6 calendar days, in UTC.') : state.streamerPeriod === '30d' ? ui('Today and the previous 29 calendar days, in UTC.') : ui('Up to {days} days of retained history.', { days: format(retentionDays) });
   main.append(heading(ui('Streamer leaderboard'), ui('One creator, every connected platform. Explore the accounts behind their activity.'), el('a', { className: 'button secondary', href: '#streams' }, icon('radio'), ui('Manage alerts'))));
   const viewSelect = el('select', { id: 'streamer-view', onChange: event => { state.streamerView = event.target.value; renderShell(); document.getElementById('streamer-view')?.focus(); } }, [['creators', 'Creator profiles'], ['accounts', 'Platform accounts']].map(([value, name]) => el('option', { value, selected: state.streamerView === value }, ui(name))));
-  const periodSelect = el('select', { id: 'streamer-period', onChange: event => { state.streamerPeriod = event.target.value; renderShell(); document.getElementById('streamer-period')?.focus(); } }, [['7d', 'Past 7 days'], ['30d', 'Past 30 days'], ['all', `Retained history · ${retentionDays} days`]].map(([value, name]) => el('option', { value, selected: state.streamerPeriod === value }, ui(name))));
+  const periodSelect = el('select', { id: 'streamer-period', onChange: event => { state.streamerPeriod = event.target.value; renderShell(); document.getElementById('streamer-period')?.focus(); } }, [['7d', 'Past 7 days'], ['30d', 'Past 30 days'], ['all', ui('Retained history · {days} days', { days: format(retentionDays) })]].map(([value, name]) => el('option', { value, selected: state.streamerPeriod === value }, ui(name))));
   const sortSelect = el('select', { id: 'streamer-sort', onChange: event => { state.streamerSort = event.target.value; renderShell(); document.getElementById('streamer-sort')?.focus(); } }, [['trackedMilliseconds', 'Tracked time'], ['averageViewers', 'Average concurrent viewers'], ['followersGained', 'Net followers']].map(([value, name]) => el('option', { value, selected: state.streamerSort === value }, ui(name))));
   main.append(el('div', { className: 'stream-stats-toolbar' }, el('div', { className: 'stream-stats-controls' }, el('div', { className: 'field' }, el('label', { className: 'field-label', for: 'streamer-view' }, ui('Leaderboard view')), viewSelect), el('div', { className: 'field' }, el('label', { className: 'field-label', for: 'streamer-period' }, ui('Leaderboard period')), periodSelect), el('div', { className: 'field' }, el('label', { className: 'field-label', for: 'streamer-sort' }, ui('Sort by')), sortSelect)), el('p', { className: 'stream-period-note' }, rangeNote)));
   if (!stats || (grouped && !stats.creatorLeaderboards)) {
@@ -435,16 +444,16 @@ function renderStreamerLeaderboard(main) {
   } else {
     main.append(el('div', { className: 'metrics' }, metric(grouped ? ui('Combined platform time') : ui('Tracked account time'), trackedTime(entries.reduce((sum, row) => sum + (row.trackedMilliseconds || 0), 0)), ui('Simulcasting counts on each platform'), 'clock'), metric(grouped ? ui('Creators ranked') : ui('Accounts ranked'), format(entries.length), ui('With activity in this period'), 'users'), metric(ui('Account sessions'), format(entries.reduce((sum, row) => sum + (row.sessions || 0), 0)), ui('Sessions across connected accounts'), 'radio'), metric(ui('Confirmed active'), format(entries.filter(row => row.active).length), grouped ? ui('Creators with an active account sample') : ui('At their most recent saved sample'), 'check', 'green')));
     const headers = ['Rank', grouped ? 'Creator' : 'Platform account', grouped ? 'Platform time' : 'Tracked time', 'Avg. viewers', grouped ? 'Highest platform peak' : 'Peak viewers', 'Net followers', 'Sessions', 'Status'];
-    const ranking = entries.length ? el('div', { className: 'table-wrap stream-stats-table-wrap' }, el('table', { className: 'stream-stats-table' }, el('caption', { className: 'sr-only' }, ui("{p0} leaderboard. {p1} Sorted by {p2}. Unavailable metrics appear last.", { p0: grouped ? 'Creator' : 'Account', p1: rangeNote, p2: sortSelect.selectedOptions[0]?.textContent })), el('thead', {}, el('tr', {}, headers.map(name => el('th', { scope: 'col' }, ui(name))))), el('tbody', {}, entries.map((row, index) => {
-      const identity = row.displayName || row.username || 'Unknown creator';
+    const ranking = entries.length ? el('div', { className: 'table-wrap stream-stats-table-wrap' }, el('table', { className: 'stream-stats-table' }, el('caption', { className: 'sr-only' }, ui("{p0} leaderboard. {p1} Sorted by {p2}. Unavailable metrics appear last.", { p0: ui(grouped ? 'Creator' : 'Account'), p1: rangeNote, p2: ui(({ trackedMilliseconds: 'Tracked time', averageViewers: 'Average concurrent viewers', followersGained: 'Net followers' })[state.streamerSort] || 'Tracked time') })), el('thead', {}, el('tr', {}, headers.map(name => el('th', { scope: 'col' }, ui(name))))), el('tbody', {}, entries.map((row, index) => {
+      const identity = row.displayName || row.username || ui('Unknown creator');
       const platformLabel = grouped ? (row.platforms || []).map(platformName).join(' · ') : `${platformName(row.platform)} · ${row.username || ''}`;
-      const cells = [el('span', { className: `rank${index === 0 ? ' first' : ''}` }, String(index + 1).padStart(2, '0')), el('div', { className: 'table-name' }, el('div', { className: 'stream-avatar' }, identity.slice(0, 2).toUpperCase()), el('div', {}, el('strong', {}, identity), el('small', {}, platformLabel), grouped && el('small', { className: 'stream-metric-note' }, ui("{p0} platform account(s)", { p0: row.accounts?.length || 0 })), row.discordMemberId && el('small', { className: 'stream-metric-note' }, userLabel(row.discordMemberId)))), el('strong', { className: 'stream-number' }, trackedTime(row.trackedMilliseconds)), el('div', {}, el('span', { className: Number.isFinite(row.averageViewers) ? 'stream-number' : 'stream-unavailable' }, streamMetric(row.averageViewers)), Number.isFinite(row.averageViewers) && streamCoverage(row, 'viewerTrackedMilliseconds')), el('span', { className: Number.isFinite(row.peakViewers) ? 'stream-number' : 'stream-unavailable' }, streamMetric(row.peakViewers)), el('div', {}, el('span', { className: Number.isFinite(row.followersGained) ? 'stream-number' : 'stream-unavailable' }, streamMetric(row.followersGained, true)), Number.isFinite(row.followersGained) && streamCoverage(row, 'followerTrackedMilliseconds')), el('span', { className: 'stream-number' }, format(row.sessions)), el('div', {}, tag(row.active ? ui('Confirmed active') : ui('Not active'), row.active ? 'green' : 'muted'), el('small', { className: 'stream-metric-note' }, row.lastTrackedAt ? ui("Last tracked {p0}", { p0: dateLabel(row.lastTrackedAt) }) : ui('No saved sample')))];
-      return el('tr', {}, cells.map((cell, column) => el('td', { 'data-label': headers[column] }, cell)));
+      const cells = [el('span', { className: `rank${index === 0 ? ' first' : ''}` }, String(index + 1).padStart(2, '0')), el('div', { className: 'table-name' }, el('div', { className: 'stream-avatar' }, String(identity).slice(0, 2).toUpperCase()), el('div', {}, el('strong', {}, identity), el('small', {}, platformLabel), grouped && el('small', { className: 'stream-metric-note' }, ui("{p0} platform account(s)", { p0: row.accounts?.length || 0 })), row.discordMemberId && el('small', { className: 'stream-metric-note' }, userLabel(row.discordMemberId)))), el('strong', { className: 'stream-number' }, trackedTime(row.trackedMilliseconds)), el('div', {}, el('span', { className: Number.isFinite(row.averageViewers) ? 'stream-number' : 'stream-unavailable' }, streamMetric(row.averageViewers)), Number.isFinite(row.averageViewers) && streamCoverage(row, 'viewerTrackedMilliseconds')), el('span', { className: Number.isFinite(row.peakViewers) ? 'stream-number' : 'stream-unavailable' }, streamMetric(row.peakViewers)), el('div', {}, el('span', { className: Number.isFinite(row.followersGained) ? 'stream-number' : 'stream-unavailable' }, streamMetric(row.followersGained, true)), Number.isFinite(row.followersGained) && streamCoverage(row, 'followerTrackedMilliseconds')), el('span', { className: 'stream-number' }, format(row.sessions)), el('div', {}, tag(row.active ? ui('Confirmed active') : ui('Not active'), row.active ? 'green' : 'muted'), el('small', { className: 'stream-metric-note' }, row.lastTrackedAt ? ui("Last tracked {p0}", { p0: dateLabel(row.lastTrackedAt) }) : ui('No saved sample')))];
+      return el('tr', {}, cells.map((cell, column) => el('td', { 'data-label': ui(headers[column]) }, cell)));
     })))) : empty(ui('The next live announcement starts the story.'), ui('No confirmed stream activity was tracked in this period. Add a creator in Stream alerts; counting begins when the bot posts a live announcement.'), 'radio', link(ui('Manage stream alerts'), 'streams'));
     main.append(panel(grouped ? ui('Creator standings') : ui('Platform account standings'), ranking, tag(DEMO ? ui('Sample statistics') : ui("{p0}-day retention", { p0: retentionDays }), 'muted'), grouped ? ui('Platform time is summed. The peak is the highest single-platform sample.') : ui('Unavailable metrics are never treated as zero.')));
   }
   main.append(el('div', { className: 'stream-stats-explainer' }, contextCard(ui('Every platform contributes its own time'), ui('Time starts at the bot’s live announcement and stops when the stream ends, alerts pause, or the announcement is deleted. Unconfirmed gaps are excluded. Creator totals add account time: one hour on Twitch and YouTube contributes two platform hours, even when broadcast together.'), 'clock'), contextCard(ui('Read the metrics in context'), ui('Viewer averages are weighted by each account’s covered time; peaks show the highest single-platform sample, not a combined audience. These are sampled concurrent viewers, not total views. Net followers sums supported Twitch gains minus losses; Kick, TikTok, and YouTube are unavailable. Its baseline begins at the first confirmed poll after the announcement. Coverage shows the platform time with that metric.'), 'chart')));
-  main.append(el('footer', { className: 'overview-bottom' }, el('span', {}, icon('clock'), stats?.updatedAt ? `${DEMO ? 'Sample updated' : 'Last updated'} ${dateLabel(stats.updatedAt)}` : ui('No saved samples yet')), el('span', {}, ui('Periods follow UTC calendar days. Refresh to load new samples.'))));
+  main.append(el('footer', { className: 'overview-bottom' }, el('span', {}, icon('clock'), stats?.updatedAt ? ui(DEMO ? 'Sample updated {date}' : 'Last updated {date}', { date: dateLabel(stats.updatedAt) }) : ui('No saved samples yet')), el('span', {}, ui('Periods follow UTC calendar days. Refresh to load new samples.'))));
 }
 
 function demoStreamStats() {
@@ -490,6 +499,8 @@ function syncDemoCreators(detail = state.detail) {
   for (const creator of creators) creator.accountIds = [...new Set([...(creator.accountIds || []).filter(id => { const connected = streams.find(stream => stream.id === id); return !connected || connected.creatorId === creator.id; }), ...streams.filter(stream => stream.creatorId === creator.id).map(stream => stream.id), ...stats.leaderboards.all.filter(row => row.creatorId === creator.id).map(row => row.streamerId)])];
 }
 
+function creatorAccountCount(count) { return ui(count === 1 ? '{count} account' : '{count} accounts', { count: format(count) }); }
+
 function renderStreams(main) {
   const streams = state.detail.streams || [];
   const creators = state.detail.creators || [];
@@ -502,10 +513,10 @@ function renderStreams(main) {
     const accounts = streams.filter(stream => stream.creatorId === creator.id);
     const retainedCount = Math.max(0, (creator.accountIds || []).length - accounts.length);
     const actions = el('div', { className: 'creator-actions' }, button(ui('Add platform'), () => openStreamEditor('account', { creatorId: creator.id }), 'secondary small', 'plus'), el('button', { type: 'button', className: 'icon-button', 'aria-label': ui("Edit profile {p0}", { p0: creator.name }), onClick: () => openStreamEditor('creator', creator) }, icon('edit')), !accounts.length && el('button', { type: 'button', className: 'icon-button', 'aria-label': ui("Delete empty profile {p0}", { p0: creator.name }), onClick: () => removeCreator(creator) }, icon('trash')));
-    const header = el('div', { className: 'creator-header' }, el('div', { className: 'creator-identity' }, el('span', { className: 'stream-avatar' }, creator.name.slice(0, 2).toUpperCase()), el('div', {}, el('h2', {}, creator.name), el('p', {}, creator.discordMemberId ? ui("Discord member: {p0}", { p0: userLabel(creator.discordMemberId) }) : ui('No Discord member linked'), ' · ', ui("{p0} account(s)", { p0: accounts.length })))), actions);
+    const header = el('div', { className: 'creator-header' }, el('div', { className: 'creator-identity' }, el('span', { className: 'stream-avatar' }, String(creator.name).slice(0, 2).toUpperCase()), el('div', {}, el('h2', {}, creator.name), el('p', {}, creator.discordMemberId ? ui("Discord member: {p0}", { p0: userLabel(creator.discordMemberId) }) : ui('No Discord member linked'), ' · ', creatorAccountCount(accounts.length)))), actions);
     const rows = accounts.map(stream => {
       const accountLabel = `${platformName(stream.platform)} ${stream.username}`;
-      return el('li', { className: 'creator-account' }, el('div', { className: 'account-identity' }, tag(platformName(stream.platform)), el('div', {}, el('strong', {}, stream.username), el('small', {}, ui("Live: {p0}", { p0: stream.enabled ? '# ' + channelName(stream.alertChannelId) : 'off' })), stream.uploads?.enabled && el('small', {}, ui("Uploads: # {p0}", { p0: channelName(stream.uploads.channelId) })), stream.platform === 'tiktok' && !DEMO && el('a', { className: 'creator-connection-link', href: `/connections?guild=${encodeURIComponent(state.guildId)}&record=${encodeURIComponent(stream.id)}`, target: '_blank', rel: 'noopener noreferrer' }, stream.tiktokConnection?.connected ? ui('TikTok connection') : ui('Creator sign-in')))), el('div', { className: 'account-status' }, tag(!stream.enabled ? ui('Live off') : stream.state === 'live' ? ui('Live now') : ui('Watching'), stream.enabled && stream.state === 'live' ? 'green' : 'muted')), el('div', { className: 'table-actions' }, toggleControl(ui("Enable live alerts for {p0}", { p0: accountLabel }), stream.enabled, async enabled => { if (!await discardStreamDraft()) { renderShell(); return; } try { await saveStream(stream.id, { enabled }); stream.enabled = enabled; if (DEMO) syncDemoCreators(); toast(enabled ? ui('Live alerts enabled.') : ui('Live alerts paused. Upload settings are unchanged.')); renderShell(); } catch (error) { toast(error.message, true); renderShell(); } }), el('button', { type: 'button', className: 'icon-button', 'aria-label': ui("Edit account {p0}", { p0: accountLabel }), onClick: () => openStreamEditor('account', stream) }, icon('edit')), el('button', { type: 'button', className: 'icon-button', 'aria-label': ui("Remove account {p0}", { p0: accountLabel }), onClick: () => removeStream(stream) }, icon('trash'))));
+      return el('li', { className: 'creator-account' }, el('div', { className: 'account-identity' }, tag(platformName(stream.platform)), el('div', {}, el('strong', {}, stream.username), el('small', {}, ui("Live: {p0}", { p0: stream.enabled ? ui('# {channel}', { channel: channelName(stream.alertChannelId) }) : ui('Off') })), stream.uploads?.enabled && el('small', {}, ui("Uploads: # {p0}", { p0: channelName(stream.uploads.channelId) })), stream.platform === 'tiktok' && !DEMO && el('a', { className: 'creator-connection-link', href: `/connections?guild=${encodeURIComponent(state.guildId)}&record=${encodeURIComponent(stream.id)}`, target: '_blank', rel: 'noopener noreferrer' }, stream.tiktokConnection?.connected ? ui('TikTok connection') : ui('Creator sign-in')))), el('div', { className: 'account-status' }, tag(!stream.enabled ? ui('Live off') : stream.state === 'live' ? ui('Live now') : ui('Watching'), stream.enabled && stream.state === 'live' ? 'green' : 'muted')), el('div', { className: 'table-actions' }, toggleControl(ui("Enable live alerts for {p0}", { p0: accountLabel }), stream.enabled, async enabled => { if (!await discardStreamDraft()) { renderShell(); return; } try { await saveStream(stream.id, { enabled }); stream.enabled = enabled; if (DEMO) syncDemoCreators(); toast(enabled ? ui('Live alerts enabled.') : ui('Live alerts paused. Upload settings are unchanged.')); renderShell(); } catch (error) { toast(uiError(error), true); renderShell(); } }), el('button', { type: 'button', className: 'icon-button', 'aria-label': ui("Edit account {p0}", { p0: accountLabel }), onClick: () => openStreamEditor('account', stream) }, icon('edit')), el('button', { type: 'button', className: 'icon-button', 'aria-label': ui("Remove account {p0}", { p0: accountLabel }), onClick: () => removeStream(stream) }, icon('trash'))));
     });
     main.append(el('section', { className: 'panel creator-card' }, header, accounts.length ? el('ul', { className: 'creator-accounts', 'aria-label': ui("{p0} platform accounts", { p0: creator.name }) }, rows) : el('div', { className: 'creator-empty' }, ui('No connected accounts. Add a platform to start announcing this creator.')), retainedCount > 0 && el('p', { className: 'panel-footer' }, ui("{p0} removed account(s) remain grouped here to preserve any history. Deleting an empty profile keeps past account statistics available individually.", { p0: retainedCount }))));
   }
@@ -543,7 +554,7 @@ function renderCreatorEditor(main, existing) {
       if (DEMO) { if (editing) Object.assign(state.detail.creators.find(creator => creator.id === existing.id), body, { updatedAt: new Date().toISOString() }); else state.detail.creators.push({ ...body, id: `demo-creator-${crypto.randomUUID()}`, guildId: state.guildId, accountIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); syncDemoCreators(); }
       else { await api(editing ? `${guildPath()}/creators/${safeId(existing.id)}` : `${guildPath()}/creators`, editing ? 'PATCH' : 'POST', body); state.detail = await api(guildPath()); }
       state.creatorEditor = null; state.dirty = false; state.saving = false; renderShell(); toast(editing ? ui('Creator profile saved.') : ui('Profile created. Add a platform account when ready.'));
-    } catch (error) { busy = false; state.saving = false; [...form.elements].forEach(control => { control.disabled = false; }); window.CyroI18n.setContent(message, error.message); message.className = 'save-status error'; window.CyroI18n.setContent(submit, editing ? ui('Save profile') : ui('Create profile')); }
+    } catch (error) { busy = false; state.saving = false; [...form.elements].forEach(control => { control.disabled = false; }); window.CyroI18n.setContent(message, uiError(error)); message.className = 'save-status error'; window.CyroI18n.setContent(submit, editing ? ui('Save profile') : ui('Create profile')); }
   });
   main.append(el('div', { className: 'stream-form-panel' }, panel(editing ? ui("Edit profile · {p0}", { p0: existing.name }) : ui('Create a creator profile'), form)));
 }
@@ -552,7 +563,7 @@ async function removeCreator(creator) {
   if (state.detail.streams.some(stream => stream.creatorId === creator.id)) return toast(ui('Move or remove the connected accounts before deleting this profile.'), true);
   if (!await confirmAction(ui('Delete this empty profile?'), ui("Remove {p0}? This removes the profile grouping. Past account statistics are retained and remain available individually.", { p0: creator.name }), ui('Delete profile'), ui('Keep profile'))) return;
   state.saving = true;
-  try { if (!DEMO) await api(`${guildPath()}/creators/${safeId(creator.id)}`, 'DELETE'); state.detail.creators = state.detail.creators.filter(item => item.id !== creator.id); if (DEMO) syncDemoCreators(); else state.detail = await api(guildPath()); renderShell(); toast(ui('Empty profile deleted. Past account statistics are retained.')); } catch (error) { toast(error.message, true); } finally { state.saving = false; }
+  try { if (!DEMO) await api(`${guildPath()}/creators/${safeId(creator.id)}`, 'DELETE'); state.detail.creators = state.detail.creators.filter(item => item.id !== creator.id); if (DEMO) syncDemoCreators(); else state.detail = await api(guildPath()); renderShell(); toast(ui('Empty profile deleted. Past account statistics are retained.')); } catch (error) { toast(uiError(error), true); } finally { state.saving = false; }
 }
 
 function renderStreamEditor(main, existing) {
@@ -576,7 +587,7 @@ function renderStreamEditor(main, existing) {
   if (editing) username.querySelector('input').disabled = true;
   form.append(el('div', { className: 'form-section' }, field(ui('Creator profile'), creatorSelect, editing ? ui('Choose another profile to move this account and its retained history. Accounts are never merged automatically.') : ui('You can link multiple different accounts from the same platform.')), el('div', { className: 'field-row' }, field(ui('Streaming platform'), platformSelect), username), channelField(session, ui('Alert channel'), 'alertChannelId', ui('The bot needs permission to send messages and embed links here.')), el('div', { className: 'field-row' }, roleField(session, ui('Role to notify'), 'pingRoleId', ui('Optional role mention in announcements.')), roleField(session, ui('Role while live'), 'liveRoleId', ui('Optional role given to the member on the creator profile.'))), memberNote, el('div', { className: 'field-row section-gap' }, textField(session, ui('Title filter'), 'titleFilter', ui('Optional text the stream title must contain.')), textField(session, ui('Alert cooldown (seconds)'), 'cooldownSeconds', ui('Minimum time between announcements.'), { type: 'number', min: 0, max: 86400 })), textField(session, ui('Announcement message'), 'messageTemplate', ui('Leave blank for the default. Placeholders: {streamer}, {username}, {platform}, {url}, {title}, {category}, {viewers}, {mention}.'), { multiline: true, maxlength: 1800 }), field(ui('When the stream ends'), el('select', { onChange: event => session.change('cleanupMode', event.target.value) }, [['offline', 'Update the message to offline'], ['delete', 'Delete the announcement'], ['keep', 'Keep the announcement']].map(([value, text]) => el('option', { value, selected: value === draft.cleanupMode }, ui(text)))))));
   form.prepend(toggleSection(session, ui('Announce when live'), ui('Watch this account for live streams. Upload alerts can run separately.'), 'enabled'));
-  if (existing.liveCapability?.reason) form.append(el('div', { className: 'form-section provider-note' }, existing.liveCapability.reason));
+  if (existing.liveCapability?.reason) form.append(el('div', { className: 'form-section provider-note' }, uiError({ message: existing.liveCapability.reason, i18n: existing.liveCapability.i18n })));
   drawUploadSettings(); form.append(uploadSection);
   form.append(el('div', { className: 'save-bar' }, message, el('div', { className: 'login-actions' }, button(ui('Cancel'), () => { state.streamEditor = null; state.dirty = false; renderShell(); }, 'secondary'), submit)));
   form.addEventListener('submit', async event => {
@@ -596,7 +607,7 @@ function renderStreamEditor(main, existing) {
       if (DEMO) { if (editing) Object.assign(state.detail.streams.find(s => s.id === existing.id), body); else state.detail.streams.push({ ...body, id: `demo-account-${crypto.randomUUID()}`, displayName: draft.username, state: 'unknown' }); syncDemoCreators(); }
       else { await api(editing ? `${guildPath()}/streams/${safeId(existing.id)}` : `${guildPath()}/streams`, editing ? 'PATCH' : 'POST', body); state.detail = await api(guildPath()); }
       state.streamEditor = null; state.dirty = false; state.saving = false; toast(editing ? ui('Account settings saved.') : ui('Platform account connected.')); renderShell();
-    } catch (error) { window.CyroI18n.setContent(message, error.message); message.className = 'save-status error'; busy = false; state.saving = false; controls.forEach(([control, wasDisabled]) => { control.disabled = wasDisabled; }); window.CyroI18n.setContent(submit, editing ? ui('Save account') : ui('Connect account')); }
+    } catch (error) { window.CyroI18n.setContent(message, uiError(error)); message.className = 'save-status error'; busy = false; state.saving = false; controls.forEach(([control, wasDisabled]) => { control.disabled = wasDisabled; }); window.CyroI18n.setContent(submit, editing ? ui('Save account') : ui('Connect account')); }
   });
   main.append(el('div', { className: 'stream-form-panel' }, panel(editing ? ui("Edit account · {p0} {p1}", { p0: platformName(existing.platform), p1: existing.username }) : ui('Connect a platform account'), form)));
 }
@@ -606,7 +617,7 @@ async function removeStream(stream) {
   const confirmed = await confirmAction(ui('Remove this platform account?'), ui("Stop {p0} alerts for {p1}? The creator profile and other accounts stay connected. Retained statistics remain available.", { p0: platformName(stream.platform), p1: stream.username }), ui('Remove account'), ui('Keep account'));
   if (!confirmed) return;
   state.saving = true;
-  try { if (!DEMO) await api(`${guildPath()}/streams/${safeId(stream.id)}`, 'DELETE'); state.detail.streams = state.detail.streams.filter(s => s.id !== stream.id); if (DEMO) syncDemoCreators(); else state.detail = await api(guildPath()); renderShell(); toast(ui('Platform account removed.')); } catch (error) { toast(error.message, true); } finally { state.saving = false; }
+  try { if (!DEMO) await api(`${guildPath()}/streams/${safeId(stream.id)}`, 'DELETE'); state.detail.streams = state.detail.streams.filter(s => s.id !== stream.id); if (DEMO) syncDemoCreators(); else state.detail = await api(guildPath()); renderShell(); toast(ui('Platform account removed.')); } catch (error) { toast(uiError(error), true); } finally { state.saving = false; }
 }
 function confirmAction(title, description, confirmText = ui('Discard changes'), cancelText = ui('Keep editing')) {
   const dialog = document.getElementById('confirm-dialog');
@@ -625,18 +636,18 @@ async function selectGuild(id, force = false) {
   if (!DEMO) { try { sessionStorage.setItem('cyro.selectedGuild', id); } catch {} }
   if (!state.guilds.find(g => g.id === id)?.installed) { renderShell(); return; }
   state.loading = true; renderShell();
-  try { const detail = DEMO ? demoData() : await api(`/api/guilds/${safeId(id)}`); if (sequence !== state.loadSequence) return; state.detail = detail; } catch (error) { if (sequence !== state.loadSequence) return; state.loadError = error.message; }
+  try { const detail = DEMO ? demoData() : await api(`/api/guilds/${safeId(id)}`); if (sequence !== state.loadSequence) return; state.detail = detail; } catch (error) { if (sequence !== state.loadSequence) return; state.loadError = uiError(error); }
   state.loading = false; renderShell();
 }
 async function refreshGuilds() {
   if (DEMO) return;
-  try { state.guilds = (await api('/api/guilds')).guilds; await selectGuild(state.guildId, true); } catch (error) { toast(error.message, true); }
+  try { state.guilds = (await api('/api/guilds')).guilds; await selectGuild(state.guildId, true); } catch (error) { toast(uiError(error), true); }
 }
 async function logout() {
   if (state.saving) return toast(ui('Please wait for your settings to finish saving.'));
   if (state.dirty && !await confirmAction(ui('Sign out without saving?'), ui('Your unsaved changes will be discarded.'), ui('Sign out'))) return;
   if (DEMO) { location.href = '/'; return; }
-  try { await api('/auth/logout', 'POST'); state.me = null; state.dirty = false; renderLanding(); } catch (error) { toast(error.message, true); }
+  try { await api('/auth/logout', 'POST'); state.me = null; state.dirty = false; renderLanding(); } catch (error) { toast(uiError(error), true); }
 }
 let ignoreHash = false;
 window.matchMedia('(min-width: 721px)').addEventListener('change', event => { if (event.matches) closeNavigation?.(false); });
@@ -746,16 +757,12 @@ async function boot() {
   try {
     const results = await Promise.allSettled([api('/api/me'), api('/api/status')]);
     if (results[1].status === 'fulfilled') state.status = results[1].value;
-    if (results[0].status === 'rejected') { renderLanding(results[0].reason.status === 401 ? null : results[0].reason.message); return; }
+    if (results[0].status === 'rejected') { renderLanding(results[0].reason.status === 401 ? null : uiError(results[0].reason)); return; }
     state.me = results[0].value;
     state.guilds = (await api('/api/guilds')).guilds || [];
     if (!state.guilds.length) { renderShell(); return; }
     const selected = state.guilds.find(g => g.id === requested) || state.guilds.find(g => g.installed) || state.guilds[0];
     await selectGuild(selected.id, true);
-  } catch (error) { renderLanding(error.message); }
+  } catch (error) { renderLanding(uiError(error)); }
 }
 boot();
-
-
-
-

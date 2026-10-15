@@ -170,10 +170,11 @@ it('reports feature validation errors and rejects unsupported operations without
   for (const section of sections) {
     const url = `${f.base}/api/guilds/${guildId}/${section}`;
     const request = { method: 'PATCH', headers: f.headers, body: JSON.stringify(f.configs[section]) };
-    f.features[section].updateConfig.mockRejectedValueOnce(new Error('Choose settings within the allowed range.'));
+    const validationMessage=section==='voice'?'Choose valid voice settings: volume 5–100, track limit 1–30 minutes, and an available voice.':'Choose a confessions channel and a cooldown from 10 to 3,600 seconds.';
+    f.features[section].updateConfig.mockRejectedValueOnce(new Error(validationMessage));
     const response = await fetch(url, request);
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'Choose settings within the allowed range.' });
+    expect(await response.json()).toEqual({ error: validationMessage, i18n: { key: validationMessage, params: {} } });
     expect((await fetch(url, { ...request, method: 'POST' })).status).toBe(405);
     expect((await fetch(`${url}/foreign-record`, request)).status).toBe(405);
     expect((await fetch(`${url}/foreign-record`, { headers: f.headers })).status).toBe(405);

@@ -10,7 +10,7 @@ async function renderTempVoice(main) {
   const loading = el('div', { className: 'loading-surface', role: 'status' }, el('span', { className: 'loader' }), ui('Loading temporary rooms…')); main.append(loading);
   let snapshot;
   try { snapshot = DEMO ? clone(detail.tempVoice) : await api(endpoint); if (!active()) return; detail.tempVoice = clone(snapshot); }
-  catch (error) { if (active()) loading.replaceWith(panel(ui('Could not load temporary rooms'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, error.message), button(ui('Try again'), () => renderTempVoice(main), 'secondary')))); return; }
+  catch (error) { if (active()) loading.replaceWith(panel(ui('Could not load temporary rooms'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, uiError(error)), button(ui('Try again'), () => renderTempVoice(main), 'secondary')))); return; }
   let saved = clone(snapshot.config), busy = false, refreshing = false;
   const config = clone(saved), form = el('form', { className: 'settings-form' });
   const status = el('span', { className: 'save-status', role: 'status', 'aria-live': 'polite' }, ui('Your settings are up to date.'));
@@ -35,12 +35,12 @@ async function renderTempVoice(main) {
   function drawRooms() {
     const items = snapshot.rooms || [];
     rooms.replaceChildren(...(items.length ? items.map(room => el('div', { className: 'list-row' }, el('div', {}, el('strong', {}, detail.channels?.find(channel => channel.id === room.channelId)?.name || room.name), el('p', { className: 'field-hint' }, ui("Owner ID: {p0}", { p0: room.ownerId }))), tag(room.state === 'deleting' ? ui('Closing') : room.locked ? ui('Locked') : ui('Open'), room.locked ? 'muted' : 'green'))) : [empty(ui('No temporary rooms open'), ui('Once enabled, join your lobby in Discord to create the first room.'), 'voice')]));
-    warnings.replaceChildren(...[...(snapshot.warnings || []).map(text => el('div', { className: 'alert info' }, text)), snapshot.pending ? el('p', { className: 'field-hint' }, ui("{p0} room creation {p1} waiting for confirmation. Cyro keeps the owner’s slot reserved to prevent duplicates.", { p0: snapshot.pending, p1: snapshot.pending === 1 ? 'is' : 'operations are' })) : null].filter(Boolean));
+    warnings.replaceChildren(...[...(snapshot.warnings || []).map(text => el('div', { className: 'alert info' }, uiServerCopy(text))), snapshot.pending ? el('p', { className: 'field-hint' }, ui('{count} room creation requests await confirmation. Cyro keeps each owner’s slot reserved to prevent duplicates.', { count: snapshot.pending })) : null].filter(Boolean));
   }
   async function refreshRooms() {
     if (busy || refreshing || !active()) return; refreshing = true; refresh.disabled = true; updateDirty();
     try { const result = DEMO ? clone(detail.tempVoice) : await api(endpoint); if (!active()) return; snapshot = result; detail.tempVoice = clone(result); drawRooms(); window.CyroI18n.setContent(refreshNote, ui('Room activity refreshed. Your settings draft has been kept.')); }
-    catch (error) { if (active()) window.CyroI18n.setContent(refreshNote, ui("{p0} Previous room activity is still shown.", { p0: error.message })); }
+    catch (error) { if (active()) window.CyroI18n.setContent(refreshNote, ui("{p0} Previous room activity is still shown.", { p0: uiError(error) })); }
     finally { refreshing = false; if (active()) { refresh.disabled = false; updateDirty(); } }
   }
   form.addEventListener('submit', async event => {
@@ -53,7 +53,7 @@ async function renderTempVoice(main) {
       const result = DEMO ? { config: clone(config) } : await api(endpoint, 'PATCH', clone(config)); if (!active()) return;
       saved = clone(result.config); Object.assign(config, saved); snapshot.config = clone(saved); detail.tempVoice.config = clone(saved);
       status.className = 'save-status success'; window.CyroI18n.setContent(status, DEMO ? ui('Saved for this demo session. Discord was not changed.') : ui('Temporary room settings saved.')); toast(DEMO ? ui('Demo settings saved.') : ui('Temporary room settings saved.'));
-    } catch (error) { if (active()) { status.className = 'save-status error'; window.CyroI18n.setContent(status, error.message + (!error.status || error.status >= 500 ? ' Reopen this page to check whether the save completed.' : ' Your draft is still here.')); } }
+    } catch (error) { if (active()) { status.className = 'save-status error'; window.CyroI18n.setContent(status, ui(!error.status || error.status >= 500 ? '{error} Reopen this page to check whether the save completed.' : '{error} Your draft is still here.', { error: uiError(error) })); } }
     finally { busy = false; state.saving = false; if (active()) { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); refresh.disabled = false; save.replaceChildren(icon('check'), window.CyroI18n.node(ui('Save changes'))); updateDirty(); } }
   });
   const help = contextCard(ui('How members use rooms'), ui('Join the lobby, then open the text chat attached to your new voice room. Cyro’s control panel is waiting there. Joining the lobby again returns you to your existing room.'), 'voice', el('div', { className: 'stack' },

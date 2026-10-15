@@ -37,7 +37,7 @@ async function renderIdentity(main) {
   const sequence = ++identityRenderSequence;
   const active = () => main.isConnected && state.guildId === guildId && state.page === 'identity' && sequence === identityRenderSequence;
   const endpoint = `/api/guilds/${safeId(guildId)}/identity`;
-  const guildName = state.guilds.find(guild => guild.id === guildId)?.name || 'this server';
+  const guildName = state.guilds.find(guild => guild.id === guildId)?.name || ui('this server');
   main.replaceChildren(heading(ui('Bot appearance'), ui('Give Cyro a name and picture that fit your community. These changes apply only in this Discord server.')));
   const surface = el('div', { className: 'loading-surface', role: 'status' }, el('span', { className: 'loader' }), ui('Loading the bot’s current Discord appearance…'));
   main.append(surface);
@@ -50,7 +50,7 @@ async function renderIdentity(main) {
     if (!active()) return;
   } catch (error) {
     if (!active()) return;
-    surface.replaceWith(panel(ui('Appearance unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, error.message), button(ui('Try again'), () => renderIdentity(main), 'secondary'))));
+    surface.replaceWith(panel(ui('Appearance unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, uiError(error)), button(ui('Try again'), () => renderIdentity(main), 'secondary'))));
     return;
   }
 
@@ -80,7 +80,7 @@ async function renderIdentity(main) {
       window.CyroI18n.setContent(fileStatus, ui("{p0} · Ready to save", { p0: file.name }));
     } catch (error) {
       if (!active() || fileRequest !== fileSequence) return;
-      fileStatus.className = 'field-hint identity-error'; window.CyroI18n.setContent(fileStatus, error.message);
+      fileStatus.className = 'field-hint identity-error'; window.CyroI18n.setContent(fileStatus, uiError(error));
     } finally {
       if (active() && fileRequest === fileSequence) { checkingImage = false; refreshDraft(); }
     }
@@ -115,7 +115,7 @@ async function renderIdentity(main) {
     save.disabled = busy || checkingImage || !dirty;
     resetName.disabled = busy || !saved.canChangeNickname || !nickname.value;
     resetAvatar.disabled = busy || (!saved.customAvatar && avatarDraft === undefined && !checkingImage);
-    window.CyroI18n.setContent(current, ui("Saved in {p0}: {p1} · {p2}", { p0: guildName, p1: saved.displayName, p2: saved.customAvatar ? 'Custom server picture' : 'Default picture' }));
+    window.CyroI18n.setContent(current, ui("Saved in {p0}: {p1} · {p2}", { p0: guildName, p1: saved.displayName, p2: saved.customAvatar ? ui('Custom server picture') : ui('Default picture') }));
     if (updateStatus) {
       status.className = 'save-status';
       window.CyroI18n.setContent(status, checkingImage ? ui('Checking the image before saving…') : dirty ? ui('Your changes are a preview until you save.') : ui('Showing the current appearance in this server.'));
@@ -123,9 +123,9 @@ async function renderIdentity(main) {
     const name = nickname.value.trim() || saved.defaultName;
     const src = avatarDraft === null ? saved.defaultAvatarUrl : avatarDraft || saved.avatarUrl;
     const avatar = el('div', { className: 'identity-avatar', 'aria-label': ui('Bot picture preview') });
-    const image = el('img', { src, alt: '', width: 56, height: 56, onError: () => { avatar.replaceChildren(el('span', {}, name.slice(0, 1).toUpperCase())); avatar.setAttribute('aria-label', 'Bot picture unavailable'); } });
+    const image = el('img', { src, alt: '', width: 56, height: 56, onError: () => { avatar.replaceChildren(el('span', {}, name.slice(0, 1).toUpperCase())); window.CyroI18n.setAttribute(avatar, 'aria-label', ui('Bot picture unavailable')); } });
     avatar.append(image);
-    preview.replaceChildren(avatar, el('div', { className: 'identity-preview-copy' }, el('div', { className: 'identity-author' }, el('strong', {}, name), el('span', { className: 'identity-app-tag' }, ui('APP'))), el('p', {}, ui('Your community, made yours.')), el('small', {}, ui("Preview in {p0}", { p0: guildName }))));
+    preview.replaceChildren(avatar, el('div', { className: 'identity-preview-copy' }, el('div', { className: 'identity-author' }, el('strong', {}, name), el('span', { className: 'identity-app-tag' }, 'APP')), el('p', {}, ui('Your community, made yours.')), el('small', {}, ui("Preview in {p0}", { p0: guildName }))));
     window.CyroI18n.setContent(previewNote, dirty ? ui('Draft preview. Discord will show this appearance after you save.') : ui('Current server appearance. The message above is only a preview.'));
   }
 
@@ -156,7 +156,7 @@ async function renderIdentity(main) {
     } catch (error) {
       if (!active()) return;
       status.className = 'save-status error';
-      window.CyroI18n.setContent(status, error.message + (!error.status || error.status >= 500 ? ' The update could not be confirmed. Reload from Discord to check before trying again.' : ' Your draft is still here.'));
+      window.CyroI18n.setContent(status, ui(!error.status || error.status >= 500 ? '{error} The update could not be confirmed. Reload from Discord to check before trying again.' : '{error} Your draft is still here.', { error: uiError(error) }));
     } finally {
       busy = false; state.saving = false;
       if (active()) {

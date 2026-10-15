@@ -1,42 +1,52 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
   <meta charset="utf-8">
+  <meta name="google" content="notranslate">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#09121b">
   <meta name="description" content="Connect your TikTok account to your Cyro creator profile and manage access to public video alerts.">
-  <title>Creator connections · Cyro</title>
+  <title data-i18n>Creator connections · Cyro</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/creator.css">
+  <script src="/i18n-catalogs.js" defer></script>
+  <script src="/i18n-extra-catalogs.js" defer></script>
+  <script src="/i18n-additional-catalogs.js" defer></script>
+  <script src="/i18n-errors.js" defer></script>
+  <script src="/i18n-dashboard-core.js" defer></script>
+  <script src="/i18n-dashboard-modules.js" defer></script>
+  <script src="/i18n-dashboard-shell.js" defer></script>
+  <script src="/i18n-dashboard-home.js" defer></script>
+  <script src="/i18n.js" defer></script>
   <script src="/connections.js" defer></script>
 </head>
 <body class="public-page">
-  <a class="skip-link" href="#main">Skip to content</a>
+  <a class="skip-link" href="#main" data-i18n>Skip to content</a>
   <header class="public-header">
-    <a class="brand" href="/" aria-label="Cyro home"><span class="brand-mark"><img src="/cyro-logo.png" alt="" width="48" height="48"></span><span class="brand-name">Cyro<small>Creator connections</small></span></a>
-    <nav aria-label="Main navigation"><a href="/dashboard">Server dashboard</a><a href="https://discord.gg/dAZheerkkD" target="_blank" rel="noopener noreferrer">Support</a></nav>
+    <a class="brand" href="/" aria-label="Cyro home" data-i18n-aria-label><span class="brand-mark"><img src="/cyro-logo.png" alt="" width="48" height="48"></span><span class="brand-name">Cyro<small data-i18n>Creator connections</small></span></a>
+    <nav aria-label="Main navigation" data-i18n-aria-label><label class="connection-language"><span data-i18n>Language</span><select id="connection-language" aria-label="Language" data-i18n-aria-label></select></label><a href="/dashboard" data-i18n>Server dashboard</a><a href="https://discord.gg/dAZheerkkD" target="_blank" rel="noopener noreferrer" data-i18n>Support</a></nav>
   </header>
   <main id="main" class="public-main connection-main" tabindex="-1">
-    <header class="page-heading"><div><h1>Your content. Your connection.</h1><p class="subtitle">Connect TikTok to the creator profiles linked to your Discord account.</p></div></header>
+    <header class="page-heading"><div><h1 data-i18n>Your content. Your connection.</h1><p class="subtitle" data-i18n>Connect TikTok to the creator profiles linked to your Discord account.</p></div></header>
     <div class="connection-layout">
-      <section id="connection-content" aria-label="Your creator connections"><div class="loading-surface" role="status"><span class="loader"></span>Loading your connections…</div></section>
+      <section id="connection-content" aria-label="Your creator connections" data-i18n-aria-label><div class="loading-surface" role="status"><span class="loader"></span><span data-i18n>Loading your connections…</span></div></section>
       <aside class="connection-explainer" aria-labelledby="connection-permissions">
-        <h2 id="connection-permissions">What you’re connecting</h2>
-        <p>Cyro asks TikTok for your basic profile and a list of your public videos. You approve this on TikTok’s own sign-in page.</p>
+        <h2 id="connection-permissions" data-i18n>What you’re connecting</h2>
+        <p data-i18n>Cyro asks TikTok for your basic profile and a list of your public videos. You approve this on TikTok’s own sign-in page.</p>
         <dl class="permission-list">
-          <div><dt>Your profile</dt><dd>Identifies the TikTok account you choose to connect.</dd></div>
-          <div><dt>Your public videos</dt><dd>Shows recent videos here and lets Cyro announce new uploads in the Discord server you choose.</dd></div>
+          <div><dt data-i18n>Your profile</dt><dd data-i18n>Identifies the TikTok account you choose to connect.</dd></div>
+          <div><dt data-i18n>Your public videos</dt><dd data-i18n>Shows recent videos here and lets Cyro announce new uploads in the Discord server you choose.</dd></div>
         </dl>
-        <p>Server managers choose the announcement channel and optional title filter. Cyro does not upload to TikTok or read private videos.</p>
-        <p>You can disconnect here at any time. Disconnecting stops future TikTok video checks for that connection; announcements already sent to Discord remain in that server.</p>
-        <p class="connection-note">TikTok LIVE alerts use a separate, unofficial connection. This sign-in grants access to public uploaded videos, not LIVE analytics.</p>
-        <a href="/privacy">How Cyro handles your data</a>
+        <p data-i18n>Server managers choose the announcement channel and optional title filter. Cyro does not upload to TikTok or read private videos.</p>
+        <p data-i18n>You can disconnect here at any time. Disconnecting stops future TikTok video checks for that connection; announcements already sent to Discord remain in that server.</p>
+        <p class="connection-note" data-i18n>TikTok LIVE alerts use a separate, unofficial connection. This sign-in grants access to public uploaded videos, not LIVE analytics.</p>
+        <a href="/privacy" data-i18n>How Cyro handles your data</a>
       </aside>
     </div>
   </main>
-  <footer class="public-footer"><span>Cyro by Headache Development</span><nav aria-label="Legal and support"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="https://discord.gg/dAZheerkkD" target="_blank" rel="noopener noreferrer">Support</a></nav></footer>
-  <noscript><p class="public-main">JavaScript is needed to connect your account. You can still read the <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>.</p></noscript>
+  <footer class="public-footer"><span data-i18n>Cyro by Headache Development</span><nav aria-label="Legal and support" data-i18n-aria-label><a href="/privacy" data-i18n>Privacy Policy</a><a href="/terms" data-i18n>Terms of Service</a><a href="https://discord.gg/dAZheerkkD" target="_blank" rel="noopener noreferrer" data-i18n>Support</a></nav></footer>
+  <noscript><p class="public-main">JavaScript is needed to connect your account. You can still read the <a href="/privacy" data-i18n>Privacy Policy</a> and <a href="/terms" data-i18n>Terms of Service</a>.</p></noscript>
 </body>
 </html>

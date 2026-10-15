@@ -16,7 +16,7 @@ function renderSupportSetup(main, kind) {
   const session = formSession('moderation');
   session.onSaved(() => renderShell());
   const definitionKey = tickets ? 'types' : 'forms';
-  const noun = tickets ? 'category' : 'form';
+  const noun = tickets ? ui('category') : ui('form');
   session.config[kind][definitionKey] ||= [];
   if (tickets) {
     session.config.tickets.closeAction ||= 'archive';
@@ -57,7 +57,7 @@ function renderSupportSetup(main, kind) {
     definitionList.replaceChildren();
     availabilityUpdates = [];
     if (!definitions().length) {
-      definitionList.append(el('div', { className: 'hint-box' }, ui("Your existing {p0} is the default option. Add named {p1} to offer more choices.", { p0: tickets ? 'support setup' : 'application', p1: tickets ? 'categories' : 'forms' })),
+      definitionList.append(el('div', { className: 'hint-box' }, ui("Your existing {p0} is the default option. Add named {p1} to offer more choices.", { p0: tickets ? ui('support setup') : ui('application'), p1: tickets ? ui('categories') : ui('forms') })),
         el('details', { className: 'setup-details', open: true }, el('summary', {}, tickets ? ui('General support') : ui('General application')), el('div', { className: 'setup-fields' }, settingsFields(scopedSession(session, kind), true))));
     }
     definitions().forEach((item, index) => {
@@ -83,7 +83,7 @@ function renderSupportSetup(main, kind) {
     });
   }
   function addDefinition() {
-    if (definitions().length >= 25) return toast(ui("Use up to 25 {p0}.", { p0: tickets ? 'categories' : 'forms' }), true);
+    if (definitions().length >= 25) return toast(ui("Use up to 25 {p0}.", { p0: tickets ? ui('categories') : ui('forms') }), true);
     const base = clone(session.config[kind]); delete base.types; delete base.forms;
     // Promote an existing configured default so adding an option does not hide it.
     if (!definitions().length && (tickets ? base.categoryId : base.reviewChannelId)) {
@@ -91,7 +91,7 @@ function renderSupportSetup(main, kind) {
       session.change(`${kind}.${definitionKey}`, [retained]);
       session.change('panels', session.config.panels.map(value => value.kind === kind ? { ...value, options: value.options.map(option => option.id === 'default' ? { ...option, id: retained.id } : option) } : value));
     }
-    const item = { ...base, enabled: true, id: newSettingId(tickets ? 'ticket' : 'form'), name: tickets ? 'New ticket category' : 'New application form' };
+    const item = { ...base, enabled: true, id: newSettingId(tickets ? 'ticket' : 'form'), name: String(tickets ? ui('New ticket category') : ui('New application form')) };
     if (tickets) { item.closeAction = 'delete'; item.visibility = 'inherit'; }
     session.change(`${kind}.${definitionKey}`, [...definitions(), item]); drawDefinitions(item.id); drawPanels();
   }
@@ -108,21 +108,21 @@ function renderSupportSetup(main, kind) {
       const renderPreview = () => {
         window.CyroI18n.setContent(label, item.name || ui('Untitled panel'));
         window.CyroI18n.setContent(presentation, item.presentation === 'select' ? ui('Dropdown') : ui('Buttons'));
-        preview.replaceChildren(el('span', { className: 'preview-author' }, ui('Cyro')), el('strong', {}, item.title || ui('Panel title')), el('p', {}, item.description || ui('Your panel message')),
+        preview.replaceChildren(el('span', { className: 'preview-author' }, 'Cyro'), el('strong', {}, item.title || ui('Panel title')), el('p', {}, item.description || ui('Your panel message')),
           item.presentation === 'select' ? el('div', { className: 'preview-select' }, ui('Choose an option'), icon('chevron')) : el('div', { className: 'preview-buttons' }, item.options.map(option => el('span', {}, option.label))),
           el('small', {}, ui('Preview · save before publishing')));
       };
       const optionRows = el('div', { className: 'panel-option-list' });
       choices().forEach(definition => {
         const selected = item.options.find(option => option.id === definition.id);
-        const input = el('input', { type: 'text', value: selected?.label || definition.name, maxlength: 80, disabled: !selected, 'aria-label': ui("Panel label for {p0}", { p0: definition.name }), onInput: event => {
+        const input = el('input', { type: 'text', value: selected?.label || definition.name, maxlength: 80, disabled: !selected, 'aria-label': ui("Panel label for {p0}", { p0: definition.id === 'default' ? ui(definition.name) : definition.name }), onInput: event => {
           const option = item.options.find(value => value.id === definition.id); if (option) option.label = event.target.value;
           session.change(`panels.${index}.options`, item.options); renderPreview();
         } });
         optionRows.append(el('div', { className: 'panel-option-row' }, el('label', { className: 'option-check' }, el('input', { type: 'checkbox', checked: Boolean(selected), onChange: event => {
           item.options = event.target.checked ? [...item.options, { id: definition.id, label: input.value || definition.name }] : item.options.filter(option => option.id !== definition.id);
           input.disabled = !event.target.checked; session.change(`panels.${index}.options`, item.options); renderPreview();
-        } }), el('span', {}, definition.name)), el('div', { className: 'field' }, input)));
+        } }), el('span', {}, definition.id === 'default' ? ui(definition.name) : definition.name)), el('div', { className: 'field' }, input)));
       });
       const publishTarget = { config: { channelId: null }, change(_key, value) { this.config.channelId = value; } };
       const published = el('div', { className: 'publish-result', role: 'status' });
@@ -135,7 +135,7 @@ function renderSupportSetup(main, kind) {
         try {
           const result = await api(`${guildPath()}/moderation/panel`, 'POST', { panelId: item.id, channelId: publishTarget.config.channelId });
           published.replaceChildren(window.CyroI18n.node(ui('Panel published. ')), el('a', { href: result.url, target: '_blank', rel: 'noopener noreferrer' }, ui('Open in Discord'))); toast(ui('Panel published to Discord.'));
-        } catch (error) { window.CyroI18n.setContent(published, ui("{p0} Check the channel before retrying if the request timed out.", { p0: error.message })); }
+        } catch (error) { window.CyroI18n.setContent(published, ui("{p0} Check the channel before retrying if the request timed out.", { p0: uiError(error) })); }
         finally { state.saving = false; publish.disabled = false; }
       }, 'secondary', 'discord');
       const details = el('details', { className: 'setup-details', open: item.id === openId }, el('summary', {}, label, presentation),
@@ -143,7 +143,7 @@ function renderSupportSetup(main, kind) {
           choiceField(sub, 'Member chooses with', 'presentation', [['buttons', 'Buttons'], ['select', 'Dropdown menu']]),
           textField(sub, ui('Panel title'), 'title', '', { required: true, maxlength: 120 }),
           textField(sub, ui('Panel message'), 'description', ui('Explain which option a member should choose.'), { multiline: true, maxlength: 1500 }),
-          el('div', {}, el('h3', {}, ui('Options on this panel')), el('p', { className: 'field-hint' }, ui("Select the {p0} to include. Edit the labels members see.", { p0: tickets ? 'categories' : 'forms' })), optionRows), preview,
+          el('div', {}, el('h3', {}, ui('Options on this panel')), el('p', { className: 'field-hint' }, ui("Select the {p0} to include. Edit the labels members see.", { p0: tickets ? ui('categories') : ui('forms') })), optionRows), preview,
           channelField(publishTarget, ui('Publish in channel'), 'channelId', ui('Publishes a new message using the saved panel settings.')),
           el('div', { className: 'setup-actions' }, publish, button(ui('Remove panel'), async () => {
             if (!await confirmAction(ui('Remove this panel configuration?'), ui('Previously posted messages remain in Discord. Remove those messages manually if they are no longer needed.'), ui('Remove panel'), ui('Keep panel'))) return;
@@ -155,7 +155,7 @@ function renderSupportSetup(main, kind) {
   const addPanel = () => {
     if (session.config.panels.length >= 25) return toast(ui('Use up to 25 saved support and application panels per server.'), true);
     const first = choices()[0];
-    const item = { id: newSettingId('panel'), name: tickets ? 'Support panel' : 'Application panel', kind, presentation: 'buttons', title: tickets ? 'How can we help?' : 'Join the team', description: tickets ? 'Choose a topic to open a ticket with our team. Ticket visibility follows this server\'s settings.' : 'Choose an application to get started. Your answers are posted in this server\'s review channel.', options: first ? [{ id: first.id, label: first.name }] : [] };
+    const item = { id: newSettingId('panel'), name: String(tickets ? ui('Support panel') : ui('Application panel')), kind, presentation: 'buttons', title: String(tickets ? ui('How can we help?') : ui('Join the team')), description: String(tickets ? ui('Choose a topic to open a ticket with our team. Ticket visibility follows this server\'s settings.') : ui('Choose an application to get started. Your answers are posted in this server\'s review channel.')), options: first ? [{ id: first.id, label: first.name }] : [] };
     session.change('panels', [...session.config.panels, item]); drawPanels(item.id);
   };
   drawDefinitions(); drawPanels();
@@ -166,7 +166,7 @@ function renderSupportSetup(main, kind) {
     [contextCard(ui('Set up, save, publish'), ui('Configure your options and staff access. Save changes, then publish a button or dropdown panel to any suitable Discord channel.'), tickets ? 'ticket' : 'file'),
       contextCard(ui('Existing requests keep their settings'), ui('Changing these options applies to new requests. Existing ticket channels keep their Discord permissions, and submitted applications keep their saved reviewer roles.'), 'lock')]);
   const records = state.detail.moderation.snapshot[kind] || [];
-  main.append(el('div', { className: 'section-gap' }, panel(tickets ? ui('Recent tickets') : ui('Recent applications'), records.length ? table([tickets ? 'Ticket' : 'Form', 'Member', 'Status', 'Created', ...(tickets ? ['Transcript'] : [])], records.slice(0, 20).map(record => [tickets ? record.ticketType?.name || record.id : record.applicationForm?.name || 'General application', userLabel(tickets ? record.ownerId : record.userId), tag(capitalize(record.status), record.status === 'open' || record.status === 'accepted' ? 'green' : 'muted'), dateLabel(record.createdAt), ...(tickets ? [record.transcript?.channelId && record.transcript?.messageId ? el('a', { href: `https://discord.com/channels/${encodeURIComponent(state.guildId)}/${encodeURIComponent(record.transcript.channelId)}/${encodeURIComponent(record.transcript.messageId)}`, target: '_blank', rel: 'noopener noreferrer' }, ui('Open saved transcript')) : '—'] : [])])) : empty(ui('No requests yet.'), ui('Published panels give members a place to get started.'), tickets ? 'ticket' : 'file'))));
+  main.append(el('div', { className: 'section-gap' }, panel(tickets ? ui('Recent tickets') : ui('Recent applications'), records.length ? table([tickets ? ui('Ticket') : ui('Form'), ui('Member'), ui('Status'), ui('Created'), ...(tickets ? [ui('Transcript')] : [])], records.slice(0, 20).map(record => [tickets ? record.ticketType?.name || record.id : record.applicationForm?.name || ui('General application'), userLabel(tickets ? record.ownerId : record.userId), tag(({ open: ui('Open'), claimed: ui('Claimed'), closed: ui('Closed'), pending: ui('Pending'), accepted: ui('Accepted'), denied: ui('Denied'), archived: ui('Archived'), deleting: ui('Deleting'), deleted: ui('Deleted'), submitted: ui('Submitted') })[record.status] || ui('Unknown'), record.status === 'open' || record.status === 'accepted' ? 'green' : 'muted'), dateLabel(record.createdAt), ...(tickets ? [record.transcript?.channelId && record.transcript?.messageId ? el('a', { href: `https://discord.com/channels/${encodeURIComponent(state.guildId)}/${encodeURIComponent(record.transcript.channelId)}/${encodeURIComponent(record.transcript.messageId)}`, target: '_blank', rel: 'noopener noreferrer' }, ui('Open saved transcript')) : '—'] : [])])) : empty(ui('No requests yet.'), ui('Published panels give members a place to get started.'), tickets ? 'ticket' : 'file'))));
 }
 
 function renderVerification(main) {
@@ -194,7 +194,7 @@ function renderVerification(main) {
     try {
       const response = await api(`${guildPath()}/community/verification-panel`, 'POST', {});
       result.replaceChildren(window.CyroI18n.node(ui('Verification panel published. ')), el('a', { href: response.url, target: '_blank', rel: 'noopener noreferrer' }, ui('Open in Discord'))); toast(ui('Verification panel published.'));
-    } catch (error) { window.CyroI18n.setContent(result, ui("{p0} Check the channel before retrying if the request timed out.", { p0: error.message })); }
+    } catch (error) { window.CyroI18n.setContent(result, ui("{p0} Check the channel before retrying if the request timed out.", { p0: uiError(error) })); }
     finally { publish.disabled = false; state.saving = false; }
   }, 'secondary', 'discord');
   main.append(heading(ui('Member verification'), ui('Let new members earn an access role with a reaction or a private image challenge.')));
@@ -222,7 +222,7 @@ function uploadSettingsFields(session, existing) {
   enable.querySelector('input').disabled = !ready;
   return el('section', { className: 'stream-feature-section', 'aria-label': ui('Uploaded video alerts') }, el('h3', {}, ui('Uploaded videos')),
     el('div', { className: 'toggle-row' }, el('div', {}, el('h3', {}, ui('Announce new uploaded videos')), el('p', {}, ui('Independent of live announcements. Uses the Discord member linked to this creator.'))), enable),
-    el('p', { className: 'provider-note' }, note),
+    el('p', { className: 'provider-note' }, uiServerCopy(note)),
     draft.platform === 'tiktok' && tiktokConnectionControl(existing),
     supported && el('div', { className: 'setup-fields' }, channelField(session, ui('Upload announcement channel'), 'uploads.channelId', ui('Can be different from the live announcement channel.')),
       roleField(session, ui('Role to notify for uploads'), 'uploads.pingRoleId', ui('Optional. Included with the {role} placeholder.')),
@@ -230,7 +230,7 @@ function uploadSettingsFields(session, existing) {
       textField(session, ui('Upload announcement message'), 'uploads.messageTemplate', ui('Leave blank for the default. Placeholders: {creator}, {member}, {username}, {platform}, {title}, {url}, {publishedAt}, {role}.'), { multiline: true, maxlength: 1800 }),
       el('div', { className: 'hint-box' }, ui('The first successful check records existing uploads without announcing them. Only newer videos are announced afterward. Changing a title filter does not repost old videos.'))),
     existing.uploadState?.lastCheckedAt && el('p', { className: 'upload-state' }, ui("Last upload check: {p0}", { p0: dateLabel(existing.uploadState.lastCheckedAt) })),
-    existing.uploadState?.lastError && el('div', { className: 'alert info' }, existing.uploadState.lastError),
+    existing.uploadState?.lastError && el('div', { className: 'alert info' }, uiError({ message: existing.uploadState.lastError, i18n: existing.uploadState.lastErrorI18n })),
     existing.uploadState?.deliveries?.some(item => item.status !== 'sent') && el('div', { className: 'alert info' }, ui('An earlier upload announcement has an unconfirmed result. Check the Discord channel; Cyro will not send it again automatically and risk a duplicate.')));
 }
 
@@ -242,7 +242,7 @@ function tiktokConnectionControl(existing) {
   if (!existing.discordMemberId) { box.append(el('p', {}, ui('Link a Discord member to this creator profile before connecting TikTok. That member must sign in and authorize their own TikTok account.'))); return box; }
   const href = `/connections?guild=${encodeURIComponent(state.guildId)}&record=${encodeURIComponent(existing.id)}`;
   const own = existing.discordMemberId === state.me?.user?.id;
-  box.append(el('p', {}, connection?.connected ? ui("TikTok connected{p0}{p1}", { p0: connection.displayName ? ' as ' + connection.displayName : '', p1: connection.needsReconnect ? '; the creator needs to reconnect.' : '.' }) : ui('This creator has not connected TikTok for public video alerts.')),
+  box.append(el('p', {}, connection?.connected ? ui(connection.needsReconnect ? '{connection} The creator needs to reconnect.' : '{connection}', { connection: connection.displayName ? ui('TikTok connected as {name}.', { name: connection.displayName }) : ui('TikTok connected.') }) : ui('This creator has not connected TikTok for public video alerts.')),
     el('p', {}, ui('The linked Discord member opens this link, signs in with Discord, and approves their TikTok account. Server management permission is not required.')),
     el('a', { className: 'creator-connection-link', href, target: '_blank', rel: 'noopener noreferrer' }, own ? ui('Manage my TikTok connection') : ui('Open creator sign-in page')),
     el('label', { className: 'connection-share-label' }, ui('Send this link to the creator'), el('input', { className: 'connection-link-field', type: 'text', value: new URL(href, location.origin).href, readonly: true, onFocus: event => event.target.select() })));

@@ -6,8 +6,8 @@ const memberCardDefaults = { joinHeading: 'Welcome aboard', leaveHeading: 'Until
 function renderCardPreview(node, c, joining, replace) {
   node.dataset.bar = c.bar; node.dataset.divider = String(c.showDivider); node.dataset.decoration = String(c.decoration);
   for (const [key, value] of Object.entries({ '--card-bar': c.barColor, '--card-text': c.textColor, '--card-secondary': c.secondaryColor, '--card-background': c.backgroundColor })) node.style.setProperty(key, value);
-  const line = value => replace(value, 'New member');
-  studioReplace(node, c.showAvatar && el('div', { className: 'member-card-avatar', 'aria-hidden': 'true' }, ui('N')), el('div', { className: 'member-card-copy' }, el('p', { className: 'member-card-heading' }, line(joining ? c.joinHeading : c.leaveHeading)), el('strong', { className: 'member-card-name' }, line(c.nameText)), el('p', { className: 'member-card-server' }, line(c.subtitle)), el('div', { className: 'member-card-footer' }, el('span', {}, line(joining ? c.joinFooter : c.leaveFooter)), el('b', {}, line(c.brandText)))));
+  const line = value => window.CyroI18n.computedText(() => replace(value, ui('New member')));
+  studioReplace(node, c.showAvatar && el('div', { className: 'member-card-avatar', 'aria-hidden': 'true' }, 'N'), el('div', { className: 'member-card-copy' }, el('p', { className: 'member-card-heading' }, line(joining ? c.joinHeading : c.leaveHeading)), el('strong', { className: 'member-card-name' }, line(c.nameText)), el('p', { className: 'member-card-server' }, line(c.subtitle)), el('div', { className: 'member-card-footer' }, el('span', {}, line(joining ? c.joinFooter : c.leaveFooter)), el('b', {}, line(c.brandText)))));
 }
 function studioCardFields(session, refresh) {
   const color = (label, key) => textField(session, label, `welcome.card.${key}`, '', { type: 'color', onInput: refresh });
@@ -41,20 +41,20 @@ function renderAccess(main) {
 function renderPublishing(main, kind) {
   const poll = kind === 'poll'; const section = poll ? 'polls' : 'messages';
   main.append(heading(poll ? ui('Polls') : ui('Channel messages'), poll ? ui('Publish a question with answer choices. Members vote on the poll in Discord.') : ui('Write an announcement, rules post or update with a styled embed.'), link(ui('Getting started'), 'help')));
-  const draft = poll ? { channelId: null, question: '', answers: ['Yes', 'No'], duration: 24, multiple: false } : { channelId: null, content: '', useEmbed: true, embed: { title: '', description: '', author: '', footer: '', color: '#63D7FF', url: '', image: '', thumbnail: '', fields: [] } };
+  const draft = poll ? { channelId: null, question: '', answers: ['Yes', 'No'].map(source => String(ui(source))), duration: 24, multiple: false } : { channelId: null, content: '', useEmbed: true, embed: { title: '', description: '', author: '', footer: '', color: '#63D7FF', url: '', image: '', thumbnail: '', fields: [] } };
   let operationId = crypto.randomUUID(), busy = false, uncertain = false;
   const preview = el('div', { className: 'publish-preview' });
   const status = el('p', { role: 'status', className: 'save-status' }, ui('Nothing is posted until you review and publish.'));
   const session = { config: draft, change(path, value) { putPath(draft, path, value); state.dirty = true; if (!uncertain) operationId = crypto.randomUUID(); updatePreview(); } };
   function updatePreview() {
     if (poll) {
-      studioReplace(preview, el('strong', {}, draft.question || ui('Your poll question')), el('div', { className: 'poll-answers' }, draft.answers.map(answer => el('div', {}, el('span', { className: 'poll-dot' }), answer || ui('Answer')))), el('small', {}, ui("{p0} hours · {p1}", { p0: draft.duration || 24, p1: draft.multiple ? 'Multiple answers' : 'One answer per person' })));
+      studioReplace(preview, el('strong', {}, draft.question || ui('Your poll question')), el('div', { className: 'poll-answers' }, draft.answers.map(answer => el('div', {}, el('span', { className: 'poll-dot' }), answer || ui('Answer')))), el('small', {}, ui("{p0} hours · {p1}", { p0: draft.duration || 24, p1: draft.multiple ? ui('Multiple answers') : ui('One answer per person') })));
       return;
     }
     const c = draft.embed;
-    const embed = el('div', { className: `discord-embed ${c.color ? '' : 'no-bar'}` }, c.author && el('small', {}, c.author), c.title && el('strong', {}, c.title), c.description && el('p', { className: 'preserve-lines' }, c.description), el('div', { className: 'embed-fields' }, c.fields.map(f => el('div', { className: f.inline ? '' : 'wide' }, el('b', {}, f.name || ui('Field name')), el('p', { className: 'preserve-lines' }, f.value || ui('Field value'))))), c.thumbnail && el('small', {}, 'Thumbnail: ' + c.thumbnail), c.image && el('small', {}, 'Image: ' + c.image), c.footer && el('small', {}, c.footer));
+    const embed = el('div', { className: `discord-embed ${c.color ? '' : 'no-bar'}` }, c.author && el('small', {}, c.author), c.title && el('strong', {}, c.title), c.description && el('p', { className: 'preserve-lines' }, c.description), el('div', { className: 'embed-fields' }, c.fields.map(f => el('div', { className: f.inline ? '' : 'wide' }, el('b', {}, f.name || ui('Field name')), el('p', { className: 'preserve-lines' }, f.value || ui('Field value'))))), c.thumbnail && el('small', {}, ui('Thumbnail: {url}', { url: c.thumbnail })), c.image && el('small', {}, ui('Image: {url}', { url: c.image })), c.footer && el('small', {}, c.footer));
     embed.style.setProperty('--embed-colour', c.color || 'transparent');
-    studioReplace(preview, el('span', { className: 'preview-author' }, ui('Cyro')), draft.content && el('p', { className: 'preserve-lines' }, draft.content), draft.useEmbed && embed);
+    studioReplace(preview, el('span', { className: 'preview-author' }, 'Cyro'), draft.content && el('p', { className: 'preserve-lines' }, draft.content), draft.useEmbed && embed);
   }
   const form = el('form', { className: 'settings-form' });
   const fields = el('div', { className: 'form-section' }, channelField(session, ui('Post in channel'), 'channelId', poll ? ui('Cyro needs Send Polls here. Polls use regular text channels.') : ui('You need View Channel and Send Messages here; Cyro also needs Embed Links.')));
@@ -86,16 +86,16 @@ function renderPublishing(main, kind) {
       state.detail.posts ||= []; if (!state.detail.posts.some(p => p.id === result.post.id)) state.detail.posts.push(result.post);
       uncertain = false; operationId = crypto.randomUUID(); state.dirty = false;
       status.replaceChildren(window.CyroI18n.node(ui('Published. ')), postLink(result.post)); toast(poll ? ui('Poll published.') : ui('Message published.')); drawHistory();
-    } catch (error) { uncertain = true; window.CyroI18n.setContent(status, error.message + ' Check the channel before starting another post.'); status.className = 'save-status error'; }
+    } catch (error) { uncertain = true; window.CyroI18n.setContent(status, ui('{error} Check the channel before starting another post.', { error: uiError(error) })); status.className = 'save-status error'; }
     finally { busy = false; state.saving = false; controls.forEach(([c, disabled]) => c.disabled = disabled); publish.disabled = false; }
   });
   const history = el('div', {});
   function postLink(p) { return p.messageId ? el('a', { href: `https://discord.com/channels/${safeId(state.guildId)}/${safeId(p.channelId)}/${safeId(p.messageId)}`, target: '_blank', rel: 'noopener noreferrer' }, ui('Open in Discord')) : el('span', {}, ui('Unconfirmed — check channel')); }
   function drawHistory() {
     const posts = (state.detail.posts || []).filter(p => p.kind === kind).slice(-30).reverse();
-    history.replaceChildren(posts.length ? el('div', { className: 'stack' }, posts.map(p => el('div', { className: 'publish-history-row' }, el('div', {}, el('strong', {}, p.title), el('small', {}, `#${channelName(p.channelId)} · ${dateLabel(p.createdAt)}`)), postLink(p), poll && p.status === 'sent' && button(ui('End poll'), async () => {
+    history.replaceChildren(posts.length ? el('div', { className: 'stack' }, posts.map(p => el('div', { className: 'publish-history-row' }, el('div', {}, el('strong', {}, p.title), el('small', {}, window.CyroI18n.computedText(() => `#${channelName(p.channelId)} · ${dateLabel(p.createdAt)}`))), postLink(p), poll && p.status === 'sent' && button(ui('End poll'), async () => {
       if (DEMO || !await confirmAction(ui('End this poll?'), ui('Discord will stop accepting votes and finalize the results.'), ui('End poll'), ui('Keep running'))) return;
-      try { await api(`${guildPath()}/polls/${p.id}`, 'POST', {}); toast(ui('Poll ended. Results are in Discord.')); } catch (error) { toast(error.message, true); }
+      try { await api(`${guildPath()}/polls/${p.id}`, 'POST', {}); toast(ui('Poll ended. Results are in Discord.')); } catch (error) { toast(uiError(error), true); }
     }, 'secondary small')))) : el('p', { className: 'form-intro' }, ui('Your published posts will appear here.')));
   }
   updatePreview(); drawHistory();

@@ -90,7 +90,7 @@ it('applies the existing public API rate limit to aggregate polling', async () =
     }
     const limited = await fetch(`${f.base}/api/public/stats`);
     expect(limited.status).toBe(429);
-    expect(await limited.json()).toEqual({ error: 'Too many requests. Please wait before trying again.' });
+    expect(await limited.json()).toEqual({ error: 'Too many requests. Please wait before trying again.', i18n: { key: 'Too many requests. Please wait before trying again.', params: {} } });
   } finally { clock.mockRestore(); }
 });
 

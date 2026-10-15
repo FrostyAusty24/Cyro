@@ -4,7 +4,7 @@ let suggestionsRenderSequence = 0;
 
 function suggestionStatus(item) {
   if (item.delivery === 'pending') return tag(ui('Delivery unconfirmed'), 'orange');
-  return tag(({ open: 'Voting open', accepted: 'Accepted', declined: 'Declined', closed: 'Closed' })[item.status] || ui('Unavailable'), ({ open: '', accepted: 'green', declined: 'red', closed: 'muted' })[item.status]);
+  return tag(({ open: ui('Voting open'), accepted: ui('Accepted'), declined: ui('Declined'), closed: ui('Closed') })[item.status] || ui('Unavailable'), ({ open: '', accepted: 'green', declined: 'red', closed: 'muted' })[item.status]);
 }
 
 async function renderSuggestions(main) {
@@ -23,7 +23,7 @@ async function renderSuggestions(main) {
     detail.suggestions = clone(snapshot);
   } catch (error) {
     if (!active()) return;
-    surface.replaceWith(panel(ui('Suggestions unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, error.message), button(ui('Try again'), () => renderSuggestions(main), 'secondary'))));
+    surface.replaceWith(panel(ui('Suggestions unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, uiError(error)), button(ui('Try again'), () => renderSuggestions(main), 'secondary'))));
     return;
   }
 
@@ -75,7 +75,7 @@ async function renderSuggestions(main) {
       toast(DEMO ? ui('Demo suggestion settings saved.') : ui('Suggestion settings saved.'));
     } catch (error) {
       if (!active()) return;
-      saveStatus.className = 'save-status error'; window.CyroI18n.setContent(saveStatus, error.message + (!error.status || error.status >= 500 ? ' The save could not be confirmed. Reopen this page to check the saved settings.' : ''));
+      saveStatus.className = 'save-status error'; window.CyroI18n.setContent(saveStatus, ui(!error.status || error.status >= 500 ? '{error} The save could not be confirmed. Reopen this page to check the saved settings.' : '{error}', { error: uiError(error) }));
     } finally {
       busy = false; state.saving = false;
       if (active()) { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); save.replaceChildren(icon('check'), window.CyroI18n.node(ui('Save changes'))); updateDirty(); }
@@ -120,12 +120,12 @@ async function renderSuggestions(main) {
   }
   function renderItem(item) {
     const row = el('article', { className: 'suggestion-item', 'aria-label': ui("Suggestion {p0}", { p0: item.number }) });
-    const info = el('div', { className: 'suggestion-meta' }, el('strong', {}, `#${item.number}`), suggestionStatus(item), el('span', {}, `${item.authorName || userLabel(item.authorId)} · ${dateLabel(item.createdAt)}`));
+    const info = el('div', { className: 'suggestion-meta' }, el('strong', {}, `#${item.number}`), suggestionStatus(item), el('span', {}, window.CyroI18n.computedText(() => `${item.authorName || userLabel(item.authorId)} · ${dateLabel(item.createdAt)}`)));
     const votes = el('div', { className: 'suggestion-votes', 'aria-label': ui('Votes') }, el('span', { className: 'suggestion-up' }, ui("{p0} upvotes", { p0: format(item.upVotes) })), el('span', {}, ui("{p0} downvotes", { p0: format(item.downVotes) })), el('strong', {}, ui("Score {p0}{p1}", { p0: item.score > 0 ? '+' : '', p1: format(item.score) })));
     row.append(info, el('p', { className: 'suggestion-content' }, item.text), el('div', { className: 'suggestion-footer' }, votes, messageLink(item)));
     if (item.delivery === 'pending') row.append(el('p', { className: 'suggestion-notice' }, ui('Delivery could not be confirmed. Check the suggestions channel before posting the idea again. Voting and staff decisions are unavailable until delivery is confirmed.')));
     if (item.syncPending) row.append(el('p', { className: 'suggestion-notice' }, ui('The result is saved here, but the Discord message update is still pending.')));
-    if (item.decision) row.append(el('div', { className: 'suggestion-response' }, el('strong', {}, ui('Staff response')), el('p', {}, item.decision.reason || ui('No note added.')), el('small', {}, `${userLabel(item.decision.actorId)} · ${dateLabel(item.decision.at)}`)));
+    if (item.decision) row.append(el('div', { className: 'suggestion-response' }, el('strong', {}, ui('Staff response')), el('p', {}, item.decision.reason || ui('No note added.')), el('small', {}, window.CyroI18n.computedText(() => `${userLabel(item.decision.actorId)} · ${dateLabel(item.decision.at)}`))));
     if (item.status !== 'open' || item.delivery !== 'sent') return row;
     const draft = decisionDrafts.get(item.id) || { status: 'accepted', reason: '' };
     decisionDrafts.set(item.id, draft);
@@ -140,7 +140,7 @@ async function renderSuggestions(main) {
       event.preventDefault();
       if (busy || refreshing || confirming || !active() || uncertain.has(item.id) || !reviewForm.reportValidity()) return;
       const status = draft.status, note = draft.reason.trim();
-      const action = ({ accepted: 'Accept', declined: 'Decline', closed: 'Close' })[status];
+      const action = ({ accepted: ui('Accept'), declined: ui('Decline'), closed: ui('Close') })[status];
       confirming = true; updateDirty();
       let approved;
       try { approved = await confirmAction(ui("{p0} suggestion #{p1}?", { p0: action, p1: item.number }), ui('This closes voting and posts your response on the suggestion. The final decision cannot be changed.'), ui("{p0} suggestion", { p0: action }), ui('Keep reviewing')); }
@@ -161,7 +161,7 @@ async function renderSuggestions(main) {
       } catch (error) {
         if (!active()) return;
         const ambiguous = !error.status || error.status >= 500;
-        const message = error.message + (ambiguous ? ' The response could not be confirmed. Refresh votes to check the saved result before trying again.' : '');
+        const message = ui(ambiguous ? '{error} The response could not be confirmed. Refresh votes to check the saved result before trying again.' : '{error}', { error: uiError(error) });
         if (ambiguous) uncertain.set(item.id, message);
         feedback.className = 'save-status error'; window.CyroI18n.setContent(feedback, message);
       } finally {
@@ -187,12 +187,12 @@ async function renderSuggestions(main) {
         if (item.status !== 'open') decisionDrafts.delete(item.id);
       }
       // A vote refresh leaves the settings form and its unsaved draft intact.
-      historyStatus.className = 'field-hint'; window.CyroI18n.setContent(historyStatus, ui("Page {p0} refreshed {p1}. Draft notes are kept when you change pages.", { p0: snapshot.page || 1, p1: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }));
+      historyStatus.className = 'field-hint'; window.CyroI18n.setContent(historyStatus, ui("Page {p0} refreshed {p1}. Draft notes are kept when you change pages.", { p0: snapshot.page || 1, p1: window.CyroI18n.computedText(((at) => locale => new Date(at).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : locale, { hour: 'numeric', minute: '2-digit' }))(Date.now())) }));
       drawHistory(); updateDirty();
       if (changingPage) { history.focus({ preventScroll: true }); history.scrollIntoView({ block: 'start', behavior: 'instant' }); }
     } catch (error) {
       if (!active()) return;
-      historyStatus.className = 'field-hint suggestions-error'; window.CyroI18n.setContent(historyStatus, ui("{p0} The previous results are still shown. Choose Refresh votes to try again.", { p0: error.message }));
+      historyStatus.className = 'field-hint suggestions-error'; window.CyroI18n.setContent(historyStatus, ui("{p0} The previous results are still shown. Choose Refresh votes to try again.", { p0: uiError(error) }));
     } finally {
       refreshing = false;
       if (active()) { reload.disabled = false; reload.replaceChildren(icon('clock'), window.CyroI18n.node(ui('Refresh votes'))); drawPagination(); updateDirty(); }

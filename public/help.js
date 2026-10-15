@@ -56,7 +56,7 @@ function serverLanguagePanel() {
       saved = result.locale; state.detail.language = result; state.dirty = false;
       window.CyroI18n.setContent(status, ui(DEMO ? 'Saved for this demo session. Discord was not changed.' : 'Server language saved.'));
       status.className = 'save-status success';
-    } catch (error) { if (form.isConnected && guildId === state.guildId) { window.CyroI18n.setContent(status, error.message); status.className = 'save-status error'; } }
+    } catch (error) { if (form.isConnected && guildId === state.guildId) { window.CyroI18n.setContent(status, uiError(error)); status.className = 'save-status error'; } }
     finally { busy = false; state.saving = false; if (form.isConnected) { input.disabled = false; save.disabled = input.value === saved; } }
   });
   return panel(ui('Server language'), form);

@@ -18,7 +18,7 @@ async function renderStatusRoles(main) {
     detail.statusRoles = clone(snapshot);
   } catch (error) {
     if (!active()) return;
-    loading.replaceWith(panel(ui('Status roles unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, error.message), button(ui('Try again'), () => renderStatusRoles(main), 'secondary'))));
+    loading.replaceWith(panel(ui('Status roles unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, uiError(error)), button(ui('Try again'), () => renderStatusRoles(main), 'secondary'))));
     return;
   }
 
@@ -67,13 +67,13 @@ async function renderStatusRoles(main) {
     const expected = config.caseSensitive ? needle : needle.toLocaleLowerCase('en-US');
     const actual = config.caseSensitive ? example : example.toLocaleLowerCase('en-US');
     const matches = Boolean(needle && (config.match === 'exact' ? actual === expected : actual.includes(expected)));
-    const role = roles.find(item => item.id === config.roleId)?.name || 'Reward role';
-    preview.replaceChildren(el('div', { className: 'status-role-person' }, el('span', { className: 'status-role-avatar', 'aria-hidden': 'true' }, ui('CM')),
+    const role = roles.find(item => item.id === config.roleId)?.name || ui('Reward role');
+    preview.replaceChildren(el('div', { className: 'status-role-person' }, el('span', { className: 'status-role-avatar', 'aria-hidden': 'true' }, 'CM'),
       el('div', {}, el('strong', {}, ui('Community member')), el('p', {}, example || ui('No custom status')))),
       el('div', { className: 'status-role-outcome' }, matches && config.roleId ? tag(role, 'green') : tag(ui('No status role'), 'muted')));
     previewResult.replaceChildren(icon(matches ? 'check' : 'help'), el('span', {}, !needle ? ui('Enter your status text to try the rule.') : matches ? config.roleId ? ui('Matches your rule. This member would qualify.') : ui('Text matches. Choose a reward role to finish setup.') : ui('Does not match. A role given by this rule would be removed.')));
     previewResult.classList.toggle('matches', matches);
-    window.CyroI18n.setContent(previewNote, 'Sample of a visible member’s custom status. ' + (config.enabled ? 'This preview does not change anyone’s roles.' : 'The rule is disabled until you enable it and save.'));
+    window.CyroI18n.setContent(previewNote, ui(config.enabled ? 'Sample of a visible member’s custom status. This preview does not change anyone’s roles.' : 'Sample of a visible member’s custom status. The rule is disabled until you enable it and save.'));
   }
   function updateDraft() {
     if (!active()) return;
@@ -89,7 +89,7 @@ async function renderStatusRoles(main) {
     availability.hidden = snapshot.available;
     window.CyroI18n.setContent(availability, snapshot.available ? '' : ui('Status tracking is not enabled for this bot yet. The bot operator needs to enable Discord’s Presence Intent and restart Cyro. You can save your rule while it is switched off.'));
     counts.replaceChildren(...[['assigned', 'Roles assigned'], ['pendingAdd', 'Waiting to add'], ['pendingRemove', 'Waiting to remove']].map(([key, label]) => el('div', { className: 'status-role-count' }, el('strong', {}, format(snapshot.counts?.[key])), el('span', {}, ui(label)))));
-    warnings.replaceChildren(...(snapshot.warnings || []).map(warning => el('p', { className: 'status-role-warning' }, icon('help'), el('span', {}, warning))));
+    warnings.replaceChildren(...(snapshot.warnings || []).map(warning => el('p', { className: 'status-role-warning' }, icon('help'), el('span', {}, uiServerCopy(warning)))));
     updateDraft();
   }
   async function refreshStatus() {
@@ -101,11 +101,11 @@ async function renderStatusRoles(main) {
       if (!active()) return;
       snapshot = result; detail.statusRoles = clone(result);
       // A status refresh leaves any unsaved rule edits intact.
-      window.CyroI18n.setContent(activityStatus, ui("Status refreshed {p0}. Your rule draft has been kept.", { p0: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }));
+      window.CyroI18n.setContent(activityStatus, ui("Status refreshed {p0}. Your rule draft has been kept.", { p0: window.CyroI18n.computedText(((at) => locale => new Date(at).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : locale, { hour: 'numeric', minute: '2-digit' }))(Date.now())) }));
       drawStatus();
     } catch (error) {
       if (!active()) return;
-      activityStatus.className = 'field-hint status-role-error'; window.CyroI18n.setContent(activityStatus, ui("{p0} The previous totals are still shown.", { p0: error.message }));
+      activityStatus.className = 'field-hint status-role-error'; window.CyroI18n.setContent(activityStatus, ui("{p0} The previous totals are still shown.", { p0: uiError(error) }));
     } finally {
       refreshing = false;
       if (active()) { refresh.disabled = false; refresh.replaceChildren(icon('clock'), window.CyroI18n.node(ui('Refresh status'))); updateDraft(); }
@@ -147,7 +147,7 @@ async function renderStatusRoles(main) {
     } catch (error) {
       if (!active()) return;
       saveStatus.className = 'save-status error';
-      window.CyroI18n.setContent(saveStatus, error.message + (!error.status || error.status >= 500 ? ' The save could not be confirmed. Reopen this page to check the saved rule.' : ' Your draft is still here.'));
+      window.CyroI18n.setContent(saveStatus, ui(!error.status || error.status >= 500 ? '{error} The save could not be confirmed. Reopen this page to check the saved rule.' : '{error} Your draft is still here.', { error: uiError(error) }));
     } finally {
       busy = false; state.saving = false;
       if (active()) { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); refresh.disabled = false; save.replaceChildren(icon('check'), window.CyroI18n.node(ui('Save changes'))); updateDraft(); }

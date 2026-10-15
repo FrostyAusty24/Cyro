@@ -5,7 +5,16 @@
 window.CyroI18n = (() => {
   const languages = Object.freeze([{ id: 'en', name: 'English' }, { id: 'fr', name: 'Français' }, { id: 'es', name: 'Español' }, { id: 'de', name: 'Deutsch' }, { id: 'pt', name: 'Português (Brasil)' }]);
   const catalogs = Object.fromEntries(languages.filter(language => language.id !== 'en').map(({ id }) =>
-    [id, { ...window.CyroTranslations?.[id], ...window.CyroExtraTranslations?.[id], ...window.CyroAdditionalTranslations?.[id] }]));
+    [id, { ...window.CyroTranslations?.[id], ...window.CyroExtraTranslations?.[id], ...window.CyroAdditionalTranslations?.[id],
+      ...Object.assign({}, ...(window.CyroDashboardCatalogs || []).map(batch => Array.isArray(batch)
+        ? Object.fromEntries(batch.map(row => [row[0], row[['en', 'fr', 'es', 'de', 'pt'].indexOf(id)]])) : batch[id])) }]));
+  const knownSources = new Set(Object.values(catalogs).flatMap(catalog => Object.keys(catalog)));
+  const sourceByTranslation = new Map();
+  for (const catalog of Object.values(catalogs)) for (const [source, value] of Object.entries(catalog)) {
+    // Fixed server-generated notices may already use the server's language.
+    // Never infer a template from arbitrary provider errors or user content.
+    if (!/\{[a-zA-Z0-9_]+\}/.test(value)) sourceByTranslation.set(value, source);
+  }
   const storageKey = 'cyro.dashboard.locale';
   const marker = Symbol('Cyro interface copy');
   const bindings = new Set();
@@ -21,6 +30,18 @@ window.CyroI18n = (() => {
   function text(source, params = {}) {
     if (source && source[marker]) return source;
     return { [marker]: true, source, params, toString() { return translate(source, params); } };
+  }
+  function computedText(formatter) {
+    return { [marker]: true, toString() { return String(formatter(locale)); } };
+  }
+  function errorText(error) {
+    if (isText(error)) return error;
+    const metadata = error?.i18n;
+    if (metadata && typeof metadata.key === 'string' && knownSources.has(metadata.key)) return text(metadata.key, metadata.params || {});
+    const message = typeof error === 'string' ? error : error?.message;
+    if (typeof message === 'string' && knownSources.has(message)) return text(message);
+    if (sourceByTranslation.has(message)) return text(sourceByTranslation.get(message));
+    return text('The request could not be completed. Check the bot log and try again.');
   }
   const isText = value => Boolean(value && value[marker]);
   function bind(node, key, copy, apply) {
@@ -60,15 +81,21 @@ window.CyroI18n = (() => {
     return locale;
   }
   document.documentElement.lang = locale;
-  return { languages, get locale() { return locale; }, text, translate, isText, node, setContent, setText, setAttribute, setLocale,
+  return { languages, get locale() { return locale; }, text, computedText, errorText, translate, isText, node, setContent, setText, setAttribute, setLocale,
     subscribe(callback) { subscriptions.add(callback); return () => subscriptions.delete(callback); } };
 })();
 
 // A short alias makes explicit interface labels easy to identify during review.
 const ui = (source, params) => window.CyroI18n.text(source, params);
+const uiError = error => window.CyroI18n.errorText(error);
+const uiServerCopy = value => window.CyroI18n.errorText(value);
 
 // Static page chrome is explicitly identified; editable content is never scanned.
-for (const [selector, source] of [['title', 'Cyro · Community dashboard'], ['.skip-link', 'Skip to content'], ['.boot p', 'Opening your community dashboard…']]) {
+for (const [selector, source] of [['title:not([data-i18n])', 'Cyro · Community dashboard'], ['.skip-link', 'Skip to content'], ['.boot p', 'Opening your community dashboard…']]) {
   const target = document.querySelector?.(selector);
   if (target) window.CyroI18n.setText(target, source);
+}
+for (const target of document.querySelectorAll?.('[data-i18n]') || []) window.CyroI18n.setText(target, target.textContent);
+for (const attribute of ['aria-label', 'placeholder', 'title', 'alt']) {
+  for (const target of document.querySelectorAll?.(`[data-i18n-${attribute}]`) || []) window.CyroI18n.setAttribute(target, attribute, target.getAttribute(attribute));
 }

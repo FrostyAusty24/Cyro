@@ -18,7 +18,7 @@ async function renderConfessions(main) {
     detail.confessions = clone(snapshot);
   } catch (error) {
     if (!active()) return;
-    loading.replaceWith(panel(ui('Confessions unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, error.message), button(ui('Try again'), () => renderConfessions(main), 'secondary'))));
+    loading.replaceWith(panel(ui('Confessions unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, uiError(error)), button(ui('Try again'), () => renderConfessions(main), 'secondary'))));
     return;
   }
 
@@ -66,10 +66,10 @@ async function renderConfessions(main) {
       const result = DEMO ? clone(detail.confessions) : await api(endpoint);
       if (!active()) return;
       snapshot = result; detail.confessions = clone(result); drawCounts();
-      window.CyroI18n.setContent(refreshStatus, ui("Totals refreshed {p0}. Your settings draft has been kept.", { p0: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }));
+      window.CyroI18n.setContent(refreshStatus, ui("Totals refreshed {p0}. Your settings draft has been kept.", { p0: window.CyroI18n.computedText(((at) => locale => new Date(at).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : locale, { hour: 'numeric', minute: '2-digit' }))(Date.now())) }));
     } catch (error) {
       if (!active()) return;
-      window.CyroI18n.setContent(refreshStatus, ui("{p0} The previous totals are still shown.", { p0: error.message }));
+      window.CyroI18n.setContent(refreshStatus, ui("{p0} The previous totals are still shown.", { p0: uiError(error) }));
     } finally {
       refreshing = false;
       if (active()) { refresh.disabled = false; refresh.replaceChildren(icon('clock'), window.CyroI18n.node(ui('Refresh totals'))); updateDirty(); }
@@ -96,7 +96,7 @@ async function renderConfessions(main) {
     } catch (error) {
       if (!active()) return;
       saveStatus.className = 'save-status error';
-      window.CyroI18n.setContent(saveStatus, error.message + (!error.status || error.status >= 500 ? ' The save could not be confirmed. Reopen this page to check the saved settings.' : ' Your draft is still here.'));
+      window.CyroI18n.setContent(saveStatus, ui(!error.status || error.status >= 500 ? '{error} The save could not be confirmed. Reopen this page to check the saved settings.' : '{error} Your draft is still here.', { error: uiError(error) }));
     } finally {
       busy = false; state.saving = false;
       if (active()) { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); refresh.disabled = false; save.replaceChildren(icon('check'), window.CyroI18n.node(ui('Save changes'))); updateDirty(); }
@@ -106,7 +106,7 @@ async function renderConfessions(main) {
     el('div', { className: 'discord-embed', style: '--embed-colour:#82d9f7' }, el('strong', {}, ui('Anonymous confession')), el('p', {}, ui('I joined for the game nights, but stayed for the people.')), el('small', {}, ui('No author name or profile picture'))),
     el('p', { className: 'field-hint' }, ui('Sample preview. Saving these settings does not publish a message.'))));
   const instructions = contextCard(ui('Share a thought'), ui('Members use /confess and enter their confession in Discord. Cyro confirms privately and posts an embed in your chosen channel.'), 'confession', el('p', {}, ui('Keep identifying details out of confessions. Your community rules still apply; staff can remove posts in Discord.')));
-  const privacy = contextCard(ui('Anonymous to other members'), snapshot.privacy || ui('Names are left off public posts. Discord still processes the command and knows which account submitted it.'), 'lock', link(ui('Access & commands'), 'access'));
+  const privacy = contextCard(ui('Anonymous to other members'), snapshot.privacy ? uiServerCopy(snapshot.privacy) : ui('Names are left off public posts. Discord still processes the command and knows which account submitted it.'), 'lock', link(ui('Access & commands'), 'access'));
   loading.replaceWith(el('div', { className: 'settings-grid' }, form, el('aside', { className: 'stack' }, preview, instructions, privacy)),
     panel(ui('Delivery totals'), el('div', { className: 'form-section stack' }, counts, refreshStatus), refresh));
   drawCounts();

@@ -138,11 +138,11 @@ it('rechecks the session and dashboard permission immediately before a queued st
 it('returns service validation errors and rejects unsupported status-role operations', async () => {
   const f = await fixture();
   const url = `${f.base}/api/guilds/${guildId}/status-roles`;
-  f.statusRoles.updateConfig.mockRejectedValueOnce(new Error('Choose a regular role in this server.'));
+  f.statusRoles.updateConfig.mockRejectedValueOnce(new Error('Choose a role belonging to this server.'));
   const request = { method: 'PATCH', headers: f.headers, body: JSON.stringify(f.config) };
   const response = await fetch(url, request);
   expect(response.status).toBe(400);
-  expect(await response.json()).toEqual({ error: 'Choose a regular role in this server.' });
+  expect(await response.json()).toEqual({ error: 'Choose a role belonging to this server.', i18n: { key: 'Choose a role belonging to this server.', params: {} } });
   expect((await fetch(url, { ...request, method: 'POST' })).status).toBe(405);
   expect((await fetch(`${url}/foreign-role`, request)).status).toBe(405);
   expect((await fetch(`${url}/foreign-role`, { headers: f.headers })).status).toBe(405);

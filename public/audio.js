@@ -2,14 +2,6 @@
 
 let voiceRenderSequence = 0;
 
-// These exact descriptions are emitted by Cyro, not member-authored messages.
-const voiceInterfaceNotes = new Set([
-  'Music accepts direct audio, internet radio and supported public YouTube video links. YouTube playback is best effort and requires the host source installer; playlists, live or restricted videos are not supported. Spotify does not provide full-track audio for this player.',
-  '25 free local Kokoro voices cover English, French, Spanish, Italian, Brazilian Portuguese and Hindi. Select a voice matching the message language; speech does not translate text. Each server uses one voice channel and one mode at a time.',
-  '25 free local Kokoro voices cover English, French, Spanish, Italian, Brazilian Portuguese and Hindi. Select a voice matching the message language; speech does not translate text.',
-  'Free local voices cover English, French, Spanish, German, Brazilian Portuguese, Italian and Hindi when their host runtimes are installed. Search /ttsvoice by voice name or language. Speech reads the original text; it does not translate it. Each server uses one voice channel and one mode at a time.',
-]);
-
 // Availability comes from the host. An unavailable saved choice stays visible;
 // opening the page or switching the interface language never changes settings.
 function voicePicker(voices, config, change) {
@@ -72,7 +64,7 @@ async function renderVoice(main) {
     detail.voice = clone(snapshot);
   } catch (error) {
     if (!active()) return;
-    loading.replaceWith(panel(ui('Voice settings unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, error.message), button(ui('Try again'), () => renderVoice(main), 'secondary'))));
+    loading.replaceWith(panel(ui('Voice settings unavailable'), el('div', { className: 'form-section stack' }, el('p', { role: 'alert' }, uiError(error)), button(ui('Try again'), () => renderVoice(main), 'secondary'))));
     return;
   }
 
@@ -127,7 +119,7 @@ async function renderVoice(main) {
       !snapshot.available?.music && el('div', { className: 'alert info' }, ui('Music is unavailable on this host. The bot operator needs to finish the audio setup.')),
       snapshot.available?.youtube === false && el('div', { className: 'alert info' }, ui('YouTube links are unavailable on this host. Direct audio and radio links can still be used.')),
       !snapshot.available?.tts && el('div', { className: 'alert info' }, ui('Text to speech is unavailable on this host. The bot operator needs to install the free voices.')),
-      ...(snapshot.notes || []).map(note => el('p', { className: 'field-hint' }, voiceInterfaceNotes.has(note) ? ui(note) : note))
+      ...(snapshot.notes || []).map(note => el('p', { className: 'field-hint' }, uiServerCopy(note)))
     ].filter(Boolean));
   }
   async function refreshSession() {
@@ -138,10 +130,10 @@ async function renderVoice(main) {
       if (!active()) return;
       snapshot = result; detail.voice = clone(result);
       drawActivity();
-      window.CyroI18n.setContent(refreshStatus, ui("Session refreshed {p0}. Your settings draft has been kept.", { p0: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }));
+      window.CyroI18n.setContent(refreshStatus, ui("Session refreshed {p0}. Your settings draft has been kept.", { p0: window.CyroI18n.computedText(((at) => locale => new Date(at).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : locale, { hour: 'numeric', minute: '2-digit' }))(Date.now())) }));
     } catch (error) {
       if (!active()) return;
-      window.CyroI18n.setContent(refreshStatus, ui("{p0} The previous session information is still shown.", { p0: error.message }));
+      window.CyroI18n.setContent(refreshStatus, ui("{p0} The previous session information is still shown.", { p0: uiError(error) }));
     } finally {
       refreshing = false;
       if (active()) { refresh.disabled = false; refresh.replaceChildren(icon('clock'), window.CyroI18n.node(ui('Refresh session'))); updateDirty(); }
@@ -165,7 +157,7 @@ async function renderVoice(main) {
     } catch (error) {
       if (!active()) return;
       saveStatus.className = 'save-status error';
-      window.CyroI18n.setContent(saveStatus, ui(!error.status || error.status >= 500 ? '{error} The save could not be confirmed. Reopen this page to check the saved settings.' : '{error} Your draft is still here.', { error: error.message }));
+      window.CyroI18n.setContent(saveStatus, ui(!error.status || error.status >= 500 ? '{error} The save could not be confirmed. Reopen this page to check the saved settings.' : '{error} Your draft is still here.', { error: uiError(error) }));
     } finally {
       busy = false; state.saving = false;
       if (active()) { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); refresh.disabled = false; save.replaceChildren(icon('check'), window.CyroI18n.node(ui('Save changes'))); updateDirty(); }

@@ -1,3 +1,6 @@
+import { dashboardError, dashboardErrorScript, dashboardErrorPage, GENERIC_DASHBOARD_ERROR } from '../i18n/dashboard-errors.js';
+import { BotMessageError } from '../i18n/index.js';
+import { dashboardCommunitySnapshot, dashboardModerationSnapshot } from './diagnostics.js';
 import type { AccessService } from '../control/access.js';
 import type { PublishingService } from '../control/publishing.js';
 import { GuildIdentityService, IdentityError } from '../control/identity.js';
@@ -51,7 +54,9 @@ interface CommunityTools extends ManagedCommunityFeature {
   decide(guild:Guild,actorId:string,id:string,input:unknown,source?:undefined,authorize?:()=>Promise<void>):Promise<unknown>;
 }
 interface Options {tempVoice?:ManagedCommunityFeature;communityTools?:CommunityTools;access?:AccessService;publishing?:PublishingService;suggestions?:Suggestions;statusRoles?:StatusRoles;voice?:CommunityFeature;confessions?:CommunityFeature;client:Client;config:AppConfig;logger:Logger;community:Module;moderation:Module;streams:Streams;creators?:Streams;tiktok?:DashboardTikTok;streamStats?:{snapshot(guildId:string):Promise<unknown>};publicDir:string;sessions?:SessionStore;oauth?:OAuthApi;isOperational?:()=>boolean;drainTimeoutMs?:number;requestTimeoutMs?:number}
-export class HttpError extends Error { constructor(public status:number,message:string) {super(message);} }
+export class HttpError extends BotMessageError {
+  constructor(public status:number,message:string|Error) {const value=dashboardError(message);super(value.i18n.key,value.i18n.params);}
+}
 export function clientAddress(remote:string, forwarded:string|undefined, trustProxy:boolean):string {
   if(!trustProxy||!forwarded)return remote;
   // Trust exactly the immediate proxy's appended hop, never the caller's leftmost entry.
@@ -107,7 +112,11 @@ export class DashboardServer {
       if(res.headersSent) {res.destroy();return;}
       const status = error instanceof HttpError || error instanceof TikTokDashboardError || error instanceof IdentityError ? error.status : 500;
       if(status === 500) this.options.logger.error('Dashboard request failed.', {message:error instanceof Error?error.message:'Unknown error'});
-      this.json(res,status,{error:status === 500?'The request could not be completed. Check the bot log and try again.':error.message});
+      const displayError=status===500?GENERIC_DASHBOARD_ERROR:error;
+      if(req.method==='GET'&&(req.headers.accept??'').includes('text/html')&&new URL(req.url??'/',this.origin).pathname.startsWith('/auth/')){
+        res.writeHead(status,{'Content-Type':'text/html; charset=utf-8'});res.end(dashboardErrorPage(displayError));return;
+      }
+      this.json(res,status,dashboardError(displayError));
     }).finally(()=>clearTimeout(timer))); });
     this.server.requestTimeout=20_000; this.server.headersTimeout=10_000; this.server.keepAliveTimeout=5000;
     await new Promise<void>((resolve,reject)=>{this.server!.once('error',reject);this.server!.listen(port,host,()=>{this.server!.off('error',reject);resolve();});});
@@ -127,7 +136,11 @@ export class DashboardServer {
     });
     return this.stopPromise;
   }
-  private json(res:ServerResponse,status:number,data:unknown):void {if(res.writableEnded||res.destroyed)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
+  private json(res:ServerResponse,status:number,data:unknown):void {
+    if(res.writableEnded||res.destroyed)return;
+    if(data&&typeof data==='object'&&'error' in data&&typeof data.error==='string'&&!('i18n' in data))data={...data,...dashboardError(data.error)};
+    res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));
+  }
   private redirect(res:ServerResponse,url:string):void {if(res.writableEnded||res.destroyed)return;res.writeHead(302,{Location:url});res.end();}
   private assertActive(res:ServerResponse):void {if(res.writableEnded||res.destroyed)throw new HttpError(503,'The request is no longer active.');}
   private cookie(name:string,value:string,seconds:number):string {return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${seconds}${this.secure?'; Secure':''}`;}
@@ -160,6 +173,9 @@ export class DashboardServer {
     const o=this.options;
     if(method==='GET' && route==='/healthz') {this.json(res,200,{ok:true});return;}
     if(method==='GET' && route==='/readyz') {const ready=this.operational;this.json(res,ready?200:503,{ready});return;}
+    if((method==='GET'||method==='HEAD')&&route==='/i18n-errors.js'){
+      res.setHeader('Cache-Control','public, max-age=300');res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8'});res.end(method==='HEAD'?undefined:dashboardErrorScript());return;
+    }
     if(this.stopping)throw new HttpError(503,'The dashboard is shutting down. Please try again shortly.');
     this.rate(req,route.startsWith('/auth/'));
     if(method==='GET' && route==='/api/status') {this.json(res,200,{configured:Boolean(o.config.discordClientSecret),botReady:this.operational,inviteUrl:inviteUrl(o.config.discordClientId)});return;}
@@ -269,7 +285,7 @@ export class DashboardServer {
               if(o.client.guilds.cache.get(guild.id)!==guild)throw new HttpError(404,'The bot is not installed in this server.');
             };
             try {this.json(res,200,await o.access.updateLanguage(guild,session.user.id,input,assertCurrent));}
-            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Invalid language settings.');}
+            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid language settings.');}
             return;
           }
           throw new HttpError(405,'Use GET or PATCH for language settings.');
@@ -297,18 +313,18 @@ export class DashboardServer {
             }
             if(method==='PATCH'&&!id&&section!=='bug-reports') { this.json(res,200,{config:await feature.updateConfig(guild,input,authorize)});return; }
             if(method==='POST'&&id&&section==='bug-reports'&&match[4]==='status') { this.json(res,200,{report:await o.communityTools!.decide(guild,session.user.id,id,input,undefined,authorize)});return; }
-          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'The change could not be saved.');}
+          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'The change could not be saved.');}
           throw new HttpError(405,'Use GET or PATCH for settings, or POST to update a bug report status.');
         }
         if(section==='voice'||section==='confessions'){
           const feature=o[section];
-          if(!feature)throw new HttpError(503,`${section==='voice'?'Voice':'Confession'} settings are not available.`);
+          if(!feature)throw new HttpError(503,'These settings are not available.');
           if(method==='GET'&&!id){this.json(res,200,await feature.snapshot(guild.id));return;}
           if(method==='PATCH'&&!id){
             const assertCurrent=()=>{
               this.assertActive(res);
               if(this.sessions.peek(cookies.dashboard_session??'')!==session)throw new HttpError(401,'Your session expired. Sign in again.');
-              if(!this.operational)throw new HttpError(503,`Cyro is reconnecting. Reload before changing ${section} settings.`);
+              if(!this.operational)throw new HttpError(503,'Cyro is reconnecting. Reload before changing these settings.');
               if(o.client.guilds.cache.get(guild.id)!==guild)throw new HttpError(404,'The bot is not installed in this server.');
             };
             const authorize=async()=>{
@@ -318,10 +334,10 @@ export class DashboardServer {
               assertCurrent();
             };
             try{this.json(res,200,{config:await feature.updateConfig(guild.id,input,authorize)});}
-            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:`Invalid ${section} configuration.`);}
+            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid configuration.');}
             return;
           }
-          throw new HttpError(405,`Use GET or PATCH for ${section} settings.`);
+          throw new HttpError(405,'Use GET or PATCH for these settings.');
         }
         if(section==='status-roles'){
           if(!o.statusRoles)throw new HttpError(503,'Status roles are not available.');
@@ -340,7 +356,7 @@ export class DashboardServer {
             };
             await this.withRoleConfigLock(guild.id,async()=>{
               try{this.json(res,200,{config:await o.statusRoles!.updateConfig(guild.id,input,authorize)});}
-              catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Invalid status role configuration.');}
+              catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid status role configuration.');}
             });
             return;
           }
@@ -366,12 +382,12 @@ export class DashboardServer {
               if(!this.operational)throw new HttpError(503,'Cyro is reconnecting. Reload before changing suggestions.');
             };
             try{this.json(res,200,{config:await o.suggestions.updateConfig(guild.id,input,authorize)});}
-            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Invalid suggestions configuration.');}
+            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid suggestions configuration.');}
             return;
           }
           if(method==='POST'&&id){
             try{this.json(res,200,{suggestion:await o.suggestions.decide(guild,session.user.id,id,input)});}
-            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Could not update this suggestion.');}
+            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Could not update this suggestion.');}
             return;
           }
           throw new HttpError(405,'Use GET or PATCH for suggestions settings, or POST to review a suggestion.');
@@ -417,7 +433,7 @@ export class DashboardServer {
               }};sources.forEach(inspect);
               active();
               this.json(res,200,{config:await o.access!.update(guild,session.user.id,config)});
-            }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Invalid access settings.');}
+            }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid access settings.');}
           });return;
         }
         if(section==='messages'||section==='polls'){
@@ -426,7 +442,7 @@ export class DashboardServer {
             if(method==='GET'&&!id){this.json(res,200,{posts:o.publishing.list(guild.id).filter(p=>p.kind===(section==='polls'?'poll':'message'))});return;}
             if(method==='POST'&&!id){this.json(res,201,{post:await o.publishing.publish(guild,session.user.id,input,section==='polls'?'poll':'message')});return;}
             if(method==='POST'&&id&&section==='polls'){this.json(res,200,await o.publishing.endPoll(guild,session.user.id,id));return;}
-          }catch(error){throw new HttpError(400,error instanceof Error?error.message:'Publishing failed.');}
+          }catch(error){throw new HttpError(400,error instanceof Error?error:'Publishing failed.');}
         }
 
         if(method==='POST' && ((section==='moderation'&&id==='panel')||(section==='community'&&id==='verification-panel'))) {
@@ -439,7 +455,7 @@ export class DashboardServer {
               if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length)throw new HttpError(400,'Verification uses the saved settings. Save them before publishing.');
               this.json(res,201,await o.community.publishVerificationPanel(guild.id));
             }
-          } catch(error) { if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Could not publish this panel.'); }
+          } catch(error) { if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Could not publish this panel.'); }
           return;
         }
         if(method==='GET'&&section==='stream-stats'&&!id) {
@@ -452,17 +468,17 @@ export class DashboardServer {
           const collect=(value:unknown):void=>{if(!value||typeof value!=='object')return;for(const[key,item]of Object.entries(value)){if(/^(userId|ownerId|actorId|claimedBy|closedBy|reviewedBy|lastUserId|memberId|inviterId)$/.test(key)&&typeof item==='string')memberIds.add(item);else if(item&&typeof item==='object')collect(item);}};
           collect(cs);collect(ms);
           const members=[...memberIds].slice(0,250).flatMap(id=>{const member=guild.members.cache.get(id);return member?[{id,displayName:member.displayName}]:[];});
-          this.json(res,200,{guild:{id:guild.id,name:guild.name,icon:guild.icon,memberCount:guild.memberCount},community:{config:cc,snapshot:cs},moderation:{config:mc,snapshot:ms},streams,creators,streamStats,suggestions,statusRoles,voice,confessions,tempVoice,communityTools,members,language:o.access?.language?.(guild.id)??languageSnapshot(),access:{config:o.access?.config(guild.id),isOwner:guild.ownerId===session.user.id,commands:COMMAND_KEYS},posts:o.publishing?.list(guild.id)??[],channels:[...channels.values()].filter(c=>c).map(c=>({id:c!.id,name:c!.name,type:c!.type})),roles:[...guild.roles.cache.values()].filter(r=>r.id!==guild.id&&!r.managed).map(r=>({id:r.id,name:r.name,color:r.color,position:r.position}))});return;
+          this.json(res,200,{guild:{id:guild.id,name:guild.name,icon:guild.icon,memberCount:guild.memberCount},community:{config:cc,snapshot:dashboardCommunitySnapshot(cs)},moderation:{config:mc,snapshot:dashboardModerationSnapshot(ms)},streams,creators,streamStats,suggestions,statusRoles,voice,confessions,tempVoice,communityTools,members,language:o.access?.language?.(guild.id)??languageSnapshot(),access:{config:o.access?.config(guild.id),isOwner:guild.ownerId===session.user.id,commands:COMMAND_KEYS},posts:o.publishing?.list(guild.id)??[],channels:[...channels.values()].filter(c=>c).map(c=>({id:c!.id,name:c!.name,type:c!.type})),roles:[...guild.roles.cache.values()].filter(r=>r.id!==guild.id&&!r.managed).map(r=>({id:r.id,name:r.name,color:r.color,position:r.position}))});return;
         }
         if(method==='PATCH'&&(section==='community'||section==='moderation')&&!id) {
-          try{const config=await o[section].updateConfig(guild.id,input);this.json(res,200,{config});}catch(error){throw new HttpError(400,error instanceof Error?error.message:'Invalid configuration.');}return;
+          try{const config=await o[section].updateConfig(guild.id,input);this.json(res,200,{config});}catch(error){throw new HttpError(400,error instanceof Error?error:'Invalid configuration.');}return;
         }
         if(section==='streams') {
           try {
             if(method==='POST'&&!id){this.json(res,201,{stream:await o.streams.add(guild,input)});return;}
             if(method==='PATCH'&&id){this.json(res,200,{stream:await o.streams.update(guild,id,input)});return;}
             if(method==='DELETE'&&id){await o.streams.remove(guild,id);this.json(res,200,{ok:true});return;}
-          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Invalid stream configuration.');}
+          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid stream configuration.');}
         }
         if(section==='creators') {
           if(!o.creators)throw new HttpError(503,'Creator profiles are not available.');
@@ -471,7 +487,7 @@ export class DashboardServer {
             if(method==='POST'&&!id){this.json(res,201,{creator:await o.creators.add(guild,input)});return;}
             if(method==='PATCH'&&id){this.json(res,200,{creator:await o.creators.update(guild,id,input)});return;}
             if(method==='DELETE'&&id){await o.creators.remove(guild,id);this.json(res,200,{ok:true});return;}
-          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Invalid creator configuration.');}
+          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid creator configuration.');}
         }
       }
       throw new HttpError(404,'Endpoint not found.');
@@ -482,6 +498,8 @@ export class DashboardServer {
     Object.assign(assets,{'/home.js':['home.js','text/javascript'],'/home.css':['home.css','text/css'],'/home-icons.svg':['home-icons.svg','image/svg+xml']});
     Object.assign(assets,{'/icons.js':['icons.js','text/javascript'],'/icons.svg':['icons.svg','image/svg+xml'],'/i18n.js':['i18n.js','text/javascript'],'/i18n-catalogs.js':['i18n-catalogs.js','text/javascript'],'/i18n-extra-catalogs.js':['i18n-extra-catalogs.js','text/javascript'],'/i18n-additional-catalogs.js':['i18n-additional-catalogs.js','text/javascript']});
     Object.assign(assets,{'/help.js':['help.js','text/javascript'],'/temp-voice.js':['temp-voice.js','text/javascript'],'/community-tools.js':['community-tools.js','text/javascript']});
+    Object.assign(assets,{'/auth-error.js':['auth-error.js','text/javascript'],'/auth-error.css':['auth-error.css','text/css']});
+    for(const name of ['core','modules','shell','home'])assets[`/i18n-dashboard-${name}.js`]=[`i18n-dashboard-${name}.js`,'text/javascript'];
     const asset=assets[route];if(!asset)throw new HttpError(404,'Page not found.');
     const file=await readFile(path.join(o.publicDir,asset[0])).catch(()=>{throw new HttpError(404,'Dashboard file not found.');});
     res.writeHead(200,{'Content-Type':`${asset[1]}; charset=utf-8`});res.end(method==='HEAD'?undefined:file);

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { dashboardStream } from './diagnostics.js';
 import { ChannelType, PermissionFlagsBits as P, type Guild } from 'discord.js';
 import type { JsonStore } from '../storage/store.js';
 import type { ProviderMap } from '../providers/index.js';
@@ -21,7 +22,7 @@ export class DashboardStreams {
     return (await this.store.forGuild(guildId)).map(record=>{
       const provider=this.providers[record.platform];
       const configured=provider.isConfigured();
-      return {...record,liveCapability:{available:configured,reason:!configured?provider.configurationHint():record.platform==='tiktok'?'TikTok LIVE uses a best-effort unofficial connector. TikTok changes or host blocking can interrupt checks; an Euler API key may improve reliability.':record.platform==='youtube'?'YouTube LIVE uses the official Data API. New broadcast discovery is paced at 15 minutes per tracked YouTube channel across the bot.':'Live alerts are configured.'},
+      return {...dashboardStream(record),liveCapability:{available:configured,reason:!configured?provider.configurationHint():record.platform==='tiktok'?'TikTok LIVE uses a best-effort unofficial connector. TikTok changes or host blocking can interrupt checks; an Euler API key may improve reliability.':record.platform==='youtube'?'YouTube LIVE uses the official Data API. New broadcast discovery is paced at 15 minutes per tracked YouTube channel across the bot.':'Live alerts are configured.'},
         ...(provider instanceof TikTokProvider ? {tiktokConnection:provider.connectionStatus(record)} : {}),
         uploadsCapability:provider.uploadCapability?.(record)??{available:record.platform==='youtube'&&configured,reason:record.platform==='youtube'?(configured?'New public YouTube videos and Shorts are checked about every 5 minutes (slower above 10 unique channels). Live broadcasts and replays are excluded.':provider.configurationHint()):record.platform==='tiktok'?'TikTok upload alerts require creator OAuth with Login Kit and video.list.':'Automatic uploaded-video alerts are available for YouTube and connected TikTok creators.'}};
     });
