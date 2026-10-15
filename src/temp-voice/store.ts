@@ -18,6 +18,8 @@ function validate(value: TempVoiceGuild): void {
       || !Array.isArray(room.allowed) || !Array.isArray(room.blocked) || room.allowed.length > 50 || room.blocked.length > 50
       || [...room.allowed, ...room.blocked].some(id => !snowflake(id)) || !room.connectBaseline || typeof room.connectBaseline !== 'object' || Array.isArray(room.connectBaseline)) return invalid();
     for (const [id, before] of Object.entries(room.connectBaseline)) if (!snowflake(id) || !before || ![0, 1].includes(before.type) || ['existed', 'allow', 'deny'].some(key => typeof before[key as keyof typeof before] !== 'boolean')) return invalid();
+    if (room.panel !== undefined && (!room.panel || typeof room.panel !== 'object' || Array.isArray(room.panel) || !/^[a-f0-9]{24}$/.test(room.panel.reference)
+      || (room.panel.messageId !== null && !snowflake(room.panel.messageId)) || !Number.isSafeInteger(room.panel.attemptedAt) || room.panel.attemptedAt < 0)) return invalid();
     owners.add(room.ownerId); ids.add(room.id); if (room.channelId) channels.add(room.channelId);
   }
 }

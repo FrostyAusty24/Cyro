@@ -8,6 +8,7 @@ export interface TempVoiceConfig {
   ownerControls: boolean;
 }
 export interface ConnectBaseline { type: 0 | 1; existed: boolean; allow: boolean; deny: boolean }
+export interface RoomPanelReceipt { reference: string; messageId: string | null; attemptedAt: number }
 export interface TempRoom {
   id: string;
   ownerId: string;
@@ -22,6 +23,8 @@ export interface TempRoom {
   allowed: string[];
   blocked: string[];
   connectBaseline: Record<string, ConnectBaseline>;
+  /** Missing on rooms created before control panels were introduced. */
+  panel?: RoomPanelReceipt;
 }
 export interface TempVoiceGuild { config: TempVoiceConfig; rooms: TempRoom[] }
 export const snowflake = (value: unknown): value is string => typeof value === 'string' && /^\d{17,20}$/.test(value);

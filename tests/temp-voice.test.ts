@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Collection, ChannelType, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
+import { Collection, ChannelType, MessageType, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -18,6 +18,7 @@ const overwrite = (id: string, type: 0 | 1, allow = 0n, deny = 0n) => ({ id, typ
 
 async function fixture(options: { ready?: boolean } = {}) {
   const dir = await temporary(), channels = new Collection<string, any>(), members = new Map<string, any>();
+  let nextMessageId = 911111111111111111n;
   const bot = { id: botId, user: { bot: true }, pending: false, permissions: { has: () => true } } as any;
   const guild = { id: guildId, available: true, channels: {}, members: {}, roles: { fetch: vi.fn() }, voiceStates: { cache: new Collection() } } as any;
   const member = (id: string, name: string, staff = false) => ({ id, guild, displayName: name, user: { bot: false }, pending: false, permissions: { has: (bit: bigint) => staff || bit !== P.ManageChannels }, voice: { channelId: lobbyId, setChannel: vi.fn(async (channel: any) => { const value = members.get(id); value.voice.channelId = channel.id; channel.members.set(id, value); }) } });
@@ -25,7 +26,15 @@ async function fixture(options: { ready?: boolean } = {}) {
   const channel = (id: string, type: number, name = id) => {
     const value: any = { id, guild, type, name, parentId: type === ChannelType.GuildVoice ? categoryId : null, createdTimestamp: Date.now(), members: new Collection(), children: { cache: new Collection() }, userLimit: 0, permissionsFor: vi.fn(() => ({ has: () => true })), permissionOverwrites: { cache: new Collection([[guildId, overwrite(guildId, 0, P.ViewChannel | P.Connect)]]) } };
     value.permissionOverwrites.set = vi.fn(async (items: any[]) => { value.permissionOverwrites.cache = new Collection(items.map(item => [item.id, overwrite(item.id, item.type, item.allow, item.deny)])); });
-    value.setName = vi.fn(async (name: string) => { value.name = name; return value; }); value.setUserLimit = vi.fn(async (limit: number) => { value.userLimit = limit; return value; }); value.delete = vi.fn(async () => { channels.delete(id); }); channels.set(id, value); return value;
+    value.setName = vi.fn(async (name: string) => { value.name = name; return value; }); value.setUserLimit = vi.fn(async (limit: number) => { value.userLimit = limit; return value; }); value.delete = vi.fn(async () => { channels.delete(id); });
+    const messages = new Collection<string, any>();
+    value.messages = { cache: messages, fetch: vi.fn(async (input: any) => {
+      if (input.limit) return new Collection([...messages.entries()].slice(-input.limit));
+      const message = messages.get(typeof input === 'string' ? input : input.message);
+      if (!message) throw Object.assign(new Error('Unknown Message'), { code: 10008 }); return message;
+    }) };
+    value.send = vi.fn(async (payload: any) => { const message = { id: String(nextMessageId++), author: { id: botId }, guildId, channelId: id, type: MessageType.Default, webhookId: null, embeds: payload.embeds, components: payload.components }; messages.set(message.id, message); return message; });
+    channels.set(id, value); return value;
   };
   const lobby = channel(lobbyId, ChannelType.GuildVoice), category = channel(categoryId, ChannelType.GuildCategory);
   guild.channels = { cache: channels, fetch: vi.fn(async (id?: string) => id ? channels.get(id) ?? null : channels), create: vi.fn(async (input: any) => {
@@ -39,6 +48,22 @@ async function fixture(options: { ready?: boolean } = {}) {
   const service = new TempVoiceService(client, dir, logger, access); await service.init();
   await service.updateConfig(guild, { ...defaultTempVoiceConfig(), enabled: true, lobbyChannelId: lobbyId, categoryId });
   return { dir, guild, client, access, service, owner, other, bot, lobby, category, channel, channels, members };
+}
+
+function panelButton(f: Awaited<ReturnType<typeof fixture>>, code: 'l' | 'u' | 'n' | 'm', actorId = ownerId) {
+  const channel = f.channels.get(channelId), message = channel.messages.cache.last();
+  const customId = message.components[0].toJSON().components.find((button: any) => button.custom_id.endsWith(`:${code}`)).custom_id;
+  const interaction: any = { customId, guild: f.guild, guildId, channelId, user: { id: actorId }, member: f.members.get(actorId), message, deferred: false, replied: false,
+    isChatInputCommand: () => false, isButton: () => true, isModalSubmit: () => false, inCachedGuild: () => true,
+    deferReply: vi.fn(async () => { interaction.deferred = true; }), editReply: vi.fn(async () => undefined),
+    reply: vi.fn(async () => { interaction.replied = true; }), showModal: vi.fn(async () => { interaction.replied = true; }) };
+  return interaction;
+}
+function modalSubmission(button: any, value: string) {
+  const interaction: any = { ...button, customId: button.showModal.mock.calls[0][0].toJSON().custom_id, deferred: false, replied: false,
+    isButton: () => false, isModalSubmit: () => true, isFromMessage: () => true, fields: { getTextInputValue: () => value },
+    deferReply: vi.fn(async () => { interaction.deferred = true; }), editReply: vi.fn(async () => undefined), reply: vi.fn(async () => { interaction.replied = true; }), showModal: vi.fn() };
+  return interaction;
 }
 
 describe('temporary voice configuration and storage', () => {
@@ -162,5 +187,138 @@ describe('temporary room controls', () => {
     expect(await f.service.handleInteraction(interaction)).toBe(true); expect(interaction.deferReply).toHaveBeenCalledOnce();
     expect(interaction.editReply.mock.calls[0][0]).toMatchObject({ embeds: [{ title: 'Your temporary room', description: expect.stringContaining('Room owner:') }], allowedMentions: { parse: [] } });
     expect(interaction.editReply.mock.calls[0][0].content).toBeUndefined();
+  });
+});
+
+describe('temporary voice room panels', () => {
+  it('posts one durable four-button panel after moving the member, including concurrent reconciliation and restart', async () => {
+    const f = await fixture(); await Promise.all([f.service.joinLobby(f.guild, ownerId), f.service.joinLobby(f.guild, ownerId)]);
+    const channel = f.channels.get(channelId), payload = channel.send.mock.calls[0][0];
+    expect(channel.send).toHaveBeenCalledOnce(); expect(f.owner.voice.setChannel.mock.invocationCallOrder[0]).toBeLessThan(channel.send.mock.invocationCallOrder[0]);
+    expect(payload.allowedMentions).toEqual({ parse: [] }); expect(payload.embeds[0].color).toBe(0x85cae5);
+    expect(payload.components[0].toJSON().components.map((button: any) => button.label)).toEqual(['Lock', 'Unlock', 'Rename', 'Member limit']);
+    const data = JSON.parse(await readFile(path.join(f.dir, 'temp-voice.json'), 'utf8'));
+    expect(data.guilds[guildId].rooms[0].panel.messageId).toBe(channel.messages.cache.first().id);
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init();
+    await Promise.all([restored.reconcile(), restored.reconcile()]); expect(channel.send).toHaveBeenCalledOnce(); expect(restored.snapshot(guildId).warnings).toEqual([]);
+  });
+  it('adds a panel to occupied legacy room records without altering their settings or ownership', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); await f.service.control(f.guild, ownerId, 'lock');
+    const filename = path.join(f.dir, 'temp-voice.json'), data = JSON.parse(await readFile(filename, 'utf8')); delete data.guilds[guildId].rooms[0].panel;
+    f.channels.get(channelId).messages.cache.clear(); await writeFile(filename, JSON.stringify(data));
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init(); await restored.reconcile();
+    expect(f.channels.get(channelId).messages.cache.size).toBe(1); expect(restored.snapshot(guildId).rooms[0]).toMatchObject({ ownerId, locked: true });
+  });
+  it('recovers an accepted send with a lost response by its bot-owned footer, without nonce or reposting', async () => {
+    const f = await fixture(), create = f.guild.channels.create.getMockImplementation();
+    f.guild.channels.create.mockImplementation(async (input: any) => { const room = await create(input), send = room.send.getMockImplementation(); room.send.mockImplementation(async (payload: any) => { await send(payload); throw new Error('Network timeout after acceptance'); }); return room; });
+    await f.service.joinLobby(f.guild, ownerId); expect(f.owner.voice.channelId).toBe(channelId); expect(f.service.snapshot(guildId).warnings.join(' ')).toContain('unconfirmed');
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init(); await restored.reconcile();
+    const room = f.channels.get(channelId); expect(room.send).toHaveBeenCalledOnce(); expect(restored.snapshot(guildId).warnings).toEqual([]);
+    const button = panelButton(f, 'l'); await restored.handleInteraction(button); expect(button.editReply.mock.calls[0][0].embeds[0].description).toContain('locked');
+  });
+  it('never retries an unknown send or trusts a matching footer on a webhook, foreign author or foreign channel', async () => {
+    const f = await fixture(), create = f.guild.channels.create.getMockImplementation();
+    f.guild.channels.create.mockImplementation(async (input: any) => { const room = await create(input); room.send.mockRejectedValue(new Error('Network timeout')); return room; });
+    await f.service.joinLobby(f.guild, ownerId); const room = f.channels.get(channelId), payload = room.send.mock.calls[0][0];
+    const base = { author: { id: botId }, guildId, channelId, type: MessageType.Default, embeds: payload.embeds };
+    room.messages.cache.set('900000000000000001', { ...base, id: '900000000000000001', webhookId: otherId });
+    room.messages.cache.set('900000000000000002', { ...base, id: '900000000000000002', author: { id: otherId } });
+    room.messages.cache.set('900000000000000003', { ...base, id: '900000000000000003', channelId: lobbyId });
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init(); await restored.reconcile();
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now + 61_000); await restored.reconcile();
+    expect(room.send).toHaveBeenCalledOnce(); expect(restored.snapshot(guildId).warnings.join(' ')).toContain('not post a duplicate');
+  });
+  it('does not prevent movement or cleanup when panel permissions are missing, and clears its warning when restored', async () => {
+    const f = await fixture(), create = f.guild.channels.create.getMockImplementation();
+    f.guild.channels.create.mockImplementation(async (input: any) => { const room = await create(input); room.permissionsFor.mockImplementation(() => ({ has: (bits: bigint | bigint[]) => !(Array.isArray(bits) ? bits : [bits]).includes(P.SendMessages) })); return room; });
+    await f.service.joinLobby(f.guild, ownerId); const room = f.channels.get(channelId);
+    expect(f.owner.voice.channelId).toBe(channelId); expect(room.send).not.toHaveBeenCalled(); expect(f.service.snapshot(guildId).warnings.join(' ')).toContain('Send Messages');
+    const reads = f.guild.members.fetchMe.mock.calls.length; await f.service.reconcile(); expect(f.guild.members.fetchMe).toHaveBeenCalledTimes(reads);
+    room.permissionsFor.mockImplementation(() => ({ has: () => true })); const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now + 61_000);
+    await f.service.reconcile(); expect(room.send).toHaveBeenCalledOnce(); expect(f.service.snapshot(guildId).warnings).toEqual([]);
+    room.members.clear(); f.owner.voice.channelId = null; await f.service.reconcile(); expect(room.delete).toHaveBeenCalledOnce();
+  });
+  it('does not send before its intent is durably saved, while allowing the owner to enter', async () => {
+    const f = await fixture(), store = (f.service as any).store, mutate = store.mutate.bind(store); let calls = 0;
+    vi.spyOn(store, 'mutate').mockImplementation((...args: any[]) => ++calls === 3 ? Promise.reject(new Error('Disk full')) : mutate(...args));
+    await f.service.joinLobby(f.guild, ownerId); expect(f.owner.voice.channelId).toBe(channelId); expect(f.channels.get(channelId).send).not.toHaveBeenCalled();
+    const data = JSON.parse(await readFile(path.join(f.dir, 'temp-voice.json'), 'utf8')); expect(data.guilds[guildId].rooms[0].panel).toBeUndefined();
+  });
+  it('recovers a panel if saving its message ID fails after Discord accepts it', async () => {
+    const f = await fixture(), store = (f.service as any).store, mutate = store.mutate.bind(store); let calls = 0;
+    vi.spyOn(store, 'mutate').mockImplementation((...args: any[]) => ++calls === 4 ? Promise.reject(new Error('Disk full')) : mutate(...args));
+    await f.service.joinLobby(f.guild, ownerId); const room = f.channels.get(channelId); expect(room.send).toHaveBeenCalledOnce();
+    const data = JSON.parse(await readFile(path.join(f.dir, 'temp-voice.json'), 'utf8')); expect(data.guilds[guildId].rooms[0].panel.messageId).toBeNull();
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init(); await restored.reconcile();
+    expect(room.send).toHaveBeenCalledOnce(); expect(restored.snapshot(guildId).warnings).toEqual([]);
+  });
+  it('replaces a confirmed deleted panel once and refuses its stale controls', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const old = panelButton(f, 'l'), room = f.channels.get(channelId); room.messages.cache.clear();
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now + 61_000); await f.service.reconcile();
+    expect(room.send).toHaveBeenCalledTimes(2); expect(room.messages.cache.size).toBe(1);
+    await f.service.handleInteraction(old); expect(old.reply.mock.calls[0][0].content).toContain('no longer active'); expect(room.permissionOverwrites.set).not.toHaveBeenCalled();
+  });
+  it('locks and unlocks using panel buttons with fresh command authorization', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId);
+    const lock = panelButton(f, 'l'); await f.service.handleInteraction(lock); expect(lock.deferReply).toHaveBeenCalledOnce(); expect(f.service.snapshot(guildId).rooms[0]?.locked).toBe(true);
+    const unlock = panelButton(f, 'u'); await f.service.handleInteraction(unlock); expect(f.service.snapshot(guildId).rooms[0]?.locked).toBe(false); expect(f.access.member).toHaveBeenCalled();
+    expect(unlock.editReply.mock.calls[0][0]).toMatchObject({ embeds: [{ description: expect.stringContaining('unlocked') }], allowedMentions: { parse: [] } });
+  });
+  it('opens bounded rename and limit modals immediately without fetching or deferring, then applies submissions', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const reads = f.guild.members.fetch.mock.calls.length, name = panelButton(f, 'n');
+    await f.service.handleInteraction(name); expect(name.deferReply).not.toHaveBeenCalled(); expect(name.showModal).toHaveBeenCalledOnce(); expect(f.guild.members.fetch).toHaveBeenCalledTimes(reads);
+    const definition = name.showModal.mock.calls[0][0].toJSON(); expect(definition.custom_id.length).toBeLessThanOrEqual(100); expect(definition.components[0].components[0]).toMatchObject({ min_length: 1, max_length: 80 });
+    const rename = modalSubmission(name, 'A shared space'); await f.service.handleInteraction(rename); expect(f.channels.get(channelId).name).toBe('A shared space');
+    const limit = panelButton(f, 'm'); await f.service.handleInteraction(limit); expect(limit.deferReply).not.toHaveBeenCalled();
+    const change = modalSubmission(limit, '6'); await f.service.handleInteraction(change); expect(f.channels.get(channelId).userLimit).toBe(6);
+    const unlimited = modalSubmission(limit, '0'); await f.service.handleInteraction(unlimited); expect(f.channels.get(channelId).userLimit).toBe(0);
+  });
+  it.each(['-1', '100', '2.5', 'abc', '', '1e1', 'Infinity'])('rejects invalid member limit %j without a channel mutation', async value => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'm'); await f.service.handleInteraction(button);
+    const submit = modalSubmission(button, value); await f.service.handleInteraction(submit); expect(submit.reply.mock.calls[0][0].content).toContain('whole number'); expect(f.channels.get(channelId).setUserLimit).not.toHaveBeenCalled();
+  });
+  it.each(['', 'x'.repeat(81)])('rejects an out-of-bounds room name', async value => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'n'); await f.service.handleInteraction(button);
+    const submit = modalSubmission(button, value); await f.service.handleInteraction(submit); expect(submit.editReply.mock.calls[0][0].content).toContain('1 and 80'); expect(f.channels.get(channelId).setName).toHaveBeenCalledTimes(1);
+  });
+  it('refuses non-owners and disconnected users before opening a modal', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId;
+    const other = panelButton(f, 'n', otherId); await f.service.handleInteraction(other); expect(other.showModal).not.toHaveBeenCalled(); expect(other.reply.mock.calls[0][0].content).toContain('Only this room');
+    f.owner.voice.channelId = lobbyId; const left = panelButton(f, 'm'); await f.service.handleInteraction(left); expect(left.showModal).not.toHaveBeenCalled(); expect(left.reply.mock.calls[0][0].content).toContain('Join the room');
+  });
+  it('rechecks command access and membership on submit after a form was opened', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'm'); await f.service.handleInteraction(button);
+    f.access.commandMember.mockImplementation(() => { throw new Error('Command access revoked'); });
+    const denied = modalSubmission(button, '3'); await f.service.handleInteraction(denied); expect(denied.editReply.mock.calls[0][0].content).toContain('revoked'); expect(f.channels.get(channelId).setUserLimit).not.toHaveBeenCalled();
+    f.access.commandMember.mockReset(); f.owner.voice.channelId = lobbyId;
+    const left = modalSubmission(button, '3'); await f.service.handleInteraction(left); expect(left.editReply.mock.calls[0][0].content).toContain('Join your temporary'); expect(f.channels.get(channelId).setUserLimit).not.toHaveBeenCalled();
+  });
+  it('never changes a different current room using an old room panel or modal', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'm'); await f.service.handleInteraction(button);
+    const secondId = '777777777777777778', second = f.channel(secondId, ChannelType.GuildVoice); f.owner.permissions.has = () => true; f.owner.voice.channelId = secondId;
+    await (f.service as any).store.mutate(guildId, (state: any) => { state.rooms.push({ ...receipt(), id: 'b'.repeat(32), creationName: `cyro-room-${'b'.repeat(32)}`, ownerId: otherId, channelId: secondId }); });
+    const submit = modalSubmission(button, '3'); await f.service.handleInteraction(submit); expect(submit.editReply.mock.calls[0][0].content).toContain('this control panel belongs');
+    const lock = panelButton(f, 'l'); await f.service.handleInteraction(lock); expect(lock.editReply.mock.calls[0][0].content).toContain('this control panel belongs'); expect(second.setUserLimit).not.toHaveBeenCalled(); expect(second.permissionOverwrites.set).not.toHaveBeenCalled();
+  });
+  it('rejects cross-guild, wrong-channel and substituted-message panels', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId);
+    const foreign = panelButton(f, 'l'); foreign.customId = foreign.customId.replace(guildId, otherId); await f.service.handleInteraction(foreign); expect(foreign.reply.mock.calls[0][0].content).toContain('no longer active');
+    const moved = panelButton(f, 'l'); moved.channelId = lobbyId; await f.service.handleInteraction(moved); expect(moved.reply.mock.calls[0][0].content).toContain('original Cyro');
+    const forged = panelButton(f, 'l'); forged.message = { ...forged.message, author: { id: otherId } }; await f.service.handleInteraction(forged); expect(forged.reply.mock.calls[0][0].content).toContain('original Cyro');
+    expect(f.channels.get(channelId).permissionOverwrites.set).not.toHaveBeenCalled();
+  });
+  it('checks ownerControls on opening and submission while allowing joined staff', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const opened = panelButton(f, 'm'); await f.service.handleInteraction(opened);
+    await f.service.updateConfig(f.guild, { ...f.service.getConfig(guildId), ownerControls: false });
+    const denied = modalSubmission(opened, '3'); await f.service.handleInteraction(denied); expect(denied.editReply.mock.calls[0][0].content).toContain('disabled');
+    const blocked = panelButton(f, 'n'); await f.service.handleInteraction(blocked); expect(blocked.showModal).not.toHaveBeenCalled(); expect(blocked.reply.mock.calls[0][0].content).toContain('disabled');
+    f.other.voice.channelId = channelId; f.other.permissions.has = () => true; const staff = panelButton(f, 'm', otherId); await f.service.handleInteraction(staff);
+    const accepted = modalSubmission(staff, '4'); await f.service.handleInteraction(accepted); expect(f.channels.get(channelId).userLimit).toBe(4);
+  });
+  it('rechecks joined presence immediately before a panel mutation', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); let reads = 0;
+    f.access.member.mockImplementation(async () => { if (++reads > 1) f.owner.voice.channelId = lobbyId; return f.owner; });
+    const lock = panelButton(f, 'l'); await f.service.handleInteraction(lock); expect(lock.editReply.mock.calls[0][0].content).toContain('access changed'); expect(f.channels.get(channelId).permissionOverwrites.set).not.toHaveBeenCalled();
   });
 });
