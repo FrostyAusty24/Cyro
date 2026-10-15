@@ -26,7 +26,7 @@ function studioCardFields(session, refresh) {
 }
 
 function renderAccess(main) {
-  state.detail.access ||= { config: { managerAccess: true, dashboardRoleIds: [], commandRoles: {} }, isOwner: true, commands: ['dashboard', 'twitch', 'kick', 'youtube', 'tiktok', 'streamalerts', 'roles-panel', 'moderate', 'ticket', 'apply', 'counting', 'invites', 'rank', 'leaderboard', 'staff-leaderboard', 'streamer-leaderboard', 'support-recovery', 'poll', 'embed', 'suggestion'] };
+  state.detail.access ||= { config: { managerAccess: true, dashboardRoleIds: [], commandRoles: {} }, isOwner: true, commands: ['dashboard', 'twitch', 'kick', 'youtube', 'tiktok', 'streamalerts', 'roles-panel', 'moderate', 'ticket', 'apply', 'counting', 'invites', 'rank', 'leaderboard', 'staff-leaderboard', 'streamer-leaderboard', 'support-recovery', 'time', 'poll', 'embed', 'suggestion'] };
   main.append(heading(ui('Access & commands'), ui('Choose who can manage this server in Cyro and use its commands.')));
   if (!state.detail.access.isOwner && !DEMO) { main.append(panel(ui('Controlled by the server owner'), el('div', { className: 'form-section' }, ui('Only the current Discord server owner can change dashboard access or command roles.')))); return; }
   const session = formSession('access');

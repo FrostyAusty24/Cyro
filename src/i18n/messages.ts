@@ -4,6 +4,7 @@ import { COMMUNITY_MESSAGE_ROWS } from './community-messages.js';
 import { TOOLS_MESSAGE_ROWS } from './tools-messages.js';
 import { MODERATION_MESSAGE_ROWS } from './moderation-messages.js';
 import { VOICE_ERROR_ROWS } from './voice-errors.js';
+import { TIME_CLOCK_MESSAGE_ROWS } from './time-clock.js';
 
 /** English source keys are also the safe fallback for untranslated features. */
 export const MESSAGE_ROWS: ReadonlyArray<readonly [string, string, string]> = [
@@ -185,7 +186,7 @@ export const MESSAGE_ROWS: ReadonlyArray<readonly [string, string, string]> = [
 
 const rows = [
   ...MESSAGE_ROWS.map(([en,fr,es]) => [en,fr,es,ADDITIONAL_TRANSLATIONS[en]!.de,ADDITIONAL_TRANSLATIONS[en]!.pt] as const),
-  ...CORE_MESSAGE_ROWS, ...COMMUNITY_MESSAGE_ROWS, ...TOOLS_MESSAGE_ROWS, ...MODERATION_MESSAGE_ROWS, ...VOICE_ERROR_ROWS,
+  ...CORE_MESSAGE_ROWS, ...COMMUNITY_MESSAGE_ROWS, ...TOOLS_MESSAGE_ROWS, ...MODERATION_MESSAGE_ROWS, ...VOICE_ERROR_ROWS, ...TIME_CLOCK_MESSAGE_ROWS,
 ];
 /** Shared labels keep one canonical translation; all feature catalogs remain independently auditable. */
 export const ALL_MESSAGE_ROWS = [...new Map(rows.slice().reverse().map(row=>[row[0],row])).values()];

@@ -233,3 +233,15 @@ Staff activity includes manual warnings, timeouts, kicks, bans and purges, appli
 Suggestions use the existing `/suggestion` form and voting buttons; admins select its channel and record decisions. Polls use Discord's native voting through the dashboard builder (`/poll`).
 
 New tools default to off. Settings, reports and temporary-room receipts remain guild-scoped and follow the existing 30-day removal retention process. Deploying this release does not change existing channel permissions.
+
+## Time clock
+
+Added in **Cyro 2.28**. In **Time clock**, optionally restrict new clock-ins to selected member roles, enable the feature and save. Leave the roles empty to let all eligible server members clock in. A channel is optional for slash-command use. To add buttons, select a text channel and publish the panel from the dashboard or with `/time panel`. Cyro needs View Channel, Send Messages and Embed Links in that channel. Its existing visibility stays as configured in Discord.
+
+Members press **Clock in** to start recording and **Clock out** to finish. Clock-out replies show the session duration and accumulated total; **My time** shows personal totals and the current session. These replies are private. `/time in`, `/time out` and `/time me` provide the same controls. Only one session can run per member in each server.
+
+`/time clock` shows member totals to users who currently have dashboard access. Other members see only their own time. `/time member user:<member>` lets authorized staff inspect one member, while ordinary members can inspect themselves. Staff use `/time clock page:<number>` to browse longer lists. Dashboard access and command restrictions continue to follow **Access & commands**.
+
+An active session records elapsed wall-clock time until the member clocks out, including time offline or while the bot restarts. It does not monitor presence, messages, voice activity or work performed. Totals include the running session; completed time is saved separately. Disabling new clock-ins or losing an eligible role does not prevent a member from ending an already active session.
+
+Settings, member totals, active-session start times and limited operation/panel receipts are stored per server in `DATA_DIR/time-clock.json`. Include that file in private backups. Server-removal retention applies. The feature starts disabled and has no automatic reset or payroll integration.

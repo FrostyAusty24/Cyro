@@ -34,7 +34,7 @@ function harness() {
   const state: any = { guildId: 'g1', page: 'identity', guilds: [{ id: 'g1', name: 'Save changes' }], detail: { channels: [{ id: 'ch1', name: 'Open', type: 0 }], roles: [{ id: 'r1', name: 'Reward role' }], posts: [] }, dirty: false, saving: false };
   const api = vi.fn(), toast = vi.fn();
   const context = createContext({ window, document, Node: NodeStub, state, DEMO: true, api, toast, crypto: { randomUUID }, localStorage: { getItem: () => 'en', setItem() {} }, location: { origin: 'https://cyro.test' }, URL, URLSearchParams, setTimeout, clearTimeout, Intl, Date, WeakRef });
-  for (const name of ['i18n-catalogs', 'i18n-extra-catalogs', 'i18n-additional-catalogs', 'i18n-dashboard-modules', 'i18n-dashboard-shell', 'i18n-dashboard-core', 'i18n']) {
+  for (const name of ['i18n-catalogs', 'i18n-extra-catalogs', 'i18n-additional-catalogs', 'i18n-dashboard-modules', 'i18n-dashboard-shell', 'i18n-dashboard-core', 'i18n-time-clock', 'i18n']) {
     try { runInContext(asset(name), context); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
   const source = asset('app');

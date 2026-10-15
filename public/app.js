@@ -9,7 +9,7 @@ const navigation = [
   ['counting', 'Counting', 'hash'], ['suggestions', 'Suggestions', 'lightbulb'], ['polls', 'Polls', 'vote'], ['confessions', 'Anonymous confessions', 'confession'], ['voice', 'Music & TTS', 'headphones'], ['temp-voice', 'Temporary voice', 'voice'], ['welcome', 'Welcome & roles', 'wave'], ['status-roles', 'Status roles', 'sparkles'], ['verification', 'Verification', 'lock'],
   ['invites', 'Invites & levels', 'gift'], ['moderation', 'Moderation', 'shield'], ['identity', 'Bot appearance', 'paintbrush'],
   ['tickets', 'Support tickets', 'ticket'], ['applications', 'Applications', 'file'], ['bug-reports', 'Bug reports', 'bug'],
-  ['staff', 'Staff leaderboard', 'award'], ['messages', 'Channel messages', 'message'], ['sticky', 'Sticky messages', 'pin'], ['access', 'Access & commands', 'key-round']
+  ['staff', 'Staff leaderboard', 'award'], ['time-clock', 'Time clock', 'clock'], ['messages', 'Channel messages', 'message'], ['sticky', 'Sticky messages', 'pin'], ['access', 'Access & commands', 'key-round']
 ].map(([key, label, iconName]) => [key, ui(label), iconName]);
 const state = { me: null, guilds: [], guildId: null, detail: null, page: 'overview', dirty: false, staffPeriod: '7d', staffSort: 'totalActions', staffQuery: '', staffActivity: 'all', streamerPeriod: '7d', streamerSort: 'trackedMilliseconds', streamerView: 'creators', status: null, streamEditor: null, creatorEditor: null, loading: false, saving: false, loadSequence: 0 };
 let toastTimer;
@@ -131,7 +131,7 @@ function renderShell() {
     return;
   }
   if (!state.detail) { main.append(el('div', { className: 'alert' }, state.loadError || ui('Could not load this server.'), button(ui('Try again'), () => selectGuild(state.guildId, true), 'secondary small'))); return; }
-  const pages = { overview: renderOverview, help: renderHelp, streams: renderStreams, 'streamer-leaderboard': renderStreamerLeaderboard, counting: renderCounting, suggestions: renderSuggestions, confessions: renderConfessions, voice: renderVoice, 'temp-voice': renderTempVoice, 'bug-reports': renderBugReports, sticky: renderStickyMessages, welcome: renderWelcome, 'status-roles': renderStatusRoles, verification: renderVerification, invites: renderInvites, moderation: renderModeration, identity: renderIdentity, tickets: main => renderSupportSetup(main, 'tickets'), applications: main => renderSupportSetup(main, 'applications'), staff: renderStaff, messages: main => renderPublishing(main, 'message'), polls: main => renderPublishing(main, 'poll'), access: renderAccess };
+  const pages = { overview: renderOverview, help: renderHelp, streams: renderStreams, 'streamer-leaderboard': renderStreamerLeaderboard, counting: renderCounting, suggestions: renderSuggestions, confessions: renderConfessions, voice: renderVoice, 'temp-voice': renderTempVoice, 'time-clock': renderTimeClock, 'bug-reports': renderBugReports, sticky: renderStickyMessages, welcome: renderWelcome, 'status-roles': renderStatusRoles, verification: renderVerification, invites: renderInvites, moderation: renderModeration, identity: renderIdentity, tickets: main => renderSupportSetup(main, 'tickets'), applications: main => renderSupportSetup(main, 'applications'), staff: renderStaff, messages: main => renderPublishing(main, 'message'), polls: main => renderPublishing(main, 'poll'), access: renderAccess };
   pages[state.page](main);
 }
 
@@ -155,6 +155,7 @@ function renderOverview(main) {
     ['confession', '', 'Anonymous confessions', 'A space to share without a name', 'confessions', state.detail.confessions?.config.enabled],
     ['gift', 'orange', 'Invites', cc.invites.loggingEnabled ? 'Staff invite history and join sources' : cc.invites.enabled ? cc.invites.challengeName : 'Logs and community challenges', 'invites', cc.invites.enabled || cc.invites.loggingEnabled],
     ['ticket', '', 'Support tickets', 'Support channels your way', 'tickets', mc.tickets.enabled],
+    ['clock', '', 'Time clock', 'Member shifts and total time', 'time-clock', state.detail.timeClock?.config.enabled],
     ['file', '', 'Applications', 'Staff and role applications', 'applications', mc.applications.enabled]
   ].map(([ic, color, title, copy, page, enabled]) => el('a', { href: `#${page}`, className: 'module-row' }, el('span', { className: `module-icon ${color}` }, icon(ic)), el('div', { className: 'module-text' }, el('div', { className: 'module-name' }, ui(title)), el('div', { className: 'module-copy' }, page === 'invites' && cc.invites.enabled && !cc.invites.loggingEnabled ? copy : ui(copy))), tag(enabled ? ui('On') : ui('Set up'), enabled ? 'green' : 'muted'))))));
   const recent = [...(ms.moderationCases || []).map(c => ({ text: ui('{action} · {member}', { action: moderationAction(c.action), member: userLabel(c.userId) }), at: c.createdAt })), ...(ms.tickets || []).map(t => ({ text: ui(t.status === 'closed' ? 'Ticket closed · {member}' : 'Ticket opened · {member}', { member: userLabel(t.ownerId) }), at: t.closedAt || t.createdAt }))].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 3);
@@ -684,6 +685,15 @@ function demoData() {
   state.demoDetail.roles.push({ id: `${role}5`, name: 'Community supporter' });
   state.demoDetail.statusRoles = { config: { enabled: true, text: 'discord.gg/commonroom', roleId: `${role}5`, match: 'contains', caseSensitive: false, offlineBehavior: 'keep' }, available: true, counts: { assigned: 18, pendingAdd: 0, pendingRemove: 0 }, warnings: [] };
   state.demoDetail.tempVoice = { config: { enabled: false, lobbyChannelId: null, categoryId: null, nameTemplate: "{name}'s room", userLimit: 0, maxRooms: 10, ownerControls: true }, rooms: [], pending: 0, warnings: [] };
+  const clockAsOf = Date.now();
+  state.demoDetail.timeClock = {
+    config: { enabled: true, channelId: `${channel}4`, roleIds: [`${role}2`] },
+    members: [
+      { userId: staff[0].userId, totalMs: 41400000, completedMs: 36000000, activeMs: 5400000, startedAt: clockAsOf - 5400000, shifts: 4, lastShiftMs: 9000000 },
+      { userId: staff[1].userId, totalMs: 25200000, completedMs: 25200000, activeMs: 0, startedAt: null, shifts: 3, lastShiftMs: 7200000 },
+      { userId: staff[2].userId, totalMs: 12600000, completedMs: 10800000, activeMs: 1800000, startedAt: clockAsOf - 1800000, shifts: 2, lastShiftMs: 5400000 }
+    ], counts: { members: 3, active: 2, totalMs: 79200000 }, asOf: clockAsOf
+  };
   state.demoDetail.communityTools = { config: { bugs: { enabled: false, cooldownMinutes: 5, categories: [] }, stickies: [] }, reports: [], counts: { open: 0, in_progress: 0, resolved: 0, dismissed: 0, pending: 0 }, stickyStates: [], page: 1, totalPages: 1 };
   state.demoDetail.channels.push({ id: `${channel}10`, name: 'The lounge', type: 2 }, { id: `${channel}11`, name: 'confessions', type: 0 });
   state.demoDetail.voice = {

@@ -2,7 +2,7 @@
 
 A Discord community bot with a web dashboard, creator alerts, moderation, tickets, applications and community activities. One running application can serve multiple Discord servers; settings, permissions and activity records stay separate for each server.
 
-**Version 2.24.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
+**Version 2.28.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
 
 [Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Headache Development support](https://discord.gg/dAZheerkkD)
 
@@ -15,6 +15,7 @@ A Discord community bot with a web dashboard, creator alerts, moderation, ticket
 - **Community:** counting, message XP, invite challenges, optional staff invite history, polls, embed publishing, suggestions/voting and anonymous public confession posts.
 - **Voice:** compatible direct audio/radio and supported public YouTube video links, plus 27 free local TTS voices across seven languages for messages from members in the current call.
 - **Management:** Discord sign-in, searchable server/channel/role pickers, per-server settings, owner-controlled dashboard/command access, server-specific bot appearance and staff leaderboards.
+- **Time clock:** optional clock-in/out buttons, private session and total-time checks, and member totals for authorized dashboard staff. Each server keeps its own records.
 
 All current features of the official hosted Cyro service are free. Paid options would only be considered if its hosting costs became too expensive to sustain. Self-hosting requires your own infrastructure and platform credentials.
 
@@ -91,6 +92,8 @@ Choose a voice matching the language being typed. TTS pronounces the original me
 ## Commands and feature setup
 
 Start with `/dashboard`. Useful member commands include `/counting`, `/rank`, `/leaderboard`, `/invites`, `/streamer-leaderboard`, `/suggestion`, `/confess`, `/ticket open` and `/apply`. Voice commands include `/playmusic`, `/musicqueue`, `/skipmusic`, `/stopmusic`, `/addtts`, `/ttsvoice` and `/stoptts`.
+
+Enable **Time clock** and publish its panel to let members start and stop recording with buttons. `/time in` and `/time out` do the same; `/time me` shows personal time. `/time clock` shows everyone's totals to people with dashboard access and only personal time to other members. `/time member user:<member>` follows the same access rule. See [time clock setup](FEATURE_SETUP.md#time-clock).
 
 Under **Music & TTS**, enable **Say the speaker’s name** to announce each member’s server display name before their chat message, for example “Frosty said: Hello everyone.” It starts off and is saved separately for each server. Personal voice choices still apply.
 

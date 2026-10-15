@@ -33,6 +33,7 @@ export const COMMAND_DESCRIPTIONS: Readonly<Record<string, readonly [string, str
   suggestion: ['Proposer une idée au vote des membres du serveur.', 'Proponer una idea para que voten los miembros del servidor.'],
   poll: ['Ouvrir le créateur de sondages dans le tableau de bord.', 'Abrir el creador de encuestas en el panel.'],
   embed: ['Ouvrir le rédacteur de messages dans le tableau de bord.', 'Abrir el editor de mensajes en el panel.'],
+  time: ['Pointer l’arrivée, le départ et consulter le temps enregistré sur ce serveur.', 'Registrar entradas, salidas y consultar el tiempo registrado en este servidor.'],
 };
 
 const GERMAN_PORTUGUESE_DESCRIPTIONS: Readonly<Record<string, readonly [string, string]>> = {
@@ -69,6 +70,7 @@ const GERMAN_PORTUGUESE_DESCRIPTIONS: Readonly<Record<string, readonly [string, 
   suggestion: ['Eine Idee vorschlagen, über die Servermitglieder abstimmen können.', 'Sugerir uma ideia para os membros do servidor votarem.'],
   poll: ['Den Umfrage-Editor im Dashboard öffnen.', 'Abrir o criador de enquetes no painel.'],
   embed: ['Den Nachrichten-Editor im Dashboard öffnen.', 'Abrir o editor de mensagens no painel.'],
+  time: ['Ein- und ausstempeln und die erfasste Zeit auf diesem Server prüfen.', 'Registrar entradas, saídas e consultar o tempo registrado neste servidor.'],
 };
 
 export function commandDescriptionLocalizations(name: string, description: string) {
