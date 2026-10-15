@@ -48,6 +48,14 @@ Non-English speech uses the unmodified, integrity-pinned `ephone` package, autho
 
 Preserve model, runtime, transitive dependency and native-library notices alongside packaged installations, including container images. The runtime uses locally installed assets for speech; downloading those assets does not send chat text to their publishers.
 
+## Optional German speech runtime
+
+German uses its own local Piper models through `sherpa-onnx-node` 1.13.8; it is not synthesized with an unsupported Kokoro language. The separately installed `bin/tts-german` runtime is pinned by [scripts/german-runtime/package-lock.json](scripts/german-runtime/package-lock.json), with public model archive and model-file SHA-256 checksums in [models.json](scripts/german-runtime/models.json).
+
+The Sherpa wrapper is Apache-2.0. Its native components include ONNX Runtime (MIT) and eSpeak NG (GPL-3.0-or-later), whose own licenses remain applicable. Full [Sherpa license](scripts/german-runtime/SHERPA-LICENSE.txt), [eSpeak license](scripts/german-runtime/ESPEAK-LICENSE.txt), upstream source links and [attribution notices](scripts/german-runtime/THIRD-PARTY-NOTICES.txt) accompany the optional runtime. Cyro's MIT license does not relicense them.
+
+The voices are **Thorsten** (`de_DE-thorsten-medium`, German male, 22,050 Hz) and **Kerstin** (`de_DE-kerstin-low`, German female, 16,000 Hz), from the [upstream Sherpa model releases](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models). Their original `MODEL_CARD` files remain beside the models. Those cards identify CC0 datasets from [Thorsten-Voice](https://github.com/thorstenMueller/Thorsten-Voice) and [dataset-voice-kerstin](https://github.com/rhasspy/dataset-voice-kerstin). Models and native binaries are downloaded at installation and are not committed to Cyro's source repository. Speech inference stays on the host; the installer verifies both voices with a public diagnostic sentence before advertising availability.
+
 ## Optional YouTube source runtime
 
 The installer fetches the official yt-dlp 2026.08.19 binary and verifies its SHA-256 against a pinned value and the upstream release manifest. Binaries are not committed here. yt-dlp and its bundled components retain their upstream licenses; consult the exact [release files](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.08.19) and [license information](https://github.com/yt-dlp/yt-dlp#license) before distributing a packaged runtime. The diagnostic uses a small fragment of Big Buck Bunny, copyright 2008 Blender Foundation, under [CC BY 3.0](https://peach.blender.org/about/), without saving the media.

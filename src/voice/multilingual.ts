@@ -11,7 +11,7 @@ export function normalizeMultilingualPhonemes(phonemes: string): string {
     .replace(/[\u0361^-]/g, '').replace(/[।॥]/g, '.').replace(/\s+/g, ' ').trim();
 }
 
-export function multilingualPhonemes(phonemizer: LocalPhonemizer, text: string, language: Exclude<SpeechLanguage, 'en'>): string {
+export function multilingualPhonemes(phonemizer: LocalPhonemizer, text: string, language: Exclude<SpeechLanguage, 'en' | 'de'>): string {
   if (!Object.hasOwn(espeakLanguages, language)) throw new Error('Unsupported speech language.');
   const espeakLanguage = espeakLanguages[language];
   if (!espeakLanguage) throw new Error('Unsupported speech language.');

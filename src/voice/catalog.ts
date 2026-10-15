@@ -18,6 +18,7 @@ export const TTS_LANGUAGES = [
   { id: 'en', name: 'English', nativeName: 'English' },
   { id: 'fr', name: 'French', nativeName: 'Français' },
   { id: 'es', name: 'Spanish', nativeName: 'Español' },
+  { id: 'de', name: 'German', nativeName: 'Deutsch' },
   { id: 'it', name: 'Italian', nativeName: 'Italiano' },
   { id: 'pt-BR', name: 'Brazilian Portuguese', nativeName: 'Português (Brasil)' },
   { id: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
@@ -40,6 +41,8 @@ export const TTS_VOICES = [
   { id: 'hi-beta', name: 'Beta · Hindi female', engineVoice: 'hf_beta', gender: 'female', accent: 'Hindi', language: 'hi' },
   { id: 'hi-omega', name: 'Omega · Hindi male', engineVoice: 'hm_omega', gender: 'male', accent: 'Hindi', language: 'hi' },
   { id: 'hi-psi', name: 'Psi · Hindi male', engineVoice: 'hm_psi', gender: 'male', accent: 'Hindi', language: 'hi' },
+  { id: 'de-thorsten', name: 'Thorsten · German male', engineVoice: 'piper_de_thorsten', gender: 'male', accent: 'German', language: 'de' },
+  { id: 'de-kerstin', name: 'Kerstin · German female', engineVoice: 'piper_de_kerstin', gender: 'female', accent: 'German', language: 'de' },
 ] as const;
 
 export type VoiceId = typeof TTS_VOICES[number]['id'];

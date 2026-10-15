@@ -1,0 +1,29 @@
+Cyro optional German speech runtime
+
+sherpa-onnx-node 1.13.8, by the next-gen Kaldi team, is licensed under Apache-2.0.
+Source and build instructions: https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8
+The complete Apache license accompanies this runtime in SHERPA-LICENSE.txt.
+Its native package includes ONNX Runtime (MIT) and eSpeak NG (GPL-3.0-or-later).
+Preserve their upstream notices and licenses when redistributing compiled binaries.
+eSpeak NG source: https://github.com/espeak-ng/espeak-ng
+ONNX Runtime source and notices: https://github.com/microsoft/onnxruntime
+ESPEAK-LICENSE.txt retains the complete GNU GPL version 3 text.
+Cyro's MIT license does not relicense these native components.
+
+German voice models are the upstream Piper models converted for sherpa-onnx:
+https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models
+Each complete MODEL_CARD is retained beside its downloaded model.
+
+de_DE-thorsten-medium: German male, 22,050 Hz.
+Dataset and speaker: Thorsten Mueller / Thorsten-Voice; model card declares CC0 dataset.
+https://github.com/thorstenMueller/Thorsten-Voice
+https://huggingface.co/rhasspy/piper-voices/tree/main/de/de_DE/thorsten/medium
+
+de_DE-kerstin-low: German female, 16,000 Hz.
+Dataset: rhasspy/dataset-voice-kerstin; model card declares CC0 dataset.
+https://github.com/rhasspy/dataset-voice-kerstin
+https://huggingface.co/rhasspy/piper-voices/tree/main/de/de_DE/kerstin/low
+
+The model archive and ONNX file checksums are pinned in models.json. These models
+and native binaries are installed on the host, not included in Cyro's source
+repository. All inference is local; model downloads do not contain member speech.

@@ -21,7 +21,7 @@ it('offers six male and six female voices while preserving the original saved ID
   ]);
   expect(TTS_VOICES.filter(voice => voice.language === 'en' && voice.gender === 'male')).toHaveLength(6);
   expect(TTS_VOICES.filter(voice => voice.language === 'en' && voice.gender === 'female')).toHaveLength(6);
-  expect(TTS_VOICES).toHaveLength(25);
+  expect(TTS_VOICES).toHaveLength(27);
 });
 
 it('persists every catalog voice while preserving existing server defaults and rejecting invalid IDs', async () => {
@@ -41,7 +41,7 @@ it('persists every catalog voice while preserving existing server defaults and r
     });
   }
   const restarted = new VoiceStore(directory); await restarted.init();
-  expect(restarted.get(newGuild).config.defaultVoice).toBe('hi-psi');
+  expect(restarted.get(newGuild).config.defaultVoice).toBe('de-kerstin');
   expect(Object.values(restarted.get(newGuild).voices)).toEqual(TTS_VOICES.map(voice => voice.id));
   expect(restarted.get(existingGuild).config.defaultVoice).toBe('voice4');
   expect(restarted.get(existingGuild).voices['323456789012345678']).toBe('voice3');

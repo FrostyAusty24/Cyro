@@ -110,7 +110,9 @@ it('durably saves a default voice and speaker names through the authorized dashb
     expect(response.status).toBe(200);
     const snapshot = await response.json();
     expect(snapshot.voices.slice(0, 12).map((item: { id: string }) => item.id)).toEqual(Array.from({ length: 12 }, (_, i) => `voice${i + 1}`));
-    expect(snapshot.voices).toHaveLength(25);
+    expect(snapshot.voices).toHaveLength(27);
+    expect(snapshot.voices.filter((item: { language: string }) => item.language === 'de')).toHaveLength(2);
+    expect(snapshot.voices.every((item: { available: unknown }) => typeof item.available === 'boolean')).toBe(true);
     expect(snapshot.voices.some((item: { id: string }) => item.id === 'fr-siwis')).toBe(true);
     expect(snapshot.voices.filter((item: { language: string; gender: string }) => item.language === 'en' && item.gender === 'male')).toHaveLength(6);
     expect(snapshot.voices.filter((item: { language: string; gender: string }) => item.language === 'en' && item.gender === 'female')).toHaveLength(6);

@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
 import { decodeAudio, type AudioSource } from './audio.js';
-import { synthesizeSpeech, ttsAvailable } from './tts.js';
+import { synthesizeSpeech, ttsAvailable, voiceAvailable } from './tts.js';
+import { TTS_VOICES } from './catalog.js';
 
 export interface VoiceRuntimeCheck { audio: boolean; tts: boolean; dave: boolean }
 const require = createRequire(import.meta.url);
@@ -69,7 +70,8 @@ export async function checkVoiceRuntime(): Promise<VoiceRuntimeCheck> {
   try { result.audio = await probeAudio(silenceWav(), AbortSignal.timeout(12_000), false); } catch { /* No audio decoder. */ }
   if (result.audio && ttsAvailable()) {
     const signal = AbortSignal.timeout(25_000);
-    try { result.tts = await probeAudio(await synthesizeSpeech('Cyro voice check', 'voice1', signal), signal, true); }
+    const voice = TTS_VOICES.find(voice => voiceAvailable(voice.id));
+    try { if (voice) result.tts = await probeAudio(await synthesizeSpeech(voice.language === 'de' ? 'Hallo, dies ist eine Sprachprüfung.' : 'Cyro voice check', voice.id, signal), signal, true); }
     catch { /* Preserve working music when the optional neural runtime is unavailable. */ }
   }
   return result;

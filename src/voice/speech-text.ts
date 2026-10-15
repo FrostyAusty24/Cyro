@@ -28,6 +28,7 @@ export function prepareSpeechText(text: string, speakerName?: string, language: 
   const labels: Record<SpeechLanguage, { someone: string; said: string }> = {
     en: { someone: 'Someone', said: 'said' }, fr: { someone: 'Quelqu’un', said: 'a dit' },
     es: { someone: 'Alguien', said: 'dijo' }, it: { someone: 'Qualcuno', said: 'ha detto' },
+    de: { someone: 'Jemand', said: 'sagte' },
     'pt-BR': { someone: 'Alguém', said: 'disse' }, hi: { someone: 'किसी', said: 'ने कहा' },
   };
   const label = labels[language];

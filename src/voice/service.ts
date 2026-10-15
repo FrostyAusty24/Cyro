@@ -3,7 +3,7 @@ import type { AccessService } from '../control/access.js';
 import type { Logger } from '../logger.js';
 import { VoiceStore, parseVoiceConfig, isVoiceId, type VoiceId } from './store.js';
 import { VoiceSessions, type VoiceOutput } from './sessions.js';
-import { TTS_VOICES, ttsAvailable, shutdownSpeech } from './tts.js';
+import { TTS_VOICES, ttsAvailable, voiceAvailable, shutdownSpeech } from './tts.js';
 import { parseAudioUrl } from './urls.js';
 import { VOICE_COMMAND_NAMES } from './commands.js';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +11,8 @@ import { audioAvailable } from './audio.js';
 import { parseYouTubeUrl, resolveYouTubeSource, youtubeAvailable, YouTubeSourceError } from './youtube.js';
 import { speechSpeakerName, TTS_MAX_CHARACTERS } from './speech-text.js';
 import type { SpeechLanguage } from './catalog.js';
-import { botText } from '../i18n/index.js';
+import { botLocale, botText } from '../i18n/index.js';
+import { voiceChoices } from './voice-search.js';
 
 export function spokenText(text:string,language:SpeechLanguage='en'):string {
   if(text.trimStart().startsWith('/'))return '';
@@ -19,6 +20,7 @@ export function spokenText(text:string,language:SpeechLanguage='en'):string {
     en: ['spoiler','link','someone','role','channel','everyone'],
     fr: ['contenu masqué','lien','quelqu’un','rôle','salon','tout le monde'],
     es: ['contenido oculto','enlace','alguien','rol','canal','todo el mundo'],
+    de: ['verdeckter Inhalt','Link','jemand','Rolle','Kanal','alle'],
     it: ['contenuto nascosto','collegamento','qualcuno','ruolo','canale','tutti'],
     'pt-BR': ['conteúdo oculto','link','alguém','cargo','canal','todos'],
     hi: ['छिपा संदेश','लिंक','कोई','भूमिका','चैनल','सभी'],
@@ -44,7 +46,7 @@ export class VoiceService {
   setRuntimeStatus(status:{audio:boolean;tts:boolean;dave:boolean}){this.runtimeStatus={...status};}
   private availability(){const audio=(this.runtimeStatus?.audio??audioAvailable())&&(this.runtimeStatus?.dave??true);return {music:audio,youtube:audio&&youtubeAvailable(),tts:audio&&(this.runtimeStatus?.tts??ttsAvailable())};}
   private assertAvailable(mode:'music'|'tts'){if(!this.availability()[mode])throw new Error(`${mode==='music'?'Music':'TTS'} is unavailable on this host. Ask the bot operator to check the voice runtime.`);}
-  snapshot(guildId:string){return {config:this.getConfig(guildId),voices:TTS_VOICES,session:this.sessions.snapshot(guildId),available:this.availability(),notes:['Music accepts direct audio, internet radio and supported public YouTube video links. YouTube playback is best effort and requires the host source installer; playlists, live or restricted videos are not supported. Spotify does not provide full-track audio for this player.','25 free local Kokoro voices cover English, French, Spanish, Italian, Brazilian Portuguese and Hindi. Select a voice matching the message language; speech does not translate text. Each server uses one voice channel and one mode at a time.']};}
+  snapshot(guildId:string){return {config:this.getConfig(guildId),voices:TTS_VOICES.map(voice=>({...voice,available:voiceAvailable(voice.id)})),session:this.sessions.snapshot(guildId),available:this.availability(),notes:['Music accepts direct audio, internet radio and supported public YouTube video links. YouTube playback is best effort and requires the host source installer; playlists, live or restricted videos are not supported. Spotify does not provide full-track audio for this player.','Free local voices cover English, French, Spanish, German, Brazilian Portuguese, Italian and Hindi when their host runtimes are installed. Search /ttsvoice by voice name or language. Speech reads the original text; it does not translate it. Each server uses one voice channel and one mode at a time.']};}
   async updateConfig(guildId:string,input:unknown,authorize?:()=>Promise<void>){
     const config=parseVoiceConfig(input);return this.enqueue(guildId,async()=>{const saved=await this.store.mutate(guildId,state=>{state.config=config;return config;},async()=>{this.assertRunning();await authorize?.();this.assertRunning();});if(!saved.musicEnabled)this.cancelMusicLoads(guildId);this.sessions.update(guildId,saved);return saved;});
   }
@@ -114,10 +116,18 @@ export class VoiceService {
   }
   async setVoice(guild:Guild,userId:string,voice:string){
     if(!isVoiceId(voice))throw new Error('Choose one of the available voices.');
+    if(!voiceAvailable(voice))throw new Error('This voice is not installed on this host yet. Choose another voice or ask the bot operator to install it.');
     return this.enqueue(guild.id,()=>this.store.mutate(guild.id,state=>{if(!state.voices[userId]&&Object.keys(state.voices).length>=10000)throw new Error('This server has reached its saved voice preference limit.');state.voices[userId]=voice;return voice;},async()=>{this.assertRunning();await this.access.command(guild,userId,'ttsvoice',true);this.assertRunning();}));
   }
   private readonly onInteraction=(interaction:Interaction)=>{
-    if(this.stopped||!interaction.isChatInputCommand()||!VOICE_COMMAND_NAMES.includes(interaction.commandName))return;
+    if(this.stopped)return;
+    if(interaction.isAutocomplete?.()){
+      if(interaction.commandName!=='ttsvoice')return;
+      const focused=interaction.options.getFocused(true);
+      const choices=interaction.inCachedGuild()&&focused.name==='voice'?voiceChoices(focused.value,botLocale(interaction.guildId,interaction.locale),voiceAvailable):[];
+      this.track(interaction.respond(choices).catch(()=>{this.logger.warn('Voice search could not complete.');}));return;
+    }
+    if(!interaction.isChatInputCommand()||!VOICE_COMMAND_NAMES.includes(interaction.commandName))return;
     // UI language follows server preferences; speech language follows the selected voice.
     const t=(source:string,params:Record<string,string|number>={})=>botText(interaction.guildId,source,params,interaction.locale);
     const task=(async()=>{

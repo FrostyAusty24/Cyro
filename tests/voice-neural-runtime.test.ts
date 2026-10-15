@@ -118,3 +118,47 @@ it('splits long speech into short complete-word chunks without dropping text', (
   expect(chunks.join(' ')).toBe(text);
   expect(splitSpeechText('x'.repeat(400)).map(chunk => chunk.length)).toEqual([100, 100, 100, 100]);
 });
+
+it('switches speech backends and German models only after confirmed worker exit', async () => {
+  const children: ReturnType<typeof fakeChild>[] = [];
+  const spawn = vi.fn(() => { const child = fakeChild(); children.push(child); return child as any; });
+  const runtime = new NeuralTtsQueue({ spawn });
+  const english = runtime.synthesize('English message', 'bm_daniel');
+  const german = runtime.synthesize('Deutsche Nachricht', 'piper_de_thorsten');
+  children[0].emit('message', { type: 'ready' });
+  children[0].emit('message', { type: 'result', id: children[0].send.mock.calls[0][0].id, wav: wav() });
+  await english;
+  expect(children[0].kill).toHaveBeenCalledWith('SIGKILL');
+  expect(children).toHaveLength(1);
+  children[0].emit('exit', null, 'SIGKILL');
+  expect(spawn).toHaveBeenLastCalledWith('piper_de_thorsten');
+  children[1].emit('message', { type: 'ready' });
+  children[1].emit('message', { type: 'result', id: children[1].send.mock.calls[0][0].id, wav: wav() });
+  await german;
+  const secondGerman = runtime.synthesize('Andere deutsche Stimme', 'piper_de_kerstin');
+  expect(children).toHaveLength(2);
+  children[1].emit('exit', null, 'SIGKILL');
+  expect(spawn).toHaveBeenLastCalledWith('piper_de_kerstin');
+  children[2].emit('message', { type: 'ready' });
+  children[2].emit('message', { type: 'result', id: children[2].send.mock.calls[0][0].id, wav: wav() });
+  await secondGerman;
+  const closing = runtime.close(); children[2].emit('exit', 0, null); await closing;
+});
+
+it('keeps other speech models queued when an optional German worker fails to initialize', async () => {
+  const children: ReturnType<typeof fakeChild>[] = [];
+  const spawn = vi.fn(() => { const child = fakeChild(); children.push(child); return child as any; });
+  const runtime = new NeuralTtsQueue({ spawn });
+  const failed = expect(runtime.synthesize('German first', 'piper_de_thorsten')).rejects.toThrow(/could not load/);
+  const sameModel = expect(runtime.synthesize('Same unavailable model', 'piper_de_thorsten')).rejects.toThrow(/unavailable/);
+  const english = runtime.synthesize('English remains available', 'bm_daniel');
+  children[0].emit('message', { type: 'fatal' });
+  await Promise.all([failed, sameModel]);
+  expect(children).toHaveLength(1);
+  children[0].emit('exit', 1, null);
+  expect(spawn).toHaveBeenLastCalledWith('bm_daniel');
+  children[1].emit('message', { type: 'ready' });
+  children[1].emit('message', { type: 'result', id: children[1].send.mock.calls[0][0].id, wav: wav() });
+  await expect(english).resolves.toEqual(wav());
+  const closing = runtime.close(); children[1].emit('exit', 0, null); await closing;
+});

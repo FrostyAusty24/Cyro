@@ -8,6 +8,7 @@ import { createRegistrationPlan } from '../src/commands/register.js';
 import { VoiceService } from '../src/voice/service.js';
 import { VoiceStore } from '../src/voice/store.js';
 import { TTS_VOICES } from '../src/voice/catalog.js';
+import * as speech from '../src/voice/tts.js';
 
 const guildId = '123456789012345678';
 const voiceNames = ['Daniel · British male', 'Michael · American male', 'Heart · American female', 'Bella · American female', 'Fenrir · American male', 'Puck · American male', 'George · British male', 'Fable · British male', 'Nicole · American female', 'Emma · British female', 'Aoede · American female', 'Sarah · American female'];
@@ -15,9 +16,11 @@ const folders: string[] = [], services: VoiceService[] = [];
 afterEach(async () => {
   for (const service of services.splice(0)) { service.stop(); await service.flush(); }
   for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
+  vi.restoreAllMocks();
 });
 
 async function fixture() {
+  vi.spyOn(speech, 'voiceAvailable').mockReturnValue(true);
   const folder = await mkdtemp(path.join(os.tmpdir(), 'cyro-voice-alias-')); folders.push(folder);
   const client = Object.assign(new EventEmitter(), { guilds: { cache: new Map() } });
   const access = { command: vi.fn(async () => {}) };
@@ -37,11 +40,11 @@ async function fixture() {
   return { folder, service, guild, access, invoke };
 }
 
-it('registers twenty-five choices and preserves the twelve numbered English shortcuts with guild-only scope', () => {
+it('registers searchable voices and preserves the twelve numbered English shortcuts with guild-only scope', () => {
   const plan = createRegistrationPlan({ discordClientId: guildId, commandScope: 'global' });
   const choose = plan.body.find(command => command.name === 'ttsvoice');
-  expect(choose?.options?.[0]).toMatchObject({ choices: TTS_VOICES.map(voice => ({ name: voice.name, value: voice.id })) });
-  expect(TTS_VOICES.length).toBeLessThanOrEqual(25);
+  expect(choose?.options?.[0]).toMatchObject({ autocomplete: true });
+  expect(choose?.options?.[0]).toHaveProperty('choices', undefined);
   for (let i = 1; i <= 12; i++) {
     const command = plan.body.find(item => item.name === `ttsvoice${i}`);
     expect(command).toMatchObject({ contexts: [InteractionContextType.Guild], integration_types: [ApplicationIntegrationType.GuildInstall] });
@@ -62,7 +65,7 @@ it('routes all numbered shortcuts including 10–12 to their full stable voice I
   }
   const stored = new VoiceStore(f.folder); await stored.init();
   expect(stored.get(guildId).voices).toEqual(preferences);
-  expect(f.service.snapshot(guildId).voices).toHaveLength(25);
+  expect(f.service.snapshot(guildId).voices).toHaveLength(TTS_VOICES.length);
 });
 
 it('uses the shared voice permission for choices and new aliases without changing a denied preference', async () => {

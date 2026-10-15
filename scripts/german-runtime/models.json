@@ -1,0 +1,22 @@
+[
+  {
+    "directory": "vits-piper-de_DE-thorsten-medium",
+    "archiveBytes": 67214254,
+    "archiveSha256": "50487d9c95fdf2191f31d2588569381063ba1591dcd4c7d4bdd30f12b2191714",
+    "file": "de_DE-thorsten-medium.onnx",
+    "bytes": 63149190,
+    "sha256": "2d98b40baac55e4206f64114110a3474807e26440b80d465cd202af1e95be5e0",
+    "tokensBytes": 907,
+    "tokensSha256": "2619c1a9de1bcf928162f40c583caf39368cfd6b2340c7bcad51dc634411ec36"
+  },
+  {
+    "directory": "vits-piper-de_DE-kerstin-low",
+    "archiveBytes": 67107768,
+    "archiveSha256": "4bfe121d5f690a3b87acecd7ae1e70b48f4589ce6ae9f45a1809e6eb19fad97b",
+    "file": "de_DE-kerstin-low.onnx",
+    "bytes": 63052422,
+    "sha256": "ca90248a848ee41c6f252e6f121ad06a7ba27d53356154fb396bfb5ad05d243b",
+    "tokensBytes": 763,
+    "tokensSha256": "42d1a69ed2b91a51928a711aa228ed9f3dc021c6d359a3e9c4f37eb1d20f80bd"
+  }
+]

@@ -7,7 +7,54 @@ const voiceInterfaceNotes = new Set([
   'Music accepts direct audio, internet radio and supported public YouTube video links. YouTube playback is best effort and requires the host source installer; playlists, live or restricted videos are not supported. Spotify does not provide full-track audio for this player.',
   '25 free local Kokoro voices cover English, French, Spanish, Italian, Brazilian Portuguese and Hindi. Select a voice matching the message language; speech does not translate text. Each server uses one voice channel and one mode at a time.',
   '25 free local Kokoro voices cover English, French, Spanish, Italian, Brazilian Portuguese and Hindi. Select a voice matching the message language; speech does not translate text.',
+  'Free local voices cover English, French, Spanish, German, Brazilian Portuguese, Italian and Hindi when their host runtimes are installed. Search /ttsvoice by voice name or language. Speech reads the original text; it does not translate it. Each server uses one voice channel and one mode at a time.',
 ]);
+
+// Availability comes from the host. An unavailable saved choice stays visible;
+// opening the page or switching the interface language never changes settings.
+function voicePicker(voices, config, change) {
+  const languageNames = { en: ui('English'), fr: ui('French'), es: ui('Spanish'), de: ui('German'), it: ui('Italian'), 'pt-BR': ui('Brazilian Portuguese'), hi: ui('Hindi') };
+  const available = voices.filter(voice => voice.available !== false);
+  const stats = { voices: available.length, languages: new Set(available.map(voice => voice.language || 'en')).size };
+  const languageFor = id => voices.find(voice => voice.id === id)?.language || 'en';
+  const selectedLanguage = languageFor(config.defaultVoice);
+  const languages = [...new Set([selectedLanguage, ...voices.map(voice => voice.language || 'en')])];
+  const languageInput = el('select', { 'aria-label': ui('Voice language') }, languages.map(language => {
+    const unavailable = !available.some(voice => (voice.language || 'en') === language);
+    const label = languageNames[language] || language;
+    return el('option', { value: language, selected: language === selectedLanguage, disabled: unavailable }, unavailable ? ui('{voice} · Unavailable on this host', { voice: label }) : label);
+  }));
+  languageInput.value = selectedLanguage;
+  const voiceOption = voice => {
+    const label = ui('{name} · {language} · {gender}', {
+      name: String(voice.name || voice.id).split(' · ')[0],
+      language: voice.language === 'en' && voice.accent === 'British' ? ui('British English') : voice.language === 'en' && voice.accent === 'American' ? ui('American English') : languageNames[voice.language] || voice.language || ui('English'),
+      gender: voice.gender === 'male' ? ui('Male voice') : voice.gender === 'female' ? ui('Female voice') : voice.gender || '',
+    });
+    return el('option', { value: voice.id, selected: config.defaultVoice === voice.id, disabled: voice.available === false }, voice.available === false ? ui('{voice} · Unavailable on this host', { voice: label }) : label);
+  };
+  const voiceInput = el('select', { required: true, onChange: event => {
+    if (available.some(voice => voice.id === event.target.value)) change('defaultVoice', event.target.value);
+    else voiceInput.value = config.defaultVoice;
+  } });
+  function draw() {
+    const choices = voices.filter(voice => (voice.language || 'en') === languageInput.value);
+    voiceInput.replaceChildren(...['male', 'female'].map(gender => {
+      const grouped = choices.filter(voice => voice.gender === gender);
+      return grouped.length ? el('optgroup', { label: gender === 'male' ? ui('Male voices') : ui('Female voices') }, grouped.map(voiceOption)) : null;
+    }).filter(Boolean), ...choices.filter(voice => !['male', 'female'].includes(voice.gender)).map(voiceOption));
+    if (!voices.some(voice => voice.id === config.defaultVoice)) voiceInput.append(el('option', { value: config.defaultVoice, selected: true, disabled: true }, ui('{voice} · Unavailable on this host', { voice: config.defaultVoice || ui('No voices available') })));
+    voiceInput.value = config.defaultVoice;
+  }
+  languageInput.addEventListener('change', () => {
+    const first = available.find(voice => (voice.language || 'en') === languageInput.value);
+    if (first) change('defaultVoice', first.id);
+    else languageInput.value = languageFor(config.defaultVoice);
+    draw();
+  });
+  draw();
+  return { languageInput, voiceInput, stats, hasUnavailable: voices.some(voice => voice.available === false) || !voices.some(voice => voice.id === config.defaultVoice) };
+}
 
 async function renderVoice(main) {
   const guildId = state.guildId;
@@ -48,32 +95,7 @@ async function renderVoice(main) {
     state.dirty = dirty();
     save.disabled = busy || refreshing || !dirty();
   }
-  const voiceOptions = snapshot.voices || [];
-  const languageNames = { en: ui('English'), fr: ui('French'), es: ui('Spanish'), it: ui('Italian'), 'pt-BR': ui('Brazilian Portuguese'), hi: ui('Hindi') };
-  const selectedLanguage = voiceOptions.find(voice => voice.id === config.defaultVoice)?.language || 'en';
-  const languageInput = el('select', { 'aria-label': ui('Voice language') },
-    [...new Set(voiceOptions.map(voice => voice.language || 'en'))].map(language =>
-      el('option', { value: language, selected: language === selectedLanguage }, languageNames[language] || language)));
-  const voiceOption = voice => el('option', { value: voice.id, selected: config.defaultVoice === voice.id }, ui('{name} · {language} · {gender}', {
-    name: String(voice.name || voice.id).split(' · ')[0],
-    language: voice.language === 'en' && voice.accent === 'British' ? ui('British English') : voice.language === 'en' && voice.accent === 'American' ? ui('American English') : languageNames[voice.language] || voice.language || ui('English'),
-    gender: voice.gender === 'male' ? ui('Male voice') : voice.gender === 'female' ? ui('Female voice') : voice.gender || '',
-  }));
-  const voiceInput = el('select', { required: true, onChange: event => session.change('defaultVoice', event.target.value) });
-  function drawVoiceOptions() {
-    const choices = voiceOptions.filter(voice => (voice.language || 'en') === languageInput.value);
-    voiceInput.replaceChildren(...['male', 'female'].map(gender => {
-      const voices = choices.filter(voice => voice.gender === gender);
-      return voices.length ? el('optgroup', { label: gender === 'male' ? ui('Male voices') : ui('Female voices') }, voices.map(voiceOption)) : null;
-    }).filter(Boolean), ...choices.filter(voice => !['male', 'female'].includes(voice.gender)).map(voiceOption));
-    if (!voiceOptions.some(voice => voice.id === config.defaultVoice)) voiceInput.append(el('option', { value: config.defaultVoice, selected: true }, config.defaultVoice || ui('No voices available')));
-  }
-  languageInput.addEventListener('change', () => {
-    const first = voiceOptions.find(voice => (voice.language || 'en') === languageInput.value);
-    if (first) session.change('defaultVoice', first.id);
-    drawVoiceOptions();
-  });
-  drawVoiceOptions();
+  const { languageInput, voiceInput, stats: voiceStats, hasUnavailable } = voicePicker(snapshot.voices || [], config, session.change);
   form.append(panel(ui('Music playback'), [
     toggleSection(session, ui('Enable music'), ui('Members can add supported audio links to the queue in their current voice channel.'), 'musicEnabled'),
     el('div', { className: 'form-section stack' },
@@ -84,7 +106,8 @@ async function renderVoice(main) {
       toggleSection(session, ui('Say the speaker’s name'), ui('Add the member’s server display name before each new message, for example: “Frosty said: Hello everyone.” Turn this off to read only their message.'), 'announceSpeaker'),
       el('div', { className: 'form-section stack' },
         field(ui('Voice language'), languageInput, ui('Language chooses how text is pronounced; it does not translate messages.')),
-        field(ui('Default voice'), voiceInput, ui('25 voices across six languages. Members can choose their own with /ttsvoice.')))]),
+        field(ui('Default voice'), voiceInput, ui('{voices} available voices across {languages} languages. Members can choose their own with /ttsvoice.', voiceStats)),
+        hasUnavailable ? el('p', { className: 'field-hint' }, ui('Some voices are unavailable on this host. Your saved default is kept until you choose another available voice.')) : null)]),
     el('div', { className: 'save-bar' }, saveStatus, save));
 
   const activity = el('div', { className: 'form-section stack' });
@@ -152,10 +175,10 @@ async function renderVoice(main) {
     el('p', {}, el('code', {}, '/playmusic link'), ui(' adds audio to the queue. Use '), el('code', {}, '/musicqueue'), ui(' to see what’s next.')),
     el('p', {}, el('code', {}, '/skipmusic'), ui(' skips a track. '), el('code', {}, '/stopmusic'), ui(' clears music and leaves the call.')),
     el('p', {}, el('code', {}, '/addtts'), ui(' starts reading this call’s chat. '), el('code', {}, '/stoptts'), ui(' stops it.')),
-    el('p', {}, el('code', {}, '/ttsvoice'), ui(' offers voices in six languages. The numbered shortcuts '), el('code', {}, '/ttsvoice1'), ui(' through '), el('code', {}, '/ttsvoice12'), ui(' keep the twelve English voices.')),
+    el('p', {}, el('code', {}, '/ttsvoice'), ui(' lets you search available voices by name or language. The numbered shortcuts '), el('code', {}, '/ttsvoice1'), ui(' through '), el('code', {}, '/ttsvoice12'), ui(' keep the twelve English voices.')),
     link(ui('Access & commands'), 'access')));
   const sources = contextCard(ui('Supported music links'), ui('Use direct audio, supported radio streams, or a public YouTube video you have permission to play. YouTube support depends on access from this host; playlists and restricted videos are unavailable. Spotify does not provide full-track audio for this bot.'), 'link');
-  const privacy = contextCard(ui('One call at a time'), ui('Each server can have one Cyro voice session. Music and text to speech run separately; stop the current session before starting the other.'), 'lock', el('p', {}, ui('TTS uses 25 free Kokoro voices on Cyro’s host, with Daniel as the default. It reads new eligible messages only, without fetching chat history or sending text to a cloud voice service.')));
+  const privacy = contextCard(ui('One call at a time'), ui('Each server can have one Cyro voice session. Music and text to speech run separately; stop the current session before starting the other.'), 'lock', el('p', {}, ui('TTS runs on Cyro’s host, with Daniel as the default. It reads new eligible messages only, without fetching chat history or sending text to a cloud voice service.')));
   loading.replaceWith(availability, el('div', { className: 'settings-grid' }, form, el('aside', { className: 'stack' }, commands, sources, privacy)),
     panel(ui('Current voice session'), [activity, el('div', { className: 'form-section' }, refreshStatus)], refresh));
   drawActivity();

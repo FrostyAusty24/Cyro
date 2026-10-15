@@ -694,6 +694,8 @@ function demoData() {
       { id: 'es-dora', name: 'Dora · Spanish female', gender: 'female', accent: 'Spanish', language: 'es' },
       { id: 'es-alex', name: 'Alex · Spanish male', gender: 'male', accent: 'Spanish', language: 'es' },
       { id: 'es-santa', name: 'Santa · Spanish male', gender: 'male', accent: 'Spanish', language: 'es' },
+      { id: 'de-thorsten', name: 'Thorsten · German male', gender: 'male', accent: 'German', language: 'de', available: true },
+      { id: 'de-kerstin', name: 'Kerstin · German female', gender: 'female', accent: 'German', language: 'de', available: true },
       { id: 'it-sara', name: 'Sara · Italian female', gender: 'female', accent: 'Italian', language: 'it' },
       { id: 'it-nicola', name: 'Nicola · Italian male', gender: 'male', accent: 'Italian', language: 'it' },
       { id: 'pt-dora', name: 'Dora · Brazilian Portuguese female', gender: 'female', accent: 'Brazilian', language: 'pt-BR' },
@@ -704,7 +706,7 @@ function demoData() {
       { id: 'hi-omega', name: 'Omega · Hindi male', gender: 'male', accent: 'Hindi', language: 'hi' },
       { id: 'hi-psi', name: 'Psi · Hindi male', gender: 'male', accent: 'Hindi', language: 'hi' },
     ],
-    available: { music: true, tts: true }, notes: ['25 free local Kokoro voices cover English, French, Spanish, Italian, Brazilian Portuguese and Hindi. Select a voice matching the message language; speech does not translate text.'],
+    available: { music: true, tts: true }, notes: ['Free local voices cover English, French, Spanish, German, Brazilian Portuguese, Italian and Hindi when their host runtimes are installed. Search /ttsvoice by voice name or language. Speech reads the original text; it does not translate it. Each server uses one voice channel and one mode at a time.'],
     session: { channelId: `${channel}10`, mode: 'music', queueLength: 2, currentTitle: 'Late-night lounge radio · sample session' }
   };
   state.demoDetail.confessions = {

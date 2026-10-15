@@ -3,8 +3,9 @@
 // Only explicitly tagged interface copy is translated. Server names, member names,
 // editable values and user-authored posts never pass through a DOM text scanner.
 window.CyroI18n = (() => {
-  const languages = Object.freeze([{ id: 'en', name: 'English' }, { id: 'fr', name: 'Français' }, { id: 'es', name: 'Español' }]);
-  const catalogs = { fr: { ...window.CyroTranslations?.fr, ...window.CyroExtraTranslations?.fr }, es: { ...window.CyroTranslations?.es, ...window.CyroExtraTranslations?.es } };
+  const languages = Object.freeze([{ id: 'en', name: 'English' }, { id: 'fr', name: 'Français' }, { id: 'es', name: 'Español' }, { id: 'de', name: 'Deutsch' }, { id: 'pt', name: 'Português (Brasil)' }]);
+  const catalogs = Object.fromEntries(languages.filter(language => language.id !== 'en').map(({ id }) =>
+    [id, { ...window.CyroTranslations?.[id], ...window.CyroExtraTranslations?.[id], ...window.CyroAdditionalTranslations?.[id] }]));
   const storageKey = 'cyro.dashboard.locale';
   const marker = Symbol('Cyro interface copy');
   const bindings = new Set();

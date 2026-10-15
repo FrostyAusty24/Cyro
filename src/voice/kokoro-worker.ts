@@ -14,7 +14,8 @@ interface SpeechEngine {
   generate_from_ids(ids: InputIds, options: { voice: string; speed: number }): Promise<SpeechAudio>;
 }
 interface SpeechModel { dispose(): Promise<void> }
-const voices: ReadonlySet<string> = new Set(TTS_VOICES.map(voice => voice.engineVoice));
+const kokoroVoices = TTS_VOICES.filter(voice => voice.language !== 'de');
+const voices: ReadonlySet<string> = new Set(kokoroVoices.map(voice => voice.engineVoice));
 const sampleRate = 24_000;
 const maxSamples = 90 * sampleRate;
 
@@ -88,7 +89,7 @@ async function main(): Promise<void> {
       const parts: Float32Array[] = [];
       let count = 0;
       // Apply only after validating the original message: pronunciation spellings can expand its length.
-      const voice = TTS_VOICES.find(item => item.engineVoice === request.voice)!;
+      const voice = kokoroVoices.find(item => item.engineVoice === request.voice)!;
       const spoken = prepareSpeechText(request.text as string, request.speakerName as string | undefined, voice.language);
       for (const text of splitSpeechText(voice.language === 'en' ? normalizeSpeechPronunciation(spoken) : spoken)) {
         let audio: SpeechAudio;

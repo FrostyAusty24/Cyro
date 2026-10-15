@@ -32,7 +32,8 @@ it('migrates legacy settings to English and persists isolated server language ch
   expect(JSON.parse(await readFile(path.join(f.dir,'control.json'),'utf8')).version).toBe(1);
 });
 it('rejects unsupported locales, extra fields, and unauthorized updates',async()=>{
-  for(const input of [null,[],{}, {locale:'de'}, {locale:'fr',guildId:B}, {locale:7}])expect(()=>parseLanguageSettings(input)).toThrow();
+  for(const input of [null,[],{}, {locale:'ja'}, {locale:'fr',guildId:B}, {locale:7}])expect(()=>parseLanguageSettings(input)).toThrow();
+  for(const locale of ['en','fr','es','de','pt','auto'])expect(parseLanguageSettings({locale})).toEqual({locale});
   const f=await fixture();f.revoke();await expect(f.access.updateLanguage(f.guild,U,{locale:'es'})).rejects.toThrow('not granted');
   expect(f.store.get(A).locale).toBe('en');
 });
@@ -56,7 +57,12 @@ it('protects language HTTP writes with session, CSRF, current access and guild i
   expect((await fetch(`${base}${A}/language`,{method:'PATCH',headers:{...headers,'X-CSRF-Token':'bad'},body:'{"locale":"fr"}'})).status).toBe(403);
   const saved=await fetch(`${base}${A}/language`,{method:'PATCH',headers,body:'{"locale":"es"}'});
   expect(saved.status).toBe(200);expect(await saved.json()).toMatchObject({locale:'es'});
-  expect((await fetch(`${base}${A}/language`,{method:'PATCH',headers,body:'{"locale":"de"}'})).status).toBe(400);
+  for(const locale of ['de','pt']){
+    const result=await fetch(`${base}${A}/language`,{method:'PATCH',headers,body:JSON.stringify({locale})});
+    expect(result.status).toBe(200);expect(await result.json()).toMatchObject({locale});
+    const restored=new ControlStore(f.dir);await restored.init();expect(restored.get(A).locale).toBe(locale);expect(restored.get(B).locale).toBe('en');
+  }
+  expect((await fetch(`${base}${A}/language`,{method:'PATCH',headers,body:'{"locale":"ja"}'})).status).toBe(400);
   f.revoke();expect((await fetch(`${base}${A}/language`,{method:'PATCH',headers,body:'{"locale":"fr"}'})).status).toBe(403);
-  expect(f.store.get(A).locale).toBe('es');
+  expect(f.store.get(A).locale).toBe('pt');
 });

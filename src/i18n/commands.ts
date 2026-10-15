@@ -35,13 +35,51 @@ export const COMMAND_DESCRIPTIONS: Readonly<Record<string, readonly [string, str
   embed: ['Ouvrir le rédacteur de messages dans le tableau de bord.', 'Abrir el editor de mensajes en el panel.'],
 };
 
+const GERMAN_PORTUGUESE_DESCRIPTIONS: Readonly<Record<string, readonly [string, string]>> = {
+  twitch: ['Twitch-Live-Benachrichtigungen verwalten.', 'Gerenciar alertas de transmissões ao vivo da Twitch.'],
+  kick: ['Kick-Live-Benachrichtigungen verwalten.', 'Gerenciar alertas de transmissões ao vivo da Kick.'],
+  youtube: ['YouTube-Live-Benachrichtigungen verwalten.', 'Gerenciar alertas de transmissões ao vivo do YouTube.'],
+  tiktok: ['TikTok-Live-Benachrichtigungen verwalten.', 'Gerenciar alertas de transmissões ao vivo do TikTok.'],
+  streamalerts: ['Den Bot-Status anzeigen oder alle Creator prüfen.', 'Ver o status do bot ou verificar todos os criadores.'],
+  'streamer-leaderboard': ['Die Rangliste der auf diesem Server angekündigten Streams anzeigen.', 'Ver a classificação das transmissões anunciadas neste servidor.'],
+  dashboard: ['Das Cyro-Dashboard öffnen und diesen Server einrichten.', 'Abrir o painel do Cyro para configurar este servidor.'],
+  help: ['Cyros Befehle kennenlernen und deinen Server einrichten.', 'Conhecer os comandos do Cyro e configurar seu servidor.'],
+  ping: ['Cyros Verbindung zu Discord prüfen.', 'Verificar a conexão do Cyro com o Discord.'],
+  counting: ['Den Zählerstand, Rekord und die Regeln der Community anzeigen.', 'Ver a contagem da comunidade, seu recorde e suas regras.'],
+  invites: ['Deine eindeutigen Einladungen und die Einladungs-Challenge anzeigen.', 'Ver seus convites únicos e o desafio de convites.'],
+  rank: ['Dein Aktivitätslevel und deine XP anzeigen.', 'Ver seu nível de atividade e seu XP.'],
+  leaderboard: ['Die Aktivitätsrangliste des Servers anzeigen.', 'Ver a classificação de atividade do servidor.'],
+  'roles-panel': ['Schaltflächen für Rollen veröffentlichen, die Mitglieder selbst auswählen können.', 'Publicar botões dos cargos que os membros podem escolher.'],
+  moderate: ['Moderationswerkzeuge mit Berechtigungsprüfung und Protokoll.', 'Ferramentas de moderação com verificação de permissões e histórico.'],
+  'support-recovery': ['Unterbrochene Support-Vorgänge prüfen, ohne den Discord-Verlauf zu löschen.', 'Revisar operações de suporte interrompidas sem apagar o histórico do Discord.'],
+  ticket: ['Ein Support-Ticket öffnen oder verwalten.', 'Abrir ou gerenciar um ticket de suporte.'],
+  apply: ['Eine Bewerbung für den Server auswählen und ausfüllen.', 'Escolher e preencher uma candidatura para o servidor.'],
+  'staff-leaderboard': ['Die Support-Aktivität anzeigen (nur für berechtigte Teammitglieder).', 'Ver a atividade de suporte (somente equipe autorizada).'],
+  playmusic: ['Deinem Anruf beitreten und einen YouTube-, Audio- oder Radiolink zur Warteschlange hinzufügen.', 'Entrar na sua chamada e adicionar um link do YouTube, de áudio ou de rádio à fila.'],
+  musicqueue: ['Die Musikwarteschlange dieses Anrufs anzeigen.', 'Mostrar a fila de músicas desta chamada.'],
+  skipmusic: ['Den aktuellen Titel in deinem Anruf überspringen.', 'Pular a música atual da sua chamada.'],
+  stopmusic: ['Die Musikwarteschlange leeren und Cyro von deinem Anruf trennen.', 'Limpar a fila de músicas e desconectar o Cyro da sua chamada.'],
+  addtts: ['Deinem Anruf beitreten und neue Nachrichten aus seinem Chat vorlesen.', 'Entrar na sua chamada e ler as novas mensagens do chat.'],
+  stoptts: ['Die Sprachausgabe stoppen und deinen Anruf verlassen.', 'Parar a leitura de mensagens e sair da sua chamada.'],
+  ttsvoice: ['Deine Stimme für die Sprachausgabe auf diesem Server auswählen.', 'Escolher sua voz de leitura de mensagens para este servidor.'],
+  ttslanguage: ['Die Sprache deiner Sprachausgabe auswählen.', 'Escolher o idioma da sua leitura de mensagens.'],
+  room: ['Den temporären Sprachraum verwalten, in dem du gerade bist.', 'Gerenciar a sala de voz temporária em que você está.'],
+  bugreport: ['Dem Team ein Bot- oder Serverproblem melden. Dein Name wird mitgesendet.', 'Relatar um problema do bot ou do servidor à equipe. Seu nome será incluído.'],
+  confess: ['Eine anonyme Beichte im dafür eingerichteten Serverkanal veröffentlichen.', 'Publicar uma confissão anônima no canal configurado deste servidor.'],
+  suggestion: ['Eine Idee vorschlagen, über die Servermitglieder abstimmen können.', 'Sugerir uma ideia para os membros do servidor votarem.'],
+  poll: ['Den Umfrage-Editor im Dashboard öffnen.', 'Abrir o criador de enquetes no painel.'],
+  embed: ['Den Nachrichten-Editor im Dashboard öffnen.', 'Abrir o editor de mensagens no painel.'],
+};
+
 export function commandDescriptionLocalizations(name: string, description: string) {
-  let translations = Object.hasOwn(COMMAND_DESCRIPTIONS, name) ? COMMAND_DESCRIPTIONS[name] : undefined;
+  const existing = Object.hasOwn(COMMAND_DESCRIPTIONS, name) ? COMMAND_DESCRIPTIONS[name] : undefined;
+  const additional = Object.hasOwn(GERMAN_PORTUGUESE_DESCRIPTIONS, name) ? GERMAN_PORTUGUESE_DESCRIPTIONS[name] : undefined;
+  let translations: readonly [string, string, string, string] | undefined = existing && additional ? [...existing, ...additional] : undefined;
   // Preserve existing voice aliases, including their names and voice IDs.
   if (!translations && /^ttsvoice\d+$/.test(name)) {
     const voice = /^Use (.+) as your personal TTS voice\.$/.exec(description)?.[1];
-    if (voice) translations = [`Utiliser ${voice} comme voix de synthèse vocale.`, `Usar ${voice} como tu voz de texto a voz.`];
+    if (voice) translations = [`Utiliser ${voice} comme voix de synthèse vocale.`, `Usar ${voice} como tu voz de texto a voz.`, `Nutze ${voice} als deine TTS-Stimme.`, `Usar ${voice} como sua voz de TTS.`];
   }
   if (!translations || translations.some(value => value.length < 1 || value.length > 100)) return undefined;
-  return { fr: translations[0], 'es-ES': translations[1], 'es-419': translations[1] };
+  return { fr: translations[0], 'es-ES': translations[1], 'es-419': translations[1], de: translations[2], 'pt-BR': translations[3] };
 }

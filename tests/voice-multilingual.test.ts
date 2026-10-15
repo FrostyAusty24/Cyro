@@ -2,7 +2,7 @@ import { afterAll, expect, it, vi } from 'vitest';
 import { TTS_VOICES, type SpeechLanguage } from '../src/voice/catalog.js';
 import { multilingualPhonemes, normalizeMultilingualPhonemes } from '../src/voice/multilingual.js';
 import { prepareSpeechText } from '../src/voice/speech-text.js';
-import { synthesizeSpeech, shutdownSpeech, ttsAvailable } from '../src/voice/tts.js';
+import { synthesizeSpeech, shutdownSpeech, voiceAvailable } from '../src/voice/tts.js';
 import { pcmSpeech } from '../src/voice/audio.js';
 import { createAudioResource, StreamType } from '@discordjs/voice';
 import OpusScript from 'opusscript';
@@ -11,12 +11,13 @@ afterAll(async () => { await shutdownSpeech(); });
 const samples: Record<SpeechLanguage, string> = {
   en: 'Welcome to our community.', fr: 'Bonjour, bienvenue dans notre communauté.',
   es: 'Hola, bienvenidos a nuestra comunidad.', it: 'Ciao, benvenuti nella nostra comunità.',
+  de: 'Hallo, willkommen in unserer Gemeinschaft.',
   'pt-BR': 'Olá, sejam bem-vindos à nossa comunidade.', hi: 'नमस्ते, हमारे समुदाय में आपका स्वागत है।',
 };
 
 it('uses each voice language for the optional speaker label without translating member messages', () => {
   const expected = { en: 'Frosty said: Hello', fr: 'Frosty a dit: Hello', es: 'Frosty dijo: Hello',
-    it: 'Frosty ha detto: Hello', 'pt-BR': 'Frosty disse: Hello', hi: 'Frosty ने कहा: Hello' };
+    it: 'Frosty ha detto: Hello', de: 'Frosty sagte: Hello', 'pt-BR': 'Frosty disse: Hello', hi: 'Frosty ने कहा: Hello' };
   for (const [language, result] of Object.entries(expected)) {
     expect(prepareSpeechText('Hello', 'Frosty', language as SpeechLanguage)).toBe(result);
     expect(prepareSpeechText(samples[language as SpeechLanguage], undefined, language as SpeechLanguage)).toBe(samples[language as SpeechLanguage]);
@@ -34,9 +35,9 @@ it('preserves French nasal vowels and non-English R while mapping Kokoro v1 affr
   expect(() => multilingualPhonemes(phonemizer, 'Hello.', 'es')).toThrow(/length/);
 });
 
-it.skipIf(!ttsAvailable())('renders every added voice through the offline IPC worker with audible finite PCM', async () => {
+it.skipIf(!voiceAvailable('fr-siwis'))('renders every added Kokoro voice through the offline IPC worker with audible finite PCM', async () => {
   const distinct = new Set<string>();
-  for (const voice of TTS_VOICES.filter(voice => voice.language !== 'en')) {
+  for (const voice of TTS_VOICES.filter(voice => voice.language !== 'en' && voice.language !== 'de')) {
     const wav = await synthesizeSpeech(samples[voice.language], voice.id, undefined, 'Frosty');
     expect(wav.subarray(0, 4).toString(), voice.id).toBe('RIFF');
     expect(wav.readUInt32LE(24), voice.id).toBe(24_000);
@@ -54,7 +55,7 @@ it.skipIf(!ttsAvailable())('renders every added voice through the offline IPC wo
   expect((await synthesizeSpeech(samples.en, 'voice1')).subarray(0, 4).toString()).toBe('RIFF');
 }, 120_000);
 
-it.skipIf(!ttsAvailable())('keeps each added language audible through the actual Discord Opus encoder', async () => {
+it.skipIf(!voiceAvailable('fr-siwis'))('keeps each added Kokoro language audible through the actual Discord Opus encoder', async () => {
   for (const language of ['fr', 'es', 'it', 'pt-BR', 'hi'] as const) {
     const voice = TTS_VOICES.find(item => item.language === language)!;
     const source = await pcmSpeech(samples[language], voice.id);

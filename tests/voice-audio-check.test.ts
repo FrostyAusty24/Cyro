@@ -26,3 +26,19 @@ it('preserves music availability when natural speech cannot load', async () => {
   try { expect(await checkVoiceRuntime()).toEqual({ audio: true, tts: false, dave: true }); }
   finally { synthesizer.mockRestore(); availability.mockRestore(); }
 });
+
+it('checks an installed German voice when the optional English engine is unavailable', async () => {
+  const wav = Buffer.alloc(44 + 32_000);
+  wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(16_000, 24); wav.writeUInt32LE(32_000, 28);
+  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(32_000, 40);
+  for (let sample = 0; sample < 16_000; sample++) wav.writeInt16LE(Math.round(Math.sin(sample * 2 * Math.PI * 400 / 16_000) * 8_000), 44 + sample * 2);
+  const availability = vi.spyOn(speech, 'ttsAvailable').mockReturnValue(true);
+  const voiceAvailability = vi.spyOn(speech, 'voiceAvailable').mockImplementation(voice => voice === 'de-thorsten');
+  const synthesizer = vi.spyOn(speech, 'synthesizeSpeech').mockResolvedValue(wav);
+  try {
+    expect(await checkVoiceRuntime()).toEqual({ audio: true, tts: true, dave: true });
+    expect(synthesizer).toHaveBeenCalledWith('Hallo, dies ist eine Sprachprüfung.', 'de-thorsten', expect.any(AbortSignal));
+  } finally { availability.mockRestore(); voiceAvailability.mockRestore(); synthesizer.mockRestore(); }
+});

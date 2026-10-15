@@ -1,12 +1,12 @@
 import { afterAll, expect, it } from 'vitest';
-import { TTS_VOICES, synthesizeSpeech, ttsAvailable, shutdownSpeech } from '../src/voice/tts.js';
+import { TTS_VOICES, synthesizeSpeech, voiceAvailable, shutdownSpeech } from '../src/voice/tts.js';
 import { pcmSpeech } from '../src/voice/audio.js';
 import { createAudioResource, StreamType } from '@discordjs/voice';
 import OpusScript from 'opusscript';
 
 afterAll(async () => { await shutdownSpeech(); });
 
-it.skipIf(!ttsAvailable())('renders twelve distinct offline neural voices to WAV', async () => {
+it.skipIf(!voiceAvailable('voice1'))('renders twelve distinct offline neural voices to WAV', async () => {
   const wavs: Buffer[] = [];
   for (const voice of TTS_VOICES.filter(voice => voice.language === 'en')) {
     const wav = await synthesizeSpeech('Welcome to Cyro.', voice.id);
@@ -23,7 +23,7 @@ it('rejects oversized text and unsupported voices before synthesis', async () =>
   await expect(synthesizeSpeech('Hello', '../../evil')).rejects.toThrow(/available TTS voices/);
 });
 
-it.skipIf(!ttsAvailable())('produces audible speech for every voice through the actual Discord Opus encoder', async () => {
+it.skipIf(!voiceAvailable('voice1'))('produces audible speech for every voice through the actual Discord Opus encoder', async () => {
   for (const voice of TTS_VOICES.filter(voice => voice.language === 'en')) {
     const source = await pcmSpeech('Cyro voice check. Hello from the community.', voice.id);
     const resource = createAudioResource(source.stream, { inputType: StreamType.Raw, inlineVolume: true });

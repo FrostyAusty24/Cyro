@@ -2,6 +2,7 @@ import { spawn as spawnProcess, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { GERMAN_RUNTIME_DIR, germanRuntimeInstalled, isGermanEngineVoice, speechWorkerKey } from './german-runtime.js';
 
 export const NEURAL_RUNTIME_DIR = path.resolve('bin', 'tts');
 export function neuralRuntimeInstalled(directory = NEURAL_RUNTIME_DIR): boolean {
@@ -9,16 +10,18 @@ export function neuralRuntimeInstalled(directory = NEURAL_RUNTIME_DIR): boolean 
     .every(file => existsSync(path.join(directory, file)));
 }
 
-function createChild(directory: string): ChildProcess {
-  if (!neuralRuntimeInstalled(directory)) throw new Error('Natural voices are not installed on this host yet.');
-  const emittedPath = fileURLToPath(new URL('./kokoro-worker.js', import.meta.url));
-  const workerPath = existsSync(emittedPath) ? emittedPath : fileURLToPath(new URL('./kokoro-worker.ts', import.meta.url));
+function createChild(directory: string, voice: string, germanDirectory: string): ChildProcess {
+  const german = isGermanEngineVoice(voice);
+  if (german ? !germanRuntimeInstalled(germanDirectory) : !neuralRuntimeInstalled(directory)) throw new Error('Natural voices are not installed on this host yet.');
+  const workerName = german ? 'german-worker' : 'kokoro-worker';
+  const emittedPath = fileURLToPath(new URL(`./${workerName}.js`, import.meta.url));
+  const workerPath = existsSync(emittedPath) ? emittedPath : fileURLToPath(new URL(`./${workerName}.ts`, import.meta.url));
   const args = ['--max-old-space-size=192', '--unhandled-rejections=strict'];
   if (workerPath.endsWith('.ts')) args.push('--import', 'tsx');
   // The worker needs no Discord, streaming-provider or dashboard credentials.
   const env: NodeJS.ProcessEnv = {};
   for (const key of ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP']) if (process.env[key]) env[key] = process.env[key];
-  return spawnProcess(process.execPath, [...args, workerPath, directory], {
+  return spawnProcess(process.execPath, [...args, workerPath, german ? germanDirectory : directory, voice], {
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced', windowsHide: true, shell: false, env,
   });
 }
@@ -27,11 +30,11 @@ interface Job {
   id: number; text: string; voice: string; speakerName?: string; signal?: AbortSignal; abort: () => void;
   resolve: (wav: Buffer) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>;
 }
-interface RuntimeOptions { directory?: string; spawn?: () => ChildProcess; timeoutMs?: number; idleMs?: number; maxPending?: number }
+interface RuntimeOptions { directory?: string; germanDirectory?: string; spawn?: (voice: string) => ChildProcess; timeoutMs?: number; idleMs?: number; maxPending?: number }
 
 /** One model process for all guilds. Cancelling active inference retires it before any replacement starts. */
 export class NeuralTtsQueue {
-  private readonly factory: () => ChildProcess;
+  private readonly factory: (voice: string) => ChildProcess;
   private readonly timeoutMs: number;
   private readonly idleMs: number;
   private readonly maxPending: number;
@@ -39,6 +42,7 @@ export class NeuralTtsQueue {
   private queue: Job[] = [];
   private active?: Job;
   private child?: ChildProcess;
+  private childKey?: string;
   private ready = false;
   private retiring = false;
   private closed = false;
@@ -46,7 +50,7 @@ export class NeuralTtsQueue {
   private exited: Promise<void> = Promise.resolve();
 
   constructor(options: RuntimeOptions = {}) {
-    this.factory = options.spawn ?? (() => createChild(options.directory ?? NEURAL_RUNTIME_DIR));
+    this.factory = options.spawn ?? (voice => createChild(options.directory ?? NEURAL_RUNTIME_DIR, voice, options.germanDirectory ?? GERMAN_RUNTIME_DIR));
     this.timeoutMs = options.timeoutMs ?? 45_000;
     this.idleMs = options.idleMs ?? 300_000;
     this.maxPending = options.maxPending ?? 12;
@@ -99,6 +103,8 @@ export class NeuralTtsQueue {
   private pump(): void {
     if (this.closed || this.retiring || this.active) return;
     clearTimeout(this.idleTimer);
+    const next = this.queue[0];
+    if (next && this.child && this.childKey !== speechWorkerKey(next.voice)) { this.retire(); return; }
     const job = this.queue.shift();
     if (!job) {
       if (this.child) {
@@ -110,7 +116,7 @@ export class NeuralTtsQueue {
     }
     this.active = job;
     if (!this.child) {
-      try { this.start(); }
+      try { this.start(job.voice); }
       catch { this.settle(job, new Error('Natural voices are unavailable on this host.')); this.pump(); return; }
     }
     this.child!.ref(); this.child!.channel?.ref();
@@ -126,15 +132,16 @@ export class NeuralTtsQueue {
     } catch { this.cancel(job, new Error('The speech worker could not accept this message.')); }
   }
 
-  private start(): void {
-    const child = this.factory();
+  private start(voice: string): void {
+    const child = this.factory(voice);
     this.child = child;
+    this.childKey = speechWorkerKey(voice);
     this.ready = false;
     this.retiring = false;
     this.exited = new Promise(resolve => {
       const exit = (): void => {
         if (this.child !== child) return;
-        this.child = undefined; this.ready = false; this.retiring = false;
+        this.child = undefined; this.childKey = undefined; this.ready = false; this.retiring = false;
         if (this.active) this.settle(this.active, new Error('Natural speech could not be generated. Try again shortly.'));
         resolve();
         this.pump();
@@ -153,8 +160,8 @@ export class NeuralTtsQueue {
       if (reply.type === 'ready') { this.ready = true; if (this.active) this.send(this.active); return; }
       if (reply.type === 'fatal') {
         if (this.active) this.settle(this.active, new Error('Natural voices could not load on this host.'));
-        // An installation failure will affect every waiting request, without logging their contents.
-        for (const job of [...this.queue]) this.settle(job, new Error('Natural voices are unavailable on this host.'));
+        // A failed optional model must not discard other languages waiting behind it.
+        for (const job of [...this.queue]) if (speechWorkerKey(job.voice) === this.childKey) this.settle(job, new Error('Natural voices are unavailable on this host.'));
         this.retire(); return;
       }
       const job = this.active;

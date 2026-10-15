@@ -1,3 +1,5 @@
+import { ADDITIONAL_TRANSLATIONS } from './messages-de-pt.js';
+
 /** English source keys are also the safe fallback for untranslated features. */
 export const MESSAGE_ROWS: ReadonlyArray<readonly [string, string, string]> = [
   ['Something went wrong.', 'Une erreur est survenue.', 'Se produjo un error.'],
@@ -173,6 +175,7 @@ export const MESSAGE_ROWS: ReadonlyArray<readonly [string, string, string]> = [
   ['Skipped the current track.', 'Morceau actuel passé.', 'Pista actual saltada.'],
   ['Stopped and disconnected from your call.', 'Lecture arrêtée et déconnexion de votre appel.', 'Reproducción detenida y desconexión de tu llamada.'],
   ['Voice could not start. Check Cyro’s Connect/Speak permissions and try again.', 'Impossible de démarrer l’audio. Vérifiez les permissions Se connecter et Parler de Cyro, puis réessayez.', 'No se pudo iniciar el audio. Revisa los permisos Conectar y Hablar de Cyro e inténtalo de nuevo.'],
+  ['This voice is not installed on this host yet. Choose another voice or ask the bot operator to install it.', 'Cette voix n’est pas encore installée sur cet hébergement. Choisissez une autre voix ou demandez au responsable du bot de l’installer.', 'Esta voz aún no está instalada en este alojamiento. Elige otra voz o pide al responsable del bot que la instale.'],
 ];
 
-export const BOT_TRANSLATIONS: Readonly<Record<string, { fr: string; es: string }>> = Object.fromEntries(MESSAGE_ROWS.map(([en, fr, es]) => [en, { fr, es }]));
+export const BOT_TRANSLATIONS: Readonly<Record<string, { fr: string; es: string; de: string; pt: string }>> = Object.fromEntries(MESSAGE_ROWS.map(([en, fr, es]) => [en, { fr, es, ...ADDITIONAL_TRANSLATIONS[en]! }]));

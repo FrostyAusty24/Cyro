@@ -23,7 +23,7 @@ class TestNode {
   replaceChildren(...nodes: TestNode[]) { for (const child of this.children) child.parent = null; this.children = []; this.ownText = ''; this.append(...nodes); }
   setAttribute(key: string, value: string) { this.attributes[key] = value; }
   addEventListener(type: string, listener: (event: any) => unknown) { (this.listeners[type] ||= []).push(listener); }
-  async dispatch(type: string) { for (const listener of this.listeners[type] || []) await listener({ preventDefault() {} }); }
+  async dispatch(type: string) { for (const listener of this.listeners[type] || []) await listener({ target: this, preventDefault() {} }); }
   get elements(): TestNode[] { return this.children.flatMap(child => ['INPUT', 'BUTTON', 'SELECT'].includes(child.tagName) ? [child] : child.elements); }
   reportValidity() { return true; }
 }
@@ -36,7 +36,7 @@ function harness(initialLocale: string | null = null, blockedStorage = false) {
   const document = { body, documentElement: { lang: '' }, createElement: (tag: string) => new TestNode(tag.toUpperCase()), createTextNode: (text: string) => { const node = new TestNode(); node.textContent = text; return node; } };
   const window: any = {};
   const context = createContext({ window, document, localStorage, Node: TestNode, structuredClone });
-  for (const file of ['i18n-catalogs.js', 'i18n-extra-catalogs.js', 'i18n.js']) {
+  for (const file of ['i18n-catalogs.js', 'i18n-extra-catalogs.js', 'i18n-additional-catalogs.js', 'i18n.js']) {
     const path = new URL(`../public/${file}`, import.meta.url);
     if (existsSync(path)) runInContext(readFileSync(path, 'utf8'), context);
   }
@@ -54,6 +54,9 @@ describe('dashboard languages', () => {
     expect(ui.values.get('cyro.dashboard.locale')).toBe('fr');
     expect(ui.document.documentElement.lang).toBe('fr');
     expect(harness('es').i18n.translate('Save changes')).toBe('Guardar cambios');
+    expect(harness('de').i18n.translate('Save changes')).toBe('Änderungen speichern');
+    expect(harness('pt').i18n.translate('Save changes')).toBe('Salvar alterações');
+    expect(ui.i18n.languages.map((language: any) => language.id)).toEqual(['en', 'fr', 'es', 'de', 'pt']);
   });
 
   it('falls back to English and preserves unknown template placeholders', () => {
@@ -72,11 +75,17 @@ describe('dashboard languages', () => {
     expect(i18n.translate('Cancel')).toBe('Cancelar');
   });
 
-  it('keeps interpolation placeholders unchanged in both catalogs', () => {
+  it('covers every existing catalog key in German and Portuguese and preserves all interpolation placeholders', () => {
     const { window } = harness();
     const placeholders = (value: string) => [...value.matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map(match => match[1]).sort();
-    for (const catalog of [window.CyroTranslations, window.CyroExtraTranslations].filter(Boolean)) {
-      for (const locale of ['fr', 'es']) for (const [source, translated] of Object.entries(catalog[locale])) {
+    const catalogs = [window.CyroTranslations, window.CyroExtraTranslations, window.CyroAdditionalTranslations];
+    const keys = [...new Set(catalogs.flatMap(catalog => Object.keys(catalog.fr || {})))].sort();
+    expect(keys.length).toBeGreaterThan(880);
+    for (const locale of ['de', 'pt']) expect(Object.keys(window.CyroAdditionalTranslations[locale]).sort(), locale).toEqual(keys);
+    for (const catalog of catalogs) {
+      for (const locale of ['fr', 'es', 'de', 'pt']) for (const [source, translated] of Object.entries(catalog[locale] || {})) {
+        expect(typeof translated, `${locale}: ${source}`).toBe('string');
+        expect((translated as string).trim().length, `${locale}: ${source}`).toBeGreaterThan(0);
         expect(placeholders(translated as string), `${locale}: ${source}`).toEqual(placeholders(source));
       }
     }
@@ -99,6 +108,15 @@ describe('dashboard languages', () => {
     expect(post.textContent).toBe('<img src=x onerror=alert(1)>');
     expect(interpolated.textContent).toContain('<script>steal()</script>');
     expect(interpolated.children.every((node: TestNode) => node.tagName === '#text')).toBe(true);
+    for (const locale of ['de', 'pt']) {
+      i18n.setLocale(locale);
+      expect(label.textContent).not.toBe('Overview');
+      expect(serverName.textContent).toBe('Overview');
+      expect(control.value).toBe('Overview');
+      expect(post.textContent).toBe('<img src=x onerror=alert(1)>');
+      expect(interpolated.textContent).toContain('<script>steal()</script>');
+      expect(interpolated.children.every((node: TestNode) => node.tagName === '#text')).toBe(true);
+    }
   });
 
   it('does not resurrect stale button text or stale errors after content is replaced', () => {
@@ -126,12 +144,12 @@ describe('dashboard languages', () => {
     session.form.append(input); session.finish(); h.document.body.append(session.form);
     session.change('welcome.message', input.value);
     const form = session.form, children = [...form.children];
-    h.i18n.setLocale('fr'); h.i18n.setLocale('es');
+    for (const locale of ['fr', 'es', 'de', 'pt']) h.i18n.setLocale(locale);
     expect(session.form).toBe(form);
     expect(form.children).toEqual(children);
     expect(input.value).toBe('Welcome <everyone>');
     expect(state.dirty).toBe(true);
-    expect(form.textContent).toContain('Guardar cambios');
+    expect(form.textContent).toContain('Salvar alterações');
     await form.dispatch('submit');
     expect(state.detail.community.config.welcome.message).toBe('Welcome <everyone>');
     expect(state.dirty).toBe(false);
@@ -143,6 +161,8 @@ describe('dashboard languages', () => {
     for (const file of readdirSync(publicPath).filter(file => file.endsWith('.js'))) expect(() => new Script(readFileSync(new URL(file, publicPath), 'utf8'), { filename: file })).not.toThrow();
     const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
     expect(html.indexOf('/i18n-catalogs.js')).toBeLessThan(html.indexOf('/i18n.js'));
+    expect(html.indexOf('/i18n-additional-catalogs.js')).toBeGreaterThan(html.indexOf('/i18n-extra-catalogs.js'));
+    expect(html.indexOf('/i18n-additional-catalogs.js')).toBeLessThan(html.indexOf('/i18n.js'));
     expect(html.indexOf('/i18n.js')).toBeLessThan(html.indexOf('/app.js'));
   });
 
@@ -157,17 +177,57 @@ describe('dashboard languages', () => {
     h.document.body.append(card);
     const form = card.children.find(child => child.tagName === 'FORM')!;
     const input = form.elements.find(child => child.tagName === 'SELECT')!;
-    input.value = 'fr';
+    expect(input.children.map(child => child.value)).toEqual(expect.arrayContaining(['de', 'pt', 'auto']));
+    input.value = 'de';
     await input.dispatch('change');
     h.i18n.setLocale('en');
-    expect(input.value).toBe('fr');
+    expect(input.value).toBe('de');
     expect(state.dirty).toBe(true);
     expect(state.detail.language.locale).toBe('en');
     expect(api).not.toHaveBeenCalled();
     await form.dispatch('submit');
-    expect(api).toHaveBeenCalledExactlyOnceWith('/api/guilds/1234/language', 'PATCH', { locale: 'fr' });
-    expect(state.detail.language.locale).toBe('fr');
+    expect(api).toHaveBeenCalledExactlyOnceWith('/api/guilds/1234/language', 'PATCH', { locale: 'de' });
+    expect(state.detail.language.locale).toBe('de');
     expect(h.i18n.locale).toBe('en');
     expect(state.dirty).toBe(false);
+  });
+
+  it('shows unavailable voices without silently replacing a stored default or counting them as available', async () => {
+    const h = harness('de');
+    const source = readFileSync(new URL('../public/audio.js', import.meta.url), 'utf8');
+    runInContext(source.slice(source.indexOf('function voicePicker('), source.indexOf('\nasync function renderVoice(')), h.context);
+    const config = { defaultVoice: 'de-thorsten' };
+    const change = vi.fn((path: string, value: string) => { config.defaultVoice = value; });
+    const voices = [
+      { id: 'voice1', name: 'Daniel · British male', gender: 'male', accent: 'British', language: 'en', available: true },
+      { id: 'de-thorsten', name: 'Thorsten · German male', gender: 'male', language: 'de', available: false },
+      { id: 'de-kerstin', name: 'Kerstin · German female', gender: 'female', language: 'de', available: false },
+      { id: 'pt-dora', name: 'Dora · Brazilian Portuguese female', gender: 'female', language: 'pt-BR' },
+    ];
+    Object.assign(h.context, { config, change, voices });
+    const picker = runInContext('voicePicker(voices, config, change)', h.context);
+    h.document.body.append(picker.languageInput, picker.voiceInput);
+    expect(picker.stats).toEqual({ voices: 2, languages: 2 });
+    expect(picker.hasUnavailable).toBe(true);
+    expect(config.defaultVoice).toBe('de-thorsten');
+    expect(picker.voiceInput.value).toBe('de-thorsten');
+    const option = picker.voiceInput.children[0].children[0];
+    expect(option.disabled).toBe(true);
+    expect(option.selected).toBe(true);
+    expect(option.textContent).toContain('Thorsten');
+    expect(option.textContent).toContain('nicht verfügbar');
+    expect(change).not.toHaveBeenCalled();
+    h.i18n.setLocale('pt');
+    expect(option.textContent).toContain('Thorsten');
+    expect(option.textContent).toContain('Indisponível');
+    expect(config.defaultVoice).toBe('de-thorsten');
+    picker.languageInput.value = 'pt-BR'; await picker.languageInput.dispatch('change');
+    expect(change).toHaveBeenCalledExactlyOnceWith('defaultVoice', 'pt-dora');
+    expect(picker.voiceInput.value).toBe('pt-dora');
+    // A synthetic event cannot select an unavailable language either.
+    picker.languageInput.value = 'de'; await picker.languageInput.dispatch('change');
+    expect(config.defaultVoice).toBe('pt-dora');
+    expect(picker.languageInput.value).toBe('pt-BR');
+    expect(change).toHaveBeenCalledTimes(1);
   });
 });

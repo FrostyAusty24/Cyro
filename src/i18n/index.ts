@@ -1,6 +1,6 @@
 import { BOT_TRANSLATIONS } from './messages.js';
 
-export type BotLocale = 'en' | 'fr' | 'es';
+export type BotLocale = 'en' | 'fr' | 'es' | 'de' | 'pt';
 export type BotLocalePreference = BotLocale | 'auto';
 export type TextParams = Readonly<Record<string, string | number>>;
 
@@ -8,7 +8,7 @@ export type TextParams = Readonly<Record<string, string | number>>;
 export function normalizeLocale(value: unknown): BotLocale {
   if (typeof value !== 'string') return 'en';
   const base = value.trim().toLowerCase().replace(/_/g, '-').split('-')[0];
-  return base === 'fr' || base === 'es' ? base : 'en';
+  return base === 'fr' || base === 'es' || base === 'de' || base === 'pt' ? base : 'en';
 }
 
 let localeResolver: (guildId: string) => string | undefined = () => 'en';
