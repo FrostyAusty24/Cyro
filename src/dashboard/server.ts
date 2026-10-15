@@ -42,7 +42,14 @@ interface CommunityFeature {
   snapshot(guildId:string):unknown;
   updateConfig(guildId:string,input:unknown,authorize?:()=>Promise<void>):Promise<unknown>;
 }
-interface Options {access?:AccessService;publishing?:PublishingService;suggestions?:Suggestions;statusRoles?:StatusRoles;voice?:CommunityFeature;confessions?:CommunityFeature;client:Client;config:AppConfig;logger:Logger;community:Module;moderation:Module;streams:Streams;creators?:Streams;tiktok?:DashboardTikTok;streamStats?:{snapshot(guildId:string):Promise<unknown>};publicDir:string;sessions?:SessionStore;oauth?:OAuthApi;isOperational?:()=>boolean;drainTimeoutMs?:number;requestTimeoutMs?:number}
+interface ManagedCommunityFeature {
+  snapshot(guildId:string,page?:number):unknown;
+  updateConfig(guild:Guild,input:unknown,authorize?:()=>Promise<void>):Promise<unknown>;
+}
+interface CommunityTools extends ManagedCommunityFeature {
+  decide(guild:Guild,actorId:string,id:string,input:unknown,source?:undefined,authorize?:()=>Promise<void>):Promise<unknown>;
+}
+interface Options {tempVoice?:ManagedCommunityFeature;communityTools?:CommunityTools;access?:AccessService;publishing?:PublishingService;suggestions?:Suggestions;statusRoles?:StatusRoles;voice?:CommunityFeature;confessions?:CommunityFeature;client:Client;config:AppConfig;logger:Logger;community:Module;moderation:Module;streams:Streams;creators?:Streams;tiktok?:DashboardTikTok;streamStats?:{snapshot(guildId:string):Promise<unknown>};publicDir:string;sessions?:SessionStore;oauth?:OAuthApi;isOperational?:()=>boolean;drainTimeoutMs?:number;requestTimeoutMs?:number}
 export class HttpError extends Error { constructor(public status:number,message:string) {super(message);} }
 export function clientAddress(remote:string, forwarded:string|undefined, trustProxy:boolean):string {
   if(!trustProxy||!forwarded)return remote;
@@ -234,7 +241,7 @@ export class DashboardServer {
         }
         this.json(res,200,{guilds:visible});return;
       }
-      const match=route.match(/^\/api\/guilds\/(\d{17,20})(?:\/(community|moderation|streams|creators|stream-stats|access|messages|polls|identity|suggestions|status-roles|voice|confessions)(?:\/([a-zA-Z0-9-]{1,64}))?)?$/);
+      const match=route.match(/^\/api\/guilds\/(\d{17,20})(?:\/(community|moderation|streams|creators|stream-stats|access|messages|polls|identity|suggestions|status-roles|voice|confessions|temp-voice|community-tools|bug-reports)(?:\/([a-zA-Z0-9-]{1,64})(?:\/(status))?)?)?$/);
       if(match) {
         // Consume bounded request data before checking authority; an upload can outlast a role revocation.
         const input=['PATCH','POST'].includes(method)?await this.body(req,match[2]==='identity'&&!match[3]&&method==='PATCH'?3*1024*1024:131_072):undefined;
@@ -249,6 +256,33 @@ export class DashboardServer {
         }else guild=await requireGuildManager(o.client,match[1]!,session.user.id);
         this.assertActive(res);
         const section=match[2];const id=match[3];
+        if (match[4] && section !== 'bug-reports') throw new HttpError(404,'Endpoint not found.');
+        if(section==='temp-voice'||section==='community-tools'||section==='bug-reports') {
+          const feature=section==='temp-voice'?o.tempVoice:o.communityTools;
+          if(!feature)throw new HttpError(503,'Community tools are not available.');
+          const assertCurrent=()=>{
+            this.assertActive(res);
+            if(this.sessions.peek(cookies.dashboard_session??'')!==session)throw new HttpError(401,'Your session expired. Sign in again.');
+            if(!this.operational)throw new HttpError(503,'Cyro is reconnecting. Reload before changing these settings.');
+            if(o.client.guilds.cache.get(guild.id)!==guild)throw new HttpError(404,'The bot is not installed in this server.');
+          };
+          const authorize=async()=>{
+            assertCurrent();
+            if(o.access){try{await o.access.dashboard(guild,session.user.id);}catch{throw new HttpError(403,'The server owner has not granted your roles dashboard access.');}}
+            else await requireGuildManager(o.client,guild.id,session.user.id);
+            assertCurrent();
+          };
+          try {
+            if(method==='GET'&&!id&&section!=='bug-reports') {
+              const page=url.searchParams.get('page')??'1';
+              if(!/^[1-9]\d{0,5}$/.test(page)||Number(page)>100000)throw new HttpError(400,'Choose a valid report page.');
+              this.json(res,200,await feature.snapshot(guild.id,Number(page)));return;
+            }
+            if(method==='PATCH'&&!id&&section!=='bug-reports') { this.json(res,200,{config:await feature.updateConfig(guild,input,authorize)});return; }
+            if(method==='POST'&&id&&section==='bug-reports'&&match[4]==='status') { this.json(res,200,{report:await o.communityTools!.decide(guild,session.user.id,id,input,undefined,authorize)});return; }
+          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'The change could not be saved.');}
+          throw new HttpError(405,'Use GET or PATCH for settings, or POST to update a bug report status.');
+        }
         if(section==='voice'||section==='confessions'){
           const feature=o[section];
           if(!feature)throw new HttpError(503,`${section==='voice'?'Voice':'Confession'} settings are not available.`);
@@ -396,12 +430,12 @@ export class DashboardServer {
           this.json(res,200,await o.streamStats.snapshot(guild.id));return;
         }
         if(method==='GET'&&!section) {
-          const [cc,cs,mc,ms,streams,channels,streamStats,creators,suggestions,statusRoles,voice,confessions]=await Promise.all([o.community.getConfig(guild.id),o.community.snapshot(guild.id),o.moderation.getConfig(guild.id),o.moderation.snapshot(guild.id),o.streams.list(guild.id),guild.channels.fetch(),o.streamStats?.snapshot(guild.id),o.creators?.list(guild.id)??[],o.suggestions?.snapshot(guild.id),o.statusRoles?.snapshot(guild.id),o.voice?.snapshot(guild.id),o.confessions?.snapshot(guild.id)]);
+          const [cc,cs,mc,ms,streams,channels,streamStats,creators,suggestions,statusRoles,voice,confessions,tempVoice,communityTools]=await Promise.all([o.community.getConfig(guild.id),o.community.snapshot(guild.id),o.moderation.getConfig(guild.id),o.moderation.snapshot(guild.id),o.streams.list(guild.id),guild.channels.fetch(),o.streamStats?.snapshot(guild.id),o.creators?.list(guild.id)??[],o.suggestions?.snapshot(guild.id),o.statusRoles?.snapshot(guild.id),o.voice?.snapshot(guild.id),o.confessions?.snapshot(guild.id),o.tempVoice?.snapshot(guild.id),o.communityTools?.snapshot(guild.id)]);
           const memberIds=new Set<string>();
           const collect=(value:unknown):void=>{if(!value||typeof value!=='object')return;for(const[key,item]of Object.entries(value)){if(/^(userId|ownerId|actorId|claimedBy|closedBy|reviewedBy|lastUserId|memberId|inviterId)$/.test(key)&&typeof item==='string')memberIds.add(item);else if(item&&typeof item==='object')collect(item);}};
           collect(cs);collect(ms);
           const members=[...memberIds].slice(0,250).flatMap(id=>{const member=guild.members.cache.get(id);return member?[{id,displayName:member.displayName}]:[];});
-          this.json(res,200,{guild:{id:guild.id,name:guild.name,icon:guild.icon,memberCount:guild.memberCount},community:{config:cc,snapshot:cs},moderation:{config:mc,snapshot:ms},streams,creators,streamStats,suggestions,statusRoles,voice,confessions,members,access:{config:o.access?.config(guild.id),isOwner:guild.ownerId===session.user.id,commands:COMMAND_KEYS},posts:o.publishing?.list(guild.id)??[],channels:[...channels.values()].filter(c=>c).map(c=>({id:c!.id,name:c!.name,type:c!.type})),roles:[...guild.roles.cache.values()].filter(r=>r.id!==guild.id&&!r.managed).map(r=>({id:r.id,name:r.name,color:r.color,position:r.position}))});return;
+          this.json(res,200,{guild:{id:guild.id,name:guild.name,icon:guild.icon,memberCount:guild.memberCount},community:{config:cc,snapshot:cs},moderation:{config:mc,snapshot:ms},streams,creators,streamStats,suggestions,statusRoles,voice,confessions,tempVoice,communityTools,members,access:{config:o.access?.config(guild.id),isOwner:guild.ownerId===session.user.id,commands:COMMAND_KEYS},posts:o.publishing?.list(guild.id)??[],channels:[...channels.values()].filter(c=>c).map(c=>({id:c!.id,name:c!.name,type:c!.type})),roles:[...guild.roles.cache.values()].filter(r=>r.id!==guild.id&&!r.managed).map(r=>({id:r.id,name:r.name,color:r.color,position:r.position}))});return;
         }
         if(method==='PATCH'&&(section==='community'||section==='moderation')&&!id) {
           try{const config=await o[section].updateConfig(guild.id,input);this.json(res,200,{config});}catch(error){throw new HttpError(400,error instanceof Error?error.message:'Invalid configuration.');}return;
@@ -429,6 +463,7 @@ export class DashboardServer {
     const assets:Record<string,[string,string]>={'/':['index.html','text/html'],'/dashboard':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/setup.js':['setup.js','text/javascript'],'/studio.js':['studio.js','text/javascript'],'/styles.css':['styles.css','text/css'],'/favicon.svg':['favicon.svg','image/svg+xml'],'/cyro-logo.png':['cyro-logo.png','image/png']};
     Object.assign(assets,{'/privacy':['privacy.html','text/html'],'/terms':['terms.html','text/html'],'/connections':['connections.html','text/html'],'/connections.js':['connections.js','text/javascript'],'/creator.css':['creator.css','text/css'],'/identity.js':['identity.js','text/javascript'],'/suggestions.js':['suggestions.js','text/javascript'],'/status-roles.js':['status-roles.js','text/javascript'],'/audio.js':['audio.js','text/javascript'],'/confessions.js':['confessions.js','text/javascript'],'/search-select.js':['search-select.js','text/javascript']});
     Object.assign(assets,{'/home.js':['home.js','text/javascript'],'/home.css':['home.css','text/css']});
+    Object.assign(assets,{'/help.js':['help.js','text/javascript'],'/temp-voice.js':['temp-voice.js','text/javascript'],'/community-tools.js':['community-tools.js','text/javascript']});
     const asset=assets[route];if(!asset)throw new HttpError(404,'Page not found.');
     const file=await readFile(path.join(o.publicDir,asset[0])).catch(()=>{throw new HttpError(404,'Dashboard file not found.');});
     res.writeHead(200,{'Content-Type':`${asset[1]}; charset=utf-8`});res.end(method==='HEAD'?undefined:file);

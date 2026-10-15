@@ -40,7 +40,7 @@ function renderAccess(main) {
 
 function renderPublishing(main, kind) {
   const poll = kind === 'poll'; const section = poll ? 'polls' : 'messages';
-  main.append(heading(poll ? 'Polls' : 'Channel messages', poll ? 'Ask your community a question and let Discord collect the votes.' : 'Write an announcement, rules post or update with a styled embed.'));
+  main.append(heading(poll ? 'Polls' : 'Channel messages', poll ? 'Publish a question with answer choices. Members vote on the poll in Discord.' : 'Write an announcement, rules post or update with a styled embed.', link('Getting started', 'help')));
   const draft = poll ? { channelId: null, question: '', answers: ['Yes', 'No'], duration: 24, multiple: false } : { channelId: null, content: '', useEmbed: true, embed: { title: '', description: '', author: '', footer: '', color: '#63D7FF', url: '', image: '', thumbnail: '', fields: [] } };
   let operationId = crypto.randomUUID(), busy = false, uncertain = false;
   const preview = el('div', { className: 'publish-preview' });
@@ -99,6 +99,9 @@ function renderPublishing(main, kind) {
     }, 'secondary small')))) : el('p', { className: 'form-intro' }, 'Your published posts will appear here.'));
   }
   updatePreview(); drawHistory();
-  main.append(el('div', { className: 'settings-grid' }, form, el('aside', {}, contextCard('Preview', poll ? 'Members vote directly in Discord. Results remain on the original message.' : 'Text and layout preview. Linked images and markdown are rendered by Discord after posting.', poll ? 'chart' : 'file', preview))), panel(poll ? 'Published polls' : 'Published messages', el('div', { className: 'form-section' }, history)));
+  const guidance = poll
+    ? contextCard('How to run a poll', 'Choose a channel, write your question and add at least two answers. Review the preview before publishing.', 'chart', el('div', {}, el('ol', {}, el('li', {}, 'Anyone who can see the channel can vote in Discord.'), el('li', {}, 'Allow multiple answers if members can choose more than one.'), el('li', {}, 'Voting closes after your chosen duration. Use End poll below to finish early.')), el('p', {}, 'You can also start a poll with ', el('code', {}, '/poll'), ' in Discord. The question and answers cannot be edited after publishing.')))
+    : contextCard('One post or a reminder?', 'Channel messages publish once. Use Sticky messages for a notice that returns after new conversation.', 'pin', link('Set up a sticky message', 'sticky'));
+  main.append(el('div', { className: 'settings-grid' }, form, el('aside', {}, contextCard('Preview', poll ? 'Results remain on the original Discord poll.' : 'Text and layout preview. Linked images and markdown are rendered by Discord after posting.', poll ? 'chart' : 'file', preview), guidance)), panel(poll ? 'Published polls' : 'Published messages', el('div', { className: 'form-section' }, history)));
 }
 

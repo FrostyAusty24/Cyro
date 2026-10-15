@@ -105,3 +105,8 @@ Tests use mocked Discord/provider interactions and temporary data. Passing tests
 Original Cyro source is available under the [MIT License](LICENSE), copyright 2026 Headache Development. Third-party components retain their own licenses, including GPL/AGPL dependencies; MIT does not relicense them. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before packaging a runtime for distribution.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) for development and private vulnerability reporting.
+
+
+### Community setup
+
+Start with `/help` or `/dashboard`. Cyro includes join-to-create temporary voice rooms with `/room` controls, categorized `/bugreport` forms and staff triage, sticky embeds, suggestions, native Discord polls and staff activity across tickets, moderation and application reviews. Features are configured per server; new modules start disabled. See [FEATURE_SETUP.md](FEATURE_SETUP.md) for permissions and setup.

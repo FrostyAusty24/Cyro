@@ -234,7 +234,7 @@ export class ModerationService {
   async snapshot(guildId: string) {
     const state = this.store.read(guildId);
     const recoveryIssues = [...state.tickets.map(record => ({ recordType: 'ticket' as const, record })), ...state.applications.map(record => ({ recordType: 'application' as const, record }))].filter(({ record }) => record.operation).map(({ recordType, record }) => ({ recordType, id: record.id, operationId: record.operation!.id, kind: record.operation!.kind, stage: record.operation!.stage, detail: record.operation!.detail ?? 'Operation is still in progress.' }));
-    return { config: state.config, moderationCases: state.cases.slice(-100).reverse(), tickets: state.tickets.slice(-100).reverse(), applications: state.applications.slice(-100).reverse().map(({ answers: _answers, questions: _questions, ...record }) => record), recoveryIssues, staffLeaderboard: { '7d': staffStats(state.tickets, '7d'), '30d': staffStats(state.tickets, '30d'), all: staffStats(state.tickets, 'all') } };
+    return { config: state.config, moderationCases: state.cases.slice(-100).reverse(), tickets: state.tickets.slice(-100).reverse(), applications: state.applications.slice(-100).reverse().map(({ answers: _answers, questions: _questions, ...record }) => record), recoveryIssues, staffLeaderboard: { '7d': staffStats(state.tickets, '7d', Date.now(), state.cases, state.applications), '30d': staffStats(state.tickets, '30d', Date.now(), state.cases, state.applications), all: staffStats(state.tickets, 'all', Date.now(), state.cases, state.applications) } };
   }
   private exclusive<T>(guildId: string, task: () => Promise<T>): Promise<T> {
     const operation = (this.queues.get(guildId) ?? Promise.resolve()).catch(() => undefined).then(task);
@@ -301,8 +301,9 @@ export class ModerationService {
       const supportRoles = [...new Set([...ticketTypes(state.config).flatMap(type => type.staffRoleIds), ...state.tickets.filter(ticket => ticket.status === 'open').flatMap(ticket => ticket.ticketType?.staffRoleIds ?? [])])];
       if (!isStaff(actor, supportRoles)) throw new Error('Only configured support staff may view the staff leaderboard.');
       const period = (interaction.options.getString('period') ?? '7d') as '7d' | '30d' | 'all';
-      const rows = staffStats(state.tickets, period).slice(0, 20);
-      await interaction.editReply({ content: `Support activity · ${period === 'all' ? 'retained history' : period}\n${rows.map((row, i) => `${i + 1}. <@${row.userId}> — ${row.claims} claimed · ${row.closes} closed · average claim ${row.averageClaimSeconds ?? '—'}s`).join('\n') || 'No support activity yet.'}`, allowedMentions: NONE });
+      const rows = staffStats(state.tickets, period, Date.now(), state.cases, state.applications).slice(0, 10);
+      const lines = rows.map((row, i) => `**${i + 1}. <@${row.userId}>** · ${row.totalActions} actions\n${row.claims} claimed · ${row.closes} closed · ${row.moderationActions} moderation · ${row.applicationsReviewed} reviews\n${row.openAssigned} assigned now · Avg claim ${row.averageClaimSeconds ?? '—'}s · Avg close ${row.averageCloseSeconds ?? '—'}s`);
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x6dc9ed).setTitle(`Staff activity · ${period === 'all' ? 'retained history' : period}`).setDescription(lines.join('\n\n') || 'No recorded staff activity yet.').setFooter({text:'Ticket averages run from creation. Assigned tickets are current. Counts show activity, not service quality. More detail in /dashboard.'})], allowedMentions: NONE });
     }
   }
   private async supportRecovery(interaction: Command): Promise<void> {

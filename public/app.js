@@ -4,12 +4,12 @@
 const DEMO = new URLSearchParams(location.search).get('demo') === '1';
 const app = document.getElementById('app');
 const navigation = [
-  ['overview', 'Overview', 'grid'], ['streams', 'Creators & alerts', 'radio'],
+  ['overview', 'Overview', 'grid'], ['help', 'Getting started', 'help'], ['streams', 'Creators & alerts', 'radio'],
   ['streamer-leaderboard', 'Streamer leaderboard', 'chart'],
-  ['counting', 'Counting', 'hash'], ['suggestions', 'Suggestions', 'spark'], ['confessions', 'Anonymous confessions', 'confession'], ['voice', 'Music & TTS', 'music'], ['welcome', 'Welcome & roles', 'wave'], ['status-roles', 'Status roles', 'award'], ['verification', 'Verification', 'lock'],
+  ['counting', 'Counting', 'hash'], ['suggestions', 'Suggestions', 'spark'], ['polls', 'Polls', 'chart'], ['confessions', 'Anonymous confessions', 'confession'], ['voice', 'Music & TTS', 'music'], ['temp-voice', 'Temporary voice', 'voice'], ['welcome', 'Welcome & roles', 'wave'], ['status-roles', 'Status roles', 'award'], ['verification', 'Verification', 'lock'],
   ['invites', 'Invites & levels', 'gift'], ['moderation', 'Moderation', 'shield'], ['identity', 'Bot appearance', 'edit'],
-  ['tickets', 'Support tickets', 'ticket'], ['applications', 'Applications', 'file'],
-  ['staff', 'Staff leaderboard', 'award'], ['messages', 'Channel messages', 'file'], ['polls', 'Polls', 'chart'], ['access', 'Access & commands', 'lock']
+  ['tickets', 'Support tickets', 'ticket'], ['applications', 'Applications', 'file'], ['bug-reports', 'Bug reports', 'bug'],
+  ['staff', 'Staff leaderboard', 'award'], ['messages', 'Channel messages', 'file'], ['sticky', 'Sticky messages', 'pin'], ['access', 'Access & commands', 'lock']
 ];
 const iconPaths = {
   grid: ['M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z'],
@@ -34,10 +34,13 @@ const iconPaths = {
   help: ['M9 9a3 3 0 0 1 6 0c0 2-3 2-3 5M12 17h.01', 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z'],
   chart: ['M4 21V10M10 21V3M16 21v-7M22 21V7'],
   music: ['M9 18V5l12-2v13M9 9l12-2', 'M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3ZM21 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3Z'],
+  voice: ['M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14'],
+  bug: ['M8 9h8v7a4 4 0 0 1-8 0V9ZM9 9V7a3 3 0 0 1 6 0v2M5 6l3 3M19 6l-3 3M3 12h5M16 12h5M3 18l5-2M16 16l5 2M12 9v11'],
+  pin: ['m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v7'],
   confession: ['M21 11a8 8 0 0 1-8 8H7l-4 3V5a3 3 0 0 1 3-3h7a8 8 0 0 1 8 9Z', 'M8 8h8M8 12h5'],
   discord: ['M8 5 4 6c-2 4-3 8-2 12l5 2 1-2M16 5l4 1c2 4 3 8 2 12l-5 2-1-2M7 17c3 2 7 2 10 0M8 11v2M16 11v2M8 7c3-1 5-1 8 0']
 };
-const state = { me: null, guilds: [], guildId: null, detail: null, page: 'overview', dirty: false, staffPeriod: '7d', streamerPeriod: '7d', streamerSort: 'trackedMilliseconds', streamerView: 'creators', status: null, streamEditor: null, creatorEditor: null, loading: false, saving: false, loadSequence: 0 };
+const state = { me: null, guilds: [], guildId: null, detail: null, page: 'overview', dirty: false, staffPeriod: '7d', staffSort: 'totalActions', staffQuery: '', staffActivity: 'all', streamerPeriod: '7d', streamerSort: 'trackedMilliseconds', streamerView: 'creators', status: null, streamEditor: null, creatorEditor: null, loading: false, saving: false, loadSequence: 0 };
 let toastTimer;
 let closeNavigation = null;
 
@@ -153,7 +156,7 @@ function renderShell() {
     return;
   }
   if (!state.detail) { main.append(el('div', { className: 'alert' }, state.loadError || 'Could not load this server.', button('Try again', () => selectGuild(state.guildId, true), 'secondary small'))); return; }
-  const pages = { overview: renderOverview, streams: renderStreams, 'streamer-leaderboard': renderStreamerLeaderboard, counting: renderCounting, suggestions: renderSuggestions, confessions: renderConfessions, voice: renderVoice, welcome: renderWelcome, 'status-roles': renderStatusRoles, verification: renderVerification, invites: renderInvites, moderation: renderModeration, identity: renderIdentity, tickets: main => renderSupportSetup(main, 'tickets'), applications: main => renderSupportSetup(main, 'applications'), staff: renderStaff, messages: main => renderPublishing(main, 'message'), polls: main => renderPublishing(main, 'poll'), access: renderAccess };
+  const pages = { overview: renderOverview, help: renderHelp, streams: renderStreams, 'streamer-leaderboard': renderStreamerLeaderboard, counting: renderCounting, suggestions: renderSuggestions, confessions: renderConfessions, voice: renderVoice, 'temp-voice': renderTempVoice, 'bug-reports': renderBugReports, sticky: renderStickyMessages, welcome: renderWelcome, 'status-roles': renderStatusRoles, verification: renderVerification, invites: renderInvites, moderation: renderModeration, identity: renderIdentity, tickets: main => renderSupportSetup(main, 'tickets'), applications: main => renderSupportSetup(main, 'applications'), staff: renderStaff, messages: main => renderPublishing(main, 'message'), polls: main => renderPublishing(main, 'poll'), access: renderAccess };
   pages[state.page](main);
 }
 
@@ -162,7 +165,7 @@ function renderOverview(main) {
   const cc = community.config, mc = moderation.config, cs = community.snapshot, ms = moderation.snapshot;
   const openTickets = (ms.tickets || []).filter(t => t.status === 'open').length;
   const activeStreams = streams.filter(stream => stream.enabled);
-  main.append(heading(guild.name, 'Server overview. Keep up with your community and manage its tools.', el('a', { className: 'button secondary', href: '#welcome' }, icon('plus'), 'Welcome settings')));
+  main.append(heading(guild.name, 'Server overview. Keep up with your community and manage its tools.', el('a', { className: 'button secondary', href: '#help' }, icon('help'), 'How to use Cyro')));
   if (ms.recoveryIssues?.length) main.append(el('div', { className: 'alert info' }, `${ms.recoveryIssues.length} interrupted operation(s) need staff review. `, el('a', { href: '#tickets' }, 'Review tickets'), ' or ', el('a', { href: '#applications' }, 'applications'), ' before repeating an action.'));
   main.append(el('div', { className: 'metrics' }, metric('Community members', guild.memberCount == null ? '—' : format(guild.memberCount), 'Members in this server', 'users'), metric('Stream alerts', format(activeStreams.length), `${streams.filter(s => s.state === 'live' && s.enabled).length} accounts live right now`, 'radio'), metric('Community count', format(cs.counting?.current), `Personal best: ${format(cs.counting?.best)}`, 'hash'), metric('Open tickets', format(openTickets), openTickets ? 'Waiting for your team' : 'No open conversations', 'ticket')));
   const left = el('div', { className: 'stack' });
@@ -222,10 +225,11 @@ function linesField(session, label, path, hint, maxLines = 20, maxLength = 200) 
   const input = el('textarea', { rows: 4, value: (byPath(session.config, path) || []).join('\n'), onInput: event => { const values = event.target.value.split('\n').map(s => s.trim()).filter(Boolean); event.target.setCustomValidity(values.length > maxLines ? `Use at most ${maxLines} entries.` : values.some(value => value.length > maxLength) ? `Each entry must be ${maxLength} characters or fewer.` : ''); session.change(path, values); } });
   return field(label, input, hint);
 }
-function channelField(session, label, path, hint, category = false, emptyLabel = null, textOnly = false) {
+function channelField(session, label, path, hint, category = false, emptyLabel = null, textOnly = false, allowedTypes = null) {
   const current = byPath(session.config, path);
-  const options = (state.detail.channels || []).filter(c => category ? c.type === 4 || c.type === 'GuildCategory' : c.type === 0 || c.type === 'GuildText' || (!textOnly && (c.type === 5 || c.type === 'GuildAnnouncement')));
-  const select = el('select', { 'data-search-kind': category ? 'categories' : 'channels', onChange: event => session.change(path, event.target.value || null) }, el('option', { value: '', selected: !current }, emptyLabel || (category ? 'Select a category' : 'Select a channel')), options.map(c => el('option', { value: c.id, selected: current === c.id }, `${category ? '' : '# '}${c.name}`)), current && !options.some(c => c.id === current) && el('option', { value: current, selected: true }, `Unavailable · ${current}`));
+  const typeId = value => typeof value === 'number' ? value : ({ GuildText: 0, GuildVoice: 2, GuildCategory: 4, GuildAnnouncement: 5 })[value];
+  const options = (state.detail.channels || []).filter(c => allowedTypes ? allowedTypes.includes(typeId(c.type)) : category ? typeId(c.type) === 4 : typeId(c.type) === 0 || (!textOnly && typeId(c.type) === 5));
+  const select = el('select', { 'data-search-kind': category ? 'categories' : 'channels', onChange: event => session.change(path, event.target.value || null) }, el('option', { value: '', selected: !current }, emptyLabel || (category ? 'Select a category' : 'Select a channel')), options.map(c => el('option', { value: c.id, selected: current === c.id }, `${category || typeId(c.type) === 2 ? '' : '# '}${c.name}`)), current && !options.some(c => c.id === current) && el('option', { value: current, selected: true }, `Unavailable · ${current}`));
   return field(label, select, hint);
 }
 function roleField(session, label, path, hint, multiple = false) {
@@ -351,13 +355,64 @@ function table(headers, rows) { return el('div', { className: 'table-wrap' }, el
 function simpleLeaderboard(rows, headings, cells, emptyCopy) {
   return rows.length ? table(['#', 'Member', ...headings], rows.slice(0, 10).map((row, i) => [el('span', { className: `rank${i === 0 ? ' first' : ''}` }, String(i + 1).padStart(2, '0')), el('span', { className: 'leaderboard-identity' }, userLabel(row.userId)), ...cells(row)])) : empty('The leaderboard starts with your members.', emptyCopy, 'award');
 }
+function staffLeaderboardRows(rows, sort, query, activity, labelForId = userLabel) {
+  const number = value => Number.isFinite(value) ? value : 0;
+  const normalized = rows.map(row => ({ ...row, claims: number(row.claims), closes: number(row.closes), openAssigned: number(row.openAssigned), moderationActions: number(row.moderationActions), applicationsReviewed: number(row.applicationsReviewed), totalActions: Number.isFinite(row.totalActions) ? row.totalActions : number(row.claims) + number(row.closes) + number(row.moderationActions) + number(row.applicationsReviewed) }));
+  const timeSort = sort === 'averageClaimSeconds' || sort === 'averageCloseSeconds';
+  const sorted = normalized.sort((a, b) => {
+    const left = timeSort ? a[sort] ?? Infinity : number(a[sort]);
+    const right = timeSort ? b[sort] ?? Infinity : number(b[sort]);
+    const difference = timeSort ? left - right : right - left;
+    return (Number.isNaN(difference) ? 0 : difference) || b.totalActions - a.totalActions || String(a.userId).localeCompare(String(b.userId));
+  });
+  const needle = query.trim().toLocaleLowerCase();
+  return sorted.map((row, index) => ({ ...row, rank: index + 1 })).filter(row => {
+    const matchesName = !needle || `${labelForId(row.userId)} ${row.userId}`.toLocaleLowerCase().includes(needle);
+    const matchesActivity = activity === 'tickets' ? row.claims + row.closes > 0 : activity === 'moderation' ? row.moderationActions > 0 : activity === 'applications' ? row.applicationsReviewed > 0 : true;
+    return matchesName && matchesActivity;
+  });
+}
 function renderStaff(main) {
   const rows = state.detail.moderation.snapshot.staffLeaderboard?.[state.staffPeriod] || [];
-  const claims = rows.reduce((sum, row) => sum + row.claims, 0), closes = rows.reduce((sum, row) => sum + row.closes, 0);
-  main.append(heading('Staff leaderboard', 'A clear view of who is helping your community, one conversation at a time.', null), el('div', { className: 'metrics' }, metric('Active support staff', format(rows.length), 'Staff with activity in this period', 'users'), metric('Tickets claimed', format(claims), 'Conversations picked up by your team', 'ticket'), metric('Tickets closed', format(closes), 'Support conversations completed', 'check')));
+  const allRows = staffLeaderboardRows(rows, 'totalActions', '', 'all');
+  const total = key => allRows.reduce((sum, row) => sum + row[key], 0);
+  main.append(heading('Staff leaderboard', 'Tickets, moderation and application reviews handled through Cyro.', link('Staff commands', 'help')),
+    el('div', { className: 'metrics staff-metrics' }, metric('Active staff', format(allRows.filter(row => row.totalActions > 0).length), 'With recorded actions in this period', 'users'), metric('Tickets closed', format(total('closes')), 'Completed during this period', 'ticket'), metric('Total actions', format(total('totalActions')), 'Claims, closes, moderation and reviews', 'check'), metric('Assigned now', format(total('openAssigned')), 'Open tickets currently claimed by staff', 'clock')));
   const tabs = el('div', { className: 'tabs', 'aria-label': 'Leaderboard time period' }, [['7d', '7 days'], ['30d', '30 days'], ['all', 'Retained history']].map(([key, title]) => el('button', { type: 'button', 'aria-pressed': state.staffPeriod === key ? 'true' : 'false', onClick: () => { state.staffPeriod = key; renderShell(); } }, title)));
-  main.append(panel('Your support team', rows.length ? table(['Rank', 'Staff member', 'Claims', 'Closes', 'Avg. time to claim'], rows.map((row, index) => [el('span', { className: `rank${index === 0 ? ' first' : ''}` }, String(index + 1).padStart(2, '0')), el('div', { className: 'table-name' }, el('span', { className: 'avatar' }, String(index + 1)), el('span', { className: 'leaderboard-identity' }, userLabel(row.userId))), format(row.claims), format(row.closes), row.averageClaimSeconds == null ? '—' : duration(row.averageClaimSeconds)])) : empty('Every helping hand matters.', 'Once staff begin claiming and closing tickets, their contributions appear here.', 'award'), tabs, 'Ticket contributions for the selected period'), el('div', { className: 'integration-note' }, icon('help'), 'Counts show activity handled through this bot. They are one part of understanding your team’s work.'));
+  const ranking = el('div', { className: 'staff-ranking' });
+  const summary = el('p', { className: 'staff-results', role: 'status', 'aria-live': 'polite' });
+  const search = el('input', { type: 'search', value: state.staffQuery, placeholder: 'Name or Discord ID', autocomplete: 'off', onInput: event => { state.staffQuery = event.target.value; drawRows(); } });
+  const sorts = [['totalActions', 'Most total actions'], ['closes', 'Most tickets closed'], ['claims', 'Most tickets claimed'], ['moderationActions', 'Most moderation actions'], ['applicationsReviewed', 'Most applications reviewed'], ['openAssigned', 'Most tickets assigned now'], ['averageClaimSeconds', 'Fastest average claim'], ['averageCloseSeconds', 'Fastest average close']];
+  const sort = el('select', { onChange: event => { state.staffSort = event.target.value; drawRows(); } }, sorts.map(([value, label]) => el('option', { value, selected: value === state.staffSort }, label)));
+  const activity = el('select', { onChange: event => { state.staffActivity = event.target.value; drawRows(); } }, [['all', 'All staff activity'], ['tickets', 'Ticket activity'], ['moderation', 'Moderation activity'], ['applications', 'Application reviews']].map(([value, label]) => el('option', { value, selected: value === state.staffActivity }, label)));
+  const toolbar = el('div', { className: 'staff-toolbar' }, field('Find a staff member', search), field('Sort by', sort), field('Show staff with', activity));
+  const headers = ['Rank', 'Staff member', 'Total actions', 'Claims', 'Closes', 'Moderation', 'Applications', 'Assigned now', 'Avg. claim', 'Avg. close'];
+  const time = value => value == null ? '—' : duration(value);
+  function drawRows() {
+    const visible = staffLeaderboardRows(rows, state.staffSort, state.staffQuery, state.staffActivity);
+    summary.textContent = `${visible.length} of ${allRows.length} staff shown · ${sort.selectedOptions[0]?.textContent || 'Most total actions'}.`;
+    if (!visible.length) {
+      ranking.replaceChildren(empty(allRows.length ? 'No staff match these filters.' : 'No staff activity recorded yet.', allRows.length ? 'Try a different name or choose All staff activity.' : 'Claim or close a ticket, take a moderation action, or review an application through Cyro to start recording activity.', 'award', allRows.length ? button('Clear filters', () => { search.value = ''; activity.value = 'all'; state.staffQuery = ''; state.staffActivity = 'all'; drawRows(); }, 'secondary') : link('Set up support tickets', 'tickets')));
+      return;
+    }
+    ranking.replaceChildren(el('div', { className: 'table-wrap staff-table-wrap', tabindex: '0', role: 'region', 'aria-label': 'Staff activity table' }, el('table', { className: 'staff-table' },
+      el('caption', { className: 'sr-only' }, 'Staff activity in the selected period. Assigned now is the current workload. Missing averages are shown as a dash. Rank uses the selected sort before filtering.'),
+      el('thead', {}, el('tr', {}, headers.map(label => el('th', { scope: 'col' }, label)))),
+      el('tbody', {}, visible.map(row => {
+        const name = userLabel(row.userId);
+        const cells = [el('span', { className: 'rank' }, String(row.rank)), el('div', { className: 'table-name' }, el('span', { className: 'avatar', 'aria-hidden': 'true' }, name.slice(0, 2).toUpperCase()), el('span', { className: 'staff-name' }, name)), el('strong', {}, format(row.totalActions)), format(row.claims), format(row.closes), format(row.moderationActions), format(row.applicationsReviewed), format(row.openAssigned), time(row.averageClaimSeconds), time(row.averageCloseSeconds)];
+        return el('tr', {}, cells.map((cell, index) => el('td', { 'data-label': headers[index] }, cell)));
+      })))));
+  }
+  main.append(panel('Team activity', el('div', {}, toolbar, summary, ranking), tabs, 'Use a period, activity filter or staff name to find the work you want to review.'),
+    el('details', { className: 'staff-explainer' }, el('summary', {}, icon('help'), 'What these numbers mean'), el('div', {},
+      el('p', {}, el('strong', {}, 'Total actions'), ' counts ticket claims, ticket closes, moderation actions and application reviews equally. It is an activity count, not a rating of staff quality.'),
+      el('p', {}, el('strong', {}, 'Average claim / close'), ' measures time from a ticket being created to that staff member claiming or closing it. A dash means no timed action is available.'),
+      el('p', {}, el('strong', {}, 'Assigned now'), ' is the current number of open tickets claimed by each staff member, regardless of the selected period.'),
+      el('p', {}, el('strong', {}, 'Retained history'), ' includes records still stored by Cyro. Actions taken outside Cyro and deleted historical records are not included. The summary totals cover the whole selected period, before filtering.'))));
+  drawRows();
 }
+
 function duration(seconds) { if (seconds < 60) return `${Math.round(seconds)} sec`; if (seconds < 3600) return `${Math.round(seconds / 60)} min`; return `${(seconds / 3600).toFixed(1)} hr`; }
 
 function trackedTime(milliseconds) {
@@ -629,7 +684,7 @@ function demoData() {
     { id: 'sample-support-panel', name: 'Support panel', kind: 'tickets', presentation: 'select', title: 'How can we help?', description: 'Choose a topic to open a ticket with our team. Ticket visibility follows this server’s settings.', options: modConfig.tickets.types.map(item => ({ id: item.id, label: item.name })) },
     { id: 'sample-application-panel', name: 'Application panel', kind: 'applications', presentation: 'buttons', title: 'Join the team', description: 'Choose an application to get started. Your answers are posted in this server’s review channel.', options: modConfig.applications.forms.map(item => ({ id: item.id, label: item.name })) }
   ];
-  const staff = [{ userId: '400000000000000001', claims: 12, closes: 10, averageClaimSeconds: 164 }, { userId: '400000000000000002', claims: 9, closes: 8, averageClaimSeconds: 287 }, { userId: '400000000000000003', claims: 6, closes: 5, averageClaimSeconds: 342 }];
+  const staff = [{ userId: '400000000000000001', claims: 12, closes: 10, averageClaimSeconds: 164, averageCloseSeconds: 1840, openAssigned: 0, moderationActions: 4, applicationsReviewed: 3 }, { userId: '400000000000000002', claims: 9, closes: 8, averageClaimSeconds: 287, averageCloseSeconds: 2460, openAssigned: 1, moderationActions: 2, applicationsReviewed: 5 }, { userId: '400000000000000003', claims: 6, closes: 5, averageClaimSeconds: 342, averageCloseSeconds: 3210, openAssigned: 0, moderationActions: 0, applicationsReviewed: 2 }];
   state.demoDetail = { guild: { id, name: 'The Common Room', memberCount: 1284 }, channels: [['1', 'counting-club', 0], ['2', 'welcome', 0], ['3', 'live-now', 0], ['4', 'staff-log', 0], ['5', 'general', 0], ['6', 'applications', 0], ['7', 'Support', 4], ['8', 'Closed tickets', 4]].map(([suffix, name, type]) => ({ id: channel + suffix, name, type })), roles: [['1', 'Community'], ['2', 'Support team'], ['3', 'Stream alerts'], ['4', 'Creators']].map(([suffix, name]) => ({ id: role + suffix, name })), members: [{ id: staff[0].userId, displayName: 'Sam' }, { id: staff[1].userId, displayName: 'Jamie' }, { id: staff[2].userId, displayName: 'Alex' }], community: { config, snapshot: { config, counting: { current: 428, best: 612, lastUserId: staff[0].userId }, inviteTracking: { ready: true, note: 'Sample invite history. No Discord events are sent.' }, inviteLeaderboard: [{ userId: staff[0].userId, active: 7, total: 9 }, { userId: staff[1].userId, active: 5, total: 5 }], levelLeaderboard: [{ userId: staff[2].userId, xp: 1240, level: 4 }, { userId: staff[0].userId, xp: 820, level: 3 }] } }, moderation: { config: modConfig, snapshot: { config: modConfig, moderationCases: [], tickets: [{ id: 'T-0012', ownerId: staff[0].userId, channelId: `${channel}5`, status: 'open', createdAt: '2026-10-10T19:42:00Z', claimedBy: staff[1].userId }, { id: 'T-0011', ownerId: staff[2].userId, channelId: `${channel}5`, status: 'open', createdAt: '2026-10-10T18:30:00Z', claimedBy: null }, { id: 'T-0010', ownerId: staff[1].userId, channelId: `${channel}5`, status: 'closed', createdAt: '2026-10-10T15:10:00Z', closedAt: '2026-10-10T16:00:00Z' }], applications: [], staffLeaderboard: { '7d': staff, '30d': staff.map(s => ({ ...s, claims: s.claims * 3, closes: s.closes * 3 })), all: staff.map(s => ({ ...s, claims: s.claims * 7, closes: s.closes * 7 })) } } }, streams: [{ id: 'sample-1', platform: 'twitch', username: 'lunaplays', displayName: 'LunaPlays', alertChannelId: `${channel}3`, state: 'live', enabled: true, cooldownSeconds: 300, cleanupMode: 'offline', messageTemplate: '' }, { id: 'sample-2', platform: 'kick', username: 'afterhours', displayName: 'AfterHours', alertChannelId: `${channel}3`, state: 'offline', enabled: true, cooldownSeconds: 300, cleanupMode: 'offline', messageTemplate: '' }, { id: 'sample-3', platform: 'twitch', username: 'oakandember', displayName: 'Oak & Ember', alertChannelId: `${channel}3`, state: 'offline', enabled: true, cooldownSeconds: 300, cleanupMode: 'offline', messageTemplate: '' }] };
   state.demoDetail.community.snapshot.inviteLog = [
     { id: 'sample-log-3', event: 'joined', memberId: staff[2].userId, memberName: 'Alex', inviterId: null, inviteCode: null, inviteChannelId: null, source: 'unknown', reason: 'ambiguous', at: '2026-10-12T21:04:00Z' },
@@ -639,6 +694,8 @@ function demoData() {
   const now = new Date().toISOString();
   state.demoDetail.roles.push({ id: `${role}5`, name: 'Community supporter' });
   state.demoDetail.statusRoles = { config: { enabled: true, text: 'discord.gg/commonroom', roleId: `${role}5`, match: 'contains', caseSensitive: false, offlineBehavior: 'keep' }, available: true, counts: { assigned: 18, pendingAdd: 0, pendingRemove: 0 }, warnings: [] };
+  state.demoDetail.tempVoice = { config: { enabled: false, lobbyChannelId: null, categoryId: null, nameTemplate: "{name}'s room", userLimit: 0, maxRooms: 10, ownerControls: true }, rooms: [], pending: 0, warnings: [] };
+  state.demoDetail.communityTools = { config: { bugs: { enabled: false, cooldownMinutes: 5, categories: [] }, stickies: [] }, reports: [], counts: { open: 0, in_progress: 0, resolved: 0, dismissed: 0, pending: 0 }, stickyStates: [], page: 1, totalPages: 1 };
   state.demoDetail.channels.push({ id: `${channel}10`, name: 'The lounge', type: 2 }, { id: `${channel}11`, name: 'confessions', type: 0 });
   state.demoDetail.voice = {
     config: { musicEnabled: true, ttsEnabled: true, announceSpeaker: false, defaultVoice: 'voice1', volume: 50, maxTrackMinutes: 15 },

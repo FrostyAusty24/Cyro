@@ -2,7 +2,7 @@ import path from 'node:path';
 import { ControlStore } from './control/store.js';
 import { AccessService, setProtectedRoleResolver } from './control/access.js';
 import { PublishingService } from './control/publishing.js';
-import { Client, Events, GatewayIntentBits, Partials, REST, Routes } from 'discord.js';
+import { ActivityType, Client, Events, GatewayIntentBits, Partials, REST, Routes } from 'discord.js';
 import { CommandHandler } from './commands/handler.js';
 import { registerCommands } from './commands/register.js';
 import { loadConfig } from './config.js';
@@ -28,6 +28,8 @@ import { StatusRoleService } from './status-roles/service.js';
 import { probePresenceIntent } from './services/presence-intent.js';
 import { VoiceService } from './voice/service.js';
 import { ConfessionsService } from './confessions/service.js';
+import { TempVoiceService } from './temp-voice/service.js';
+import { CommunityToolsService } from './community-tools/service.js';
 import { checkVoiceRuntime } from './voice/check.js';
 
 async function main(): Promise<void> {
@@ -89,7 +91,9 @@ async function main(): Promise<void> {
   const statusRoles = new StatusRoleService(client, config.dataDir, logger, access, presenceAvailable);
   const voice = new VoiceService(client, config.dataDir, logger, access);
   const confessions = new ConfessionsService(client, config.dataDir, logger, access);
-  const retention = new GuildRetention(client, path.join(config.dataDir, 'removed-guilds.json'), [community, moderation, suggestions, statusRoles, voice, confessions, control, {
+  const tempVoice = new TempVoiceService(client, config.dataDir, logger, access);
+  const communityTools = new CommunityToolsService(client, config.dataDir, logger, access);
+  const retention = new GuildRetention(client, path.join(config.dataDir, 'removed-guilds.json'), [community, moderation, suggestions, statusRoles, voice, confessions, tempVoice, communityTools, control, {
     guildIds: () => store.guildIds(),
     purgeGuild: (guildId, shouldPurge) => monitor.withLock(() => store.purgeGuild(guildId, shouldPurge)),
   }, tiktok, {
@@ -101,7 +105,7 @@ async function main(): Promise<void> {
   let readyTask: Promise<void> = Promise.resolve();
   let startupTask: Promise<void> = Promise.resolve();
   const dashboardStreams = new DashboardStreams(store, providers, alerts, monitor);
-  const dashboard = config.dashboardEnabled ? new DashboardServer({client, config, logger, community, moderation, suggestions, statusRoles, voice, confessions, access, publishing,
+  const dashboard = config.dashboardEnabled ? new DashboardServer({client, config, logger, community, moderation, suggestions, statusRoles, voice, confessions, tempVoice, communityTools, access, publishing,
     streams: dashboardStreams, creators: new DashboardCreators(store,alerts,monitor,dashboardStreams), publicDir: path.resolve('public'),
     streamStats: creatorStats,
     tiktok: new DashboardTikTok(client, store, monitor, tiktok),
@@ -112,8 +116,11 @@ async function main(): Promise<void> {
     readyTask = (async () => {
       await moderation.reconcile();
       if (shuttingDown) return;
+      await Promise.all([tempVoice.reconcile(), communityTools.reconcile()]);
+      if (shuttingDown) return;
       // Suggestion votes and decisions are already durable; attach repairs stale message counts in the background.
-      commands.attach(); community.attach(); moderation.attach(); suggestions.attach(); statusRoles.attach(); voice.attach(); confessions.attach(); retention.attach();
+      commands.attach(); community.attach(); moderation.attach(); suggestions.attach(); statusRoles.attach(); voice.attach(); confessions.attach(); tempVoice.attach(); communityTools.attach(); retention.attach();
+      readyClient.user.setActivity('your community · /help · /dashboard', { type: ActivityType.Watching });
       operational = true;
       monitor.start(); retention.start();
       logger.info('Discord bot is ready.', { user: readyClient.user.tag, guilds: readyClient.guilds.cache.size });
@@ -143,12 +150,12 @@ async function main(): Promise<void> {
     logger.info('Shutting down.', { signal });
     try {
       await drainRuntime({
-        stopIntake: () => { operational = false; commands.stop(); community.stop(); moderation.stop(); suggestions.stop(); statusRoles.stop(); voice.stop(); confessions.stop(); monitor.stop(); },
+        stopIntake: () => { operational = false; commands.stop(); community.stop(); moderation.stop(); suggestions.stop(); statusRoles.stop(); voice.stop(); confessions.stop(); tempVoice.stop(); communityTools.stop(); monitor.stop(); },
         stopProducers: async () => {
           await startupTask.catch(() => undefined);
           await Promise.all([dashboard?.stop(), retention.stop(), readyTask.catch(() => undefined)]);
         },
-        drainHandlers: async () => { await Promise.all([commands.flush(), community.flush(), moderation.flush(), suggestions.flush(), statusRoles.flush(), voice.flush(), confessions.flush()]); },
+        drainHandlers: async () => { await Promise.all([commands.flush(), community.flush(), moderation.flush(), suggestions.flush(), statusRoles.flush(), voice.flush(), confessions.flush(), tempVoice.flush(), communityTools.flush()]); },
         flushStorage: () => monitor.withLock(async () => { await store.flush(); await control.flush(); await tiktok.flush(); await analytics.pauseAll(); await analytics.flush(); }),
         destroyClient: () => { client.destroy(); },
         releaseOwnership,
@@ -170,7 +177,7 @@ async function main(): Promise<void> {
       () => store.init(),
       () => control.init(),
       () => tiktok.init(),
-      () => Promise.all([community.init(), moderation.init(), suggestions.init(), statusRoles.init(), voice.init(), confessions.init(), retention.init(), analytics.init()]),
+      () => Promise.all([community.init(), moderation.init(), suggestions.init(), statusRoles.init(), voice.init(), confessions.init(), tempVoice.init(), communityTools.init(), retention.init(), analytics.init()]),
       async () => { const capabilities = await checkVoiceRuntime(); voice.setRuntimeStatus(capabilities); logger.info('Voice runtime check.', capabilities); },
       async () => { if (config.autoDeployCommands) await registerCommands(config, logger); },
       async () => { if (dashboard) { await dashboard.start(); logger.info('Dashboard listening; readiness waits for Discord and recovery.', { url: config.dashboardUrl }); } },

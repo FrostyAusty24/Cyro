@@ -4,6 +4,8 @@ import type { Logger } from '../logger.js';
 import { commandBuilders } from './builders.js';
 import { communityCommands } from '../community/commands.js';
 import { moderationCommands } from '../moderation/index.js';
+import { tempVoiceCommands } from '../temp-voice/commands.js';
+import { communityToolsCommands } from '../community-tools/commands.js';
 import { voiceCommands } from '../voice/commands.js';
 
 export function createRegistrationPlan(config: Pick<AppConfig, 'discordClientId' | 'commandScope' | 'developmentGuildId'>) {
@@ -11,7 +13,7 @@ export function createRegistrationPlan(config: Pick<AppConfig, 'discordClientId'
     DISCORD_COMMAND_SCOPE: config.commandScope,
     DISCORD_DEV_GUILD_ID: config.developmentGuildId,
   });
-  const allCommands = [...commandBuilders, ...communityCommands, ...moderationCommands, ...voiceCommands,
+  const allCommands = [...commandBuilders, ...communityCommands, ...moderationCommands, ...voiceCommands, ...tempVoiceCommands, ...communityToolsCommands,
     new SlashCommandBuilder().setName('confess').setDescription('Post an anonymous confession in this server’s configured channel.').addStringOption(o=>o.setName('confession').setDescription('Your confession (posted without your name)').setRequired(true).setMaxLength(1500)),
     new SlashCommandBuilder().setName('suggestion').setDescription('Share an idea for members of this server to vote on.'),
     ...['poll', 'embed'].map(name => new SlashCommandBuilder().setName(name).setDescription(`Open the dashboard ${name === 'poll' ? 'poll builder' : 'message composer'}.`))];

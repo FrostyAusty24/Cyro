@@ -13,7 +13,7 @@ async function renderSuggestions(main) {
   const active = () => main.isConnected && state.guildId === guildId && state.page === 'suggestions' && sequence === suggestionsRenderSequence;
   const endpoint = `/api/guilds/${safeId(guildId)}/suggestions`;
   const detail = state.detail;
-  main.replaceChildren(heading('Suggestions', 'Give your community a place for ideas, votes, and a clear response from your team.'));
+  main.replaceChildren(heading('Suggestions', 'Members submit ideas with /suggestion. Let them vote, then share your team’s decision.', link('Getting started', 'help')));
   const surface = el('div', { className: 'loading-surface', role: 'status' }, el('span', { className: 'loader' }), 'Loading suggestions…');
   main.append(surface);
   let snapshot;
@@ -115,7 +115,7 @@ async function renderSuggestions(main) {
     drawCounts();
     drawPagination();
     const items = (snapshot.items || []).filter(item => filter === 'all' || (filter === 'pending' ? item.delivery === 'pending' : item.delivery === 'sent' && item.status === filter));
-    const content = items.length ? items.map(renderItem) : [empty(filter === 'all' ? 'Your next good idea starts here.' : 'No matching suggestions on this page.', filter === 'all' ? 'Enable the board and choose a channel above. Members can then use /suggestion in Discord.' : 'Choose another status or page, or refresh to check for new ideas.', 'spark')];
+    const content = items.length ? items.map(renderItem) : [empty(filter === 'all' ? 'No suggestions yet.' : 'No matching suggestions on this page.', filter === 'all' ? 'Choose a channel, enable suggestions and save. Members can then use /suggestion in Discord to post their first idea.' : 'Choose another status or page, or refresh to check for new ideas.', 'spark')];
     history.replaceChildren(...content);
   }
   function renderItem(item) {

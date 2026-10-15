@@ -190,3 +190,32 @@ The startup check verifies generated speech through the local audio pipeline. Mi
 ### YouTube music host check
 
 `npm install` attempts an optional checksum-verified yt-dlp installation in `bin/`. The bot still starts if it is unavailable. Use `npm run install-youtube` to retry installation, then `npm run build` and `npm run check-youtube` for a credential-free source test. Keep `bin/` out of the source repository. The installation probe records only diagnostic flags for a public Blender CC BY sample; no user music, cookies or platform credentials are used. Source access does not prove a Discord call can receive sound.
+
+
+## Community tools and getting started (2.19)
+
+Use `/help` for a member command guide or `/dashboard` for server settings. The Getting started page explains setup and links to each feature. `/ping` reports Discord connection latency.
+
+### Temporary voice rooms
+
+In **Temporary voice**, select a normal voice lobby and destination category, choose a room name (supports `{name}`), capacity and maximum active rooms, then enable and save. Cyro needs View Channel, Connect, Manage Channels, Manage Permissions and Move Members in the destination category; View Channel, Connect and Move Members in the lobby. New rooms inherit the category's visibility. Later category edits do not automatically sync to existing rooms.
+
+Joining the lobby makes one room per member and moves them into it. Joining again returns them to their room. Empty rooms are removed after a short grace period. Owners use `/room info`, `/room name`, `/room limit`, `/room lock`, `/room unlock`, `/room permit` and `/room revoke` while in their room. Staff with Manage Channels can control a room they have joined. Locks prevent new joins, do not disconnect current participants and cannot block Discord administrators. Owner controls are optional; no server-wide management permission is granted. Disabling creation still lets tracked empty rooms be cleaned up.
+
+### Bug reports
+
+In **Bug reports**, create categories such as Bot issues or Server issues and select a destination text channel for each. Enable reports and save. `/bugreport` opens a form; its optional category supports autocomplete. Reports include the member's Discord identity and are visible to that channel's audience and authorized dashboard staff. Choose public or private channels to suit your server. Reports are not anonymous.
+
+Staff can use report buttons or the dashboard to set Open, In progress, Resolved or Dismissed. There are up to 10 categories and 1,000 retained reports per server; completed reports are evicted first. If all slots contain active or unconfirmed work, new submissions pause until staff resolve reports. Unconfirmed delivery is never blindly posted again; check the destination channel before resubmitting.
+
+### Sticky messages
+
+In **Sticky messages**, add an embed and select a channel, message threshold and minimum delay (at least 30 seconds). Saving does not post; the sticky refreshes after new human messages meet both thresholds. Cyro removes only its own previous tracked sticky. Disabling or removing a sticky cleans up its tracked post. Up to 10 are supported per server. Delivery references allow recovery after restart without reposting an uncertain send.
+
+### Staff activity, suggestions and polls
+
+Staff activity includes manual warnings, timeouts, kicks, bans and purges, application reviews, ticket claims and closures. Automatic filters do not count. Current assigned tickets are shown separately from the selected 7-day, 30-day or retained-history window. Average claim and closure times start at ticket creation; counts reflect activity, not quality. Search by staff name or ID and sort by the metric you need.
+
+Suggestions use the existing `/suggestion` form and voting buttons; admins select its channel and record decisions. Polls use Discord's native voting through the dashboard builder (`/poll`).
+
+New tools default to off. Settings, reports and temporary-room receipts remain guild-scoped and follow the existing 30-day removal retention process. Deploying this release does not change existing channel permissions.

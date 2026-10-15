@@ -79,3 +79,11 @@
   .home-steps{grid-template-columns:1fr;gap:25px;margin-top:24px}.home-steps li{position:relative;padding-left:36px}.home-step-number{position:absolute;left:0;top:3px}.home-steps p{margin-bottom:6px}.home-questions{grid-template-columns:1fr;gap:22px}.home-questions>div>p{max-width:100%;margin-top:12px}.home-faq summary{font-size:13px}.home-help{align-items:flex-start;flex-direction:column;gap:12px;padding-block:4px 32px}.home-help h2{font-size:18px}.home-footer{font-size:11px;gap:14px;flex-direction:column;align-items:flex-start!important}.home-footer .public-links{gap:8px 16px;flex-wrap:wrap}
 }
 @media(max-width:380px){.home-nav-links{gap:12px}.home-nav-links .button{width:100%;margin:0}.home-hero .login-copy h1{font-size:34px}.home-community{gap:14px}.home-logo{width:72px;height:72px}.home-server-total{gap:9px}.home-server-number{font-size:26px}}
+
+/* Keep public explanations at a comfortable reading size. */
+.home-feature li,.home-provider-note,.home-faq p,.home-steps p,.home-questions>div>p{font-size:14px;line-height:1.75}
+.home-feature h3,.home-faq summary{font-size:16px;line-height:1.6}
+.home-free{border-left-width:1px;background:var(--panel)}
+.home-free-signature,.home-server-status{font-size:12px}
+.home-nav-links>a:not(.button),.home-steps a,.home-help a,.home-questions a{font-size:14px}
+@media(max-width:720px){.home-feature li,.home-provider-note,.home-faq p,.home-steps p,.home-questions>div>p{font-size:14px}.home-feature h3,.home-faq summary{font-size:15px}}

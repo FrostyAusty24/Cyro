@@ -72,7 +72,7 @@ export class CommandHandler {
 
   private async handleInteraction(interaction: Interaction): Promise<void> {
     if (!interaction.isAutocomplete() && !interaction.isChatInputCommand()) return;
-    if (!['streamalerts', 'streamer-leaderboard', 'dashboard', 'poll', 'embed'].includes(interaction.commandName) && !PLATFORMS.includes(interaction.commandName as Platform)) return;
+    if (!['help', 'ping', 'streamalerts', 'streamer-leaderboard', 'dashboard', 'poll', 'embed'].includes(interaction.commandName) && !PLATFORMS.includes(interaction.commandName as Platform)) return;
     try {
       if (interaction.isAutocomplete()) await this.autocomplete(interaction);
       else if (interaction.isChatInputCommand()) await this.execute(interaction);
@@ -88,6 +88,12 @@ export class CommandHandler {
 
   private async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!interaction.inCachedGuild()) throw new Error('This command can only be used in a Discord server.');
+    if (interaction.commandName === 'help' || interaction.commandName === 'ping') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      if (interaction.commandName === 'help') await this.help(interaction);
+      else await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x6dc9ed).setTitle('Cyro is connected').setDescription(`Discord connection: ${this.client.ws.ping >= 0 ? `${Math.round(this.client.ws.ping)} ms` : 'warming up'}.\nUse /help for commands or /dashboard to open server settings.`)], allowedMentions: { parse: [] } });
+      return;
+    }
     if (interaction.commandName === 'streamer-leaderboard') {
       await interaction.deferReply();
       await this.access?.command(interaction.guild, interaction.user.id, interaction.commandName, true);
@@ -114,6 +120,23 @@ export class CommandHandler {
     } else {
       await this.platform(interaction, interaction.commandName as Platform);
     }
+  }
+
+  private async help(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
+    const embed = new EmbedBuilder().setColor(0x6dc9ed).setTitle('Welcome to Cyro')
+      .setDescription('**Start with /dashboard** to choose this server’s channels, roles and features. Only people granted dashboard access can edit settings. Features must be enabled by your server first.')
+      .addFields(
+        { name: 'Make yourself heard', value: '`/suggestion` — suggest an idea for members to vote on.\n`/bugreport` — report a bot or server problem to the configured team.\n`/confess` — post anonymously in the confession channel.' },
+        { name: 'Voice rooms, music & TTS', value: 'Join the server’s temporary-room lobby to get a room. Use `/room` to lock it, rename it or permit a member.\n`/playmusic` queues a supported link. `/addtts` speaks new messages in your call’s chat. `/ttsvoice` chooses your voice. `/stoptts` stops it.' },
+        { name: 'Community & support', value: 'Use the server’s ticket or application panel to get help or apply. `/rank`, `/leaderboard` and `/invites` show community activity. Staff can use `/staff-leaderboard`.' },
+        { name: 'For server staff', value: '`/dashboard` manages creator alerts, moderation, welcome cards, verification, tickets, applications, sticky messages, polls and more. `/poll` opens the poll builder; `/embed` opens the message composer.' },
+      ).setFooter({ text: 'Cyro by Headache Development · Say it “k-eye-row”.' });
+    const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel('Support community').setStyle(ButtonStyle.Link).setURL('https://discord.gg/dAZheerkkD'));
+    if (this.dashboardConfig?.dashboardEnabled && this.dashboardConfig.dashboardUrl) {
+      const url = new URL('/', this.dashboardConfig.dashboardUrl); url.searchParams.set('guild', interaction.guildId); url.hash = 'help';
+      buttons.addComponents(new ButtonBuilder().setLabel('Open dashboard').setStyle(ButtonStyle.Link).setURL(url.toString()));
+    }
+    await interaction.editReply({ embeds: [embed], components: [buttons], allowedMentions: { parse: [] } });
   }
 
   private async openDashboard(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {

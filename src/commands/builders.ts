@@ -142,4 +142,6 @@ export const commandBuilders = [
   streamAlertsCommand,
   streamerLeaderboardCommand,
   dashboardCommand,
+  new SlashCommandBuilder().setName('help').setDescription('Learn Cyro’s commands and how to set up your server.').setContexts(InteractionContextType.Guild),
+  new SlashCommandBuilder().setName('ping').setDescription('Check whether Cyro is connected to Discord.').setContexts(InteractionContextType.Guild),
 ];

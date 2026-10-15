@@ -2,7 +2,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-export const COMMAND_KEYS = ['dashboard', 'twitch', 'kick', 'youtube', 'tiktok', 'streamalerts', 'streamer-leaderboard', 'counting', 'invites', 'rank', 'leaderboard', 'roles-panel', 'moderate', 'ticket', 'apply', 'staff-leaderboard', 'support-recovery', 'poll', 'embed', 'suggestion', 'confess', 'playmusic', 'musicqueue', 'skipmusic', 'stopmusic', 'addtts', 'stoptts', 'ttsvoice'] as const;
+export const COMMAND_KEYS = ['dashboard', 'twitch', 'kick', 'youtube', 'tiktok', 'streamalerts', 'streamer-leaderboard', 'counting', 'invites', 'rank', 'leaderboard', 'roles-panel', 'moderate', 'ticket', 'apply', 'staff-leaderboard', 'support-recovery','room','bugreport', 'poll', 'embed', 'suggestion', 'confess', 'playmusic', 'musicqueue', 'skipmusic', 'stopmusic', 'addtts', 'stoptts', 'ttsvoice'] as const;
 export interface AccessConfig { managerAccess: boolean; dashboardRoleIds: string[]; commandRoles: Record<string, string[]> }
 export interface PublishedPost { id: string; kind: 'message' | 'poll'; channelId: string; actorId: string; title: string; createdAt: string; status: 'pending' | 'sent'; messageId?: string; payloadHash: string }
 interface ControlGuild { access: AccessConfig; posts: PublishedPost[] }
