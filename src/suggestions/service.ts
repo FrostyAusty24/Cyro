@@ -3,20 +3,21 @@ import type { AccessService } from '../control/access.js';
 import type { Logger } from '../logger.js';
 import { SuggestionsStore } from './store.js';
 import { MAX_HISTORY, MAX_VOTERS, parseSuggestionsConfig, snowflake, suggestionSummary, type SuggestionRecord, type SuggestionStatus, type VoteChoice } from './types.js';
+import { botText } from '../i18n/index.js';
 
 type SuggestionChannel = TextChannel | NewsChannel;
 type VoteMessage = Pick<Message, 'id' | 'guildId' | 'channelId' | 'author'>;
-export function suggestionPayload(guildId: string, record: SuggestionRecord): MessageCreateOptions {
+export function suggestionPayload(guildId: string, record: SuggestionRecord, discordLocale?: string): MessageCreateOptions {
   const value = suggestionSummary(guildId, record);
-  const labels = { open: 'Open for voting', accepted: 'Accepted', declined: 'Declined', closed: 'Closed' };
+  const labels = { open: botText(guildId, 'Open for voting', {}, discordLocale), accepted: botText(guildId, 'Accepted', {}, discordLocale), declined: botText(guildId, 'Declined', {}, discordLocale), closed: botText(guildId, 'Closed', {}, discordLocale) };
   const colors = { open: 0x78d5fa, accepted: 0x7ee0b2, declined: 0xeb8493, closed: 0x9aa9c2 };
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`suggest:vote:${record.id}:up`).setLabel(`Upvote · ${value.upVotes}`).setStyle(ButtonStyle.Success).setDisabled(record.status !== 'open'),
-    new ButtonBuilder().setCustomId(`suggest:vote:${record.id}:down`).setLabel(`Downvote · ${value.downVotes}`).setStyle(ButtonStyle.Danger).setDisabled(record.status !== 'open'),
-    new ButtonBuilder().setCustomId(`suggest:vote:${record.id}:remove`).setLabel('Remove vote').setStyle(ButtonStyle.Secondary).setDisabled(record.status !== 'open'),
+    new ButtonBuilder().setCustomId(`suggest:vote:${record.id}:up`).setLabel(botText(guildId, 'Upvote · {count}', { count: value.upVotes }, discordLocale)).setStyle(ButtonStyle.Success).setDisabled(record.status !== 'open'),
+    new ButtonBuilder().setCustomId(`suggest:vote:${record.id}:down`).setLabel(botText(guildId, 'Downvote · {count}', { count: value.downVotes }, discordLocale)).setStyle(ButtonStyle.Danger).setDisabled(record.status !== 'open'),
+    new ButtonBuilder().setCustomId(`suggest:vote:${record.id}:remove`).setLabel(botText(guildId, 'Remove vote', {}, discordLocale)).setStyle(ButtonStyle.Secondary).setDisabled(record.status !== 'open'),
   );
   return {
-    embeds: [{ title: `Suggestion #${record.number} · ${labels[record.status]}`, description: record.text, color: colors[record.status], author: { name: record.authorName }, footer: { text: record.status === 'open' ? 'One vote per member. You can change or remove your vote.' : `Voting closed · ${value.upVotes} for / ${value.downVotes} against` }, timestamp: record.createdAt, ...(record.decision?.reason ? { fields: [{ name: 'Staff response', value: record.decision.reason }] } : {}) }],
+    embeds: [{ title: botText(guildId, 'Suggestion #{number} · {status}', { number: record.number, status: labels[record.status] }, discordLocale), description: record.text, color: colors[record.status], author: { name: record.authorName }, footer: { text: record.status === 'open' ? botText(guildId, 'One vote per member. You can change or remove your vote.', {}, discordLocale) : botText(guildId, 'Voting closed · {up} for / {down} against', { up: value.upVotes, down: value.downVotes }, discordLocale) }, timestamp: record.createdAt, ...(record.decision?.reason ? { fields: [{ name: botText(guildId, 'Staff response', {}, discordLocale), value: record.decision.reason }] } : {}) }],
     components: [buttons], allowedMentions: { parse: [], repliedUser: false },
   };
 }
@@ -66,31 +67,31 @@ export class SuggestionsService {
     if (!command && !modal && !vote) return;
     const run = async () => {
       if (!interaction.inCachedGuild()) {
-        if (interaction.isRepliable()) await interaction.reply({ content: 'Use suggestions inside a Discord server.', flags: MessageFlags.Ephemeral });
+        if (interaction.isRepliable()) await interaction.reply({ content: botText(interaction.guildId, 'Use suggestions inside a Discord server.', {}, interaction.locale), flags: MessageFlags.Ephemeral });
         return;
       }
       if (interaction.isChatInputCommand()) {
         this.access.commandMember(interaction.member, 'suggestion', true);
-        if (!this.getConfig(interaction.guildId).enabled) throw new Error('Suggestions are not enabled yet. Ask staff to choose a channel in the dashboard.');
-        const field = new TextInputBuilder().setCustomId('text').setLabel('Your suggestion').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setPlaceholder('What would make this community better?');
-        await interaction.showModal(new ModalBuilder().setCustomId('suggest:create').setTitle('Share a suggestion').addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(field)));
+        if (!this.getConfig(interaction.guildId).enabled) throw new Error(botText(interaction.guildId, 'Suggestions are not enabled yet. Ask staff to choose a channel in the dashboard.', {}, interaction.locale));
+        const field = new TextInputBuilder().setCustomId('text').setLabel(botText(interaction.guildId, 'Your suggestion', {}, interaction.locale)).setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setPlaceholder(botText(interaction.guildId, 'What would make this community better?', {}, interaction.locale));
+        await interaction.showModal(new ModalBuilder().setCustomId('suggest:create').setTitle(botText(interaction.guildId, 'Share a suggestion', {}, interaction.locale)).addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(field)));
       } else if (interaction.isModalSubmit()) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const item = await this.create(interaction.guild, interaction.user.id, interaction.fields.getTextInputValue('text'), interaction.id);
-        await interaction.editReply({ content: `Suggestion #${item.number} is ready for votes: ${item.messageUrl}`, allowedMentions: { parse: [] } });
+        await interaction.editReply({ content: botText(interaction.guildId, 'Suggestion #{number} is ready for votes: {url}', { number: item.number, url: item.messageUrl ?? '' }, interaction.locale), allowedMentions: { parse: [] } });
       } else if (interaction.isButton()) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const match = /^suggest:vote:(\d{17,20}):(up|down|remove)$/.exec(interaction.customId);
-        if (!match) throw new Error('This suggestion button is invalid.');
+        if (!match) throw new Error(botText(interaction.guildId, 'This suggestion button is invalid.', {}, interaction.locale));
         const choice = match[2] === 'remove' ? null : match[2] as VoteChoice;
         const item = await this.vote(interaction.guild, interaction.user.id, match[1]!, choice, interaction.id, interaction.message);
-        await interaction.editReply({ content: `Your latest vote choice is saved.${item.syncPending ? ' The count on the message will refresh when Discord is available.' : ''}`, allowedMentions: { parse: [] } });
+        await interaction.editReply({ content: botText(interaction.guildId, 'Your latest vote choice is saved.', {}, interaction.locale) + (item.syncPending ? botText(interaction.guildId, ' The count on the message will refresh when Discord is available.', {}, interaction.locale) : ''), allowedMentions: { parse: [] } });
       }
     };
     const task = run().catch(async error => {
       this.logger.warn('Suggestion interaction could not complete.', { guildId: interaction.guildId });
       if (!interaction.isRepliable() || interaction.replied) return;
-      const content = error instanceof Error && error.name === 'Error' ? error.message.slice(0, 1800) : 'I could not complete that action. Please check channel permissions or try again shortly.';
+      const content = botText(interaction.guildId, error instanceof Error && error.name === 'Error' ? error.message.slice(0, 1800) : 'I could not complete that action. Please check channel permissions or try again shortly.', {}, interaction.locale);
       try { if (interaction.deferred) await interaction.editReply({ content, allowedMentions: { parse: [] } }); else await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } }); }
       catch { this.logger.warn('Suggestion interaction response could not be delivered.'); }
     });
@@ -150,14 +151,14 @@ export class SuggestionsService {
       }
       const latest = saved.items.filter(item => item.authorId === actorId).at(-1);
       const wait = latest ? saved.config.cooldownMinutes * 60_000 - (Date.now() - Date.parse(latest.createdAt)) : 0;
-      if (wait > 0) throw new Error(`Please wait ${Math.ceil(wait / 60_000)} minute(s) before sharing another suggestion.`);
+      if (wait > 0) throw new Error(botText(guild.id, 'Please wait {minutes} minute(s) before sharing another suggestion.', { minutes: Math.ceil(wait / 60_000) }, guild.preferredLocale));
       const evict = saved.items.length >= MAX_HISTORY ? saved.items.find(item => item.status !== 'open' && item.delivery === 'sent' && !item.syncPending) : undefined;
       if (saved.items.length >= MAX_HISTORY && !evict) throw new Error('This server has reached its 1,000-suggestion limit. Staff must resolve an open suggestion before accepting more.');
       if (saved.nextNumber >= Number.MAX_SAFE_INTEGER) throw new Error('Suggestion numbering is full. Contact the bot operator.');
       const record: SuggestionRecord = { id: operationId, number: saved.nextNumber, authorId: actorId, authorName: member.displayName.slice(0, 100), text, channelId: channel.id, createdAt: new Date().toISOString(), status: 'open', delivery: 'pending', syncPending: false, votes: {} };
       await this.store.mutate(guild.id, state => { if (evict) state.items = state.items.filter(item => item.id !== evict.id); state.items.push(record); state.nextNumber++; });
       try {
-        const message = await channel.send({ ...suggestionPayload(guild.id, record), nonce: operationId, enforceNonce: true });
+        const message = await channel.send({ ...suggestionPayload(guild.id, record, guild.preferredLocale), nonce: operationId, enforceNonce: true });
         return await this.store.mutate(guild.id, state => {
           const item = state.items.find(item => item.id === operationId)!; item.delivery = 'sent'; item.messageId = message.id; return suggestionSummary(guild.id, item);
         });
@@ -175,7 +176,7 @@ export class SuggestionsService {
     const channel = await this.channel(guild, item.channelId);
     const message = await channel.messages.fetch(item.messageId);
     if (!this.matchesMessage(guild.id, item, message)) throw new Error('This message is not the saved Cyro suggestion.');
-    const payload = suggestionPayload(guild.id, item);
+    const payload = suggestionPayload(guild.id, item, guild.preferredLocale);
     await message.edit({ embeds: payload.embeds, components: payload.components, allowedMentions: payload.allowedMentions });
     await this.store.mutate(guild.id, state => { const saved = state.items.find(value => value.id === item.id); if (saved) saved.syncPending = false; });
   }

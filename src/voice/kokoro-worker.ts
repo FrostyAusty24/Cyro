@@ -4,9 +4,15 @@ import { pathToFileURL } from 'node:url';
 import { normalizeSpeechPronunciation, splitSpeechText } from './neural-text.js';
 import { TTS_VOICES } from './catalog.js';
 import { prepareSpeechText, TTS_MAX_CHARACTERS } from './speech-text.js';
+import { multilingualPhonemes, type LocalPhonemizer } from './multilingual.js';
 
 interface SpeechAudio { audio: Float32Array; sampling_rate: number }
-interface SpeechEngine { generate(text: string, options: { voice: string; speed: number }): Promise<SpeechAudio> }
+interface InputIds { dims: number[] }
+interface SpeechTokenizer { (text: string, options: { truncation: boolean }): { input_ids: InputIds } }
+interface SpeechEngine {
+  generate(text: string, options: { voice: string; speed: number }): Promise<SpeechAudio>;
+  generate_from_ids(ids: InputIds, options: { voice: string; speed: number }): Promise<SpeechAudio>;
+}
 interface SpeechModel { dispose(): Promise<void> }
 const voices: ReadonlySet<string> = new Set(TTS_VOICES.map(voice => voice.engineVoice));
 const sampleRate = 24_000;
@@ -47,7 +53,7 @@ async function main(): Promise<void> {
   const transformers = await import(pathToFileURL(transformersPath).href) as {
     env: { allowRemoteModels: boolean; allowLocalModels: boolean; useFSCache: boolean };
     StyleTextToSpeech2Model: { from_pretrained(directory: string, options: Record<string, unknown>): Promise<SpeechModel> };
-    AutoTokenizer: { from_pretrained(directory: string, options: Record<string, unknown>): Promise<unknown> };
+    AutoTokenizer: { from_pretrained(directory: string, options: Record<string, unknown>): Promise<SpeechTokenizer> };
   };
   transformers.env.allowRemoteModels = false; transformers.env.allowLocalModels = true; transformers.env.useFSCache = false;
   const modelPath = path.join(directory, 'model').replaceAll('\\', '/');
@@ -58,6 +64,18 @@ async function main(): Promise<void> {
   });
   const tokenizer = await transformers.AutoTokenizer.from_pretrained(modelPath, { local_files_only: true });
   const engine = new KokoroTTS(model, tokenizer);
+  const phonemizerPath = path.join(directory, 'node_modules', 'ephone', 'ephone.js');
+  let multilingual: LocalPhonemizer | undefined;
+  async function localPhonemizer(): Promise<LocalPhonemizer> {
+    if (!multilingual) {
+      // Loaded only for a non-English request. All dictionaries/WASM ship in the pinned local package.
+      const ephone = await import(pathToFileURL(phonemizerPath).href) as {
+        default(options: Record<string, unknown>): Promise<LocalPhonemizer>; all: unknown;
+      };
+      multilingual = await ephone.default({ languages: ephone.all, print: () => {}, printErr: () => {} });
+    }
+    return multilingual;
+  }
   let busy = false;
   process.on('message', (message: unknown) => {
     if (!message || typeof message !== 'object') return;
@@ -70,9 +88,19 @@ async function main(): Promise<void> {
       const parts: Float32Array[] = [];
       let count = 0;
       // Apply only after validating the original message: pronunciation spellings can expand its length.
-      const spoken = prepareSpeechText(request.text as string, request.speakerName as string | undefined);
-      for (const text of splitSpeechText(normalizeSpeechPronunciation(spoken))) {
-        const audio = await engine.generate(text, { voice: request.voice as string, speed: 0.95 });
+      const voice = TTS_VOICES.find(item => item.engineVoice === request.voice)!;
+      const spoken = prepareSpeechText(request.text as string, request.speakerName as string | undefined, voice.language);
+      for (const text of splitSpeechText(voice.language === 'en' ? normalizeSpeechPronunciation(spoken) : spoken)) {
+        let audio: SpeechAudio;
+        if (voice.language === 'en') audio = await engine.generate(text, { voice: voice.engineVoice, speed: 0.95 });
+        else {
+          const phonemes = multilingualPhonemes(await localPhonemizer(), text, voice.language);
+          const { input_ids } = tokenizer(phonemes, { truncation: false });
+          const tokens = input_ids.dims.at(-1);
+          // Never silently truncate a message to the model's 512-token context.
+          if (!tokens || tokens <= 2 || tokens > 512) throw new Error('Speech chunk exceeds model limits.');
+          audio = await engine.generate_from_ids(input_ids, { voice: voice.engineVoice, speed: 0.95 });
+        }
         if (audio.sampling_rate !== sampleRate || !(audio.audio instanceof Float32Array)) throw new Error('Invalid speech output.');
         count += audio.audio.length;
         if (count > maxSamples) throw new Error('Speech was too long.');

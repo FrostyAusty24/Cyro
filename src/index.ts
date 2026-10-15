@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { ControlStore } from './control/store.js';
+import { setBotLocaleResolver } from './i18n/index.js';
 import { AccessService, setProtectedRoleResolver } from './control/access.js';
 import { PublishingService } from './control/publishing.js';
 import { ActivityType, Client, Events, GatewayIntentBits, Partials, REST, Routes } from 'discord.js';
@@ -80,6 +81,7 @@ async function main(): Promise<void> {
   const alerts = new AlertService(client, store, logger, analytics);
   const monitor = new StreamMonitor(store, providers, alerts, logger, config.pollIntervalSeconds, guildId => client.isReady() && Boolean(client.guilds.cache.get(guildId)?.available), analytics);
   const control = new ControlStore(config.dataDir);
+  setBotLocaleResolver(guildId => control.get(guildId).locale);
   const access = new AccessService(control);
   setProtectedRoleResolver((guildId, roleId) => access.protectedRole(guildId, roleId));
   const publishing = new PublishingService(client, control, access);

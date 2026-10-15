@@ -109,9 +109,11 @@ it('durably saves a default voice and speaker names through the authorized dashb
     const response = await fetch(url, { headers: f.headers });
     expect(response.status).toBe(200);
     const snapshot = await response.json();
-    expect(snapshot.voices.map((item: { id: string }) => item.id)).toEqual(Array.from({ length: 12 }, (_, i) => `voice${i + 1}`));
-    expect(snapshot.voices.filter((item: { gender: string }) => item.gender === 'male')).toHaveLength(6);
-    expect(snapshot.voices.filter((item: { gender: string }) => item.gender === 'female')).toHaveLength(6);
+    expect(snapshot.voices.slice(0, 12).map((item: { id: string }) => item.id)).toEqual(Array.from({ length: 12 }, (_, i) => `voice${i + 1}`));
+    expect(snapshot.voices).toHaveLength(25);
+    expect(snapshot.voices.some((item: { id: string }) => item.id === 'fr-siwis')).toBe(true);
+    expect(snapshot.voices.filter((item: { language: string; gender: string }) => item.language === 'en' && item.gender === 'male')).toHaveLength(6);
+    expect(snapshot.voices.filter((item: { language: string; gender: string }) => item.language === 'en' && item.gender === 'female')).toHaveLength(6);
     expect(snapshot.config.announceSpeaker).toBe(false);
     const updated = { ...snapshot.config, defaultVoice: 'voice12', announceSpeaker: true };
     const saved = await fetch(url, { method: 'PATCH', headers: f.headers, body: JSON.stringify(updated) });

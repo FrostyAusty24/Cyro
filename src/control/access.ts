@@ -1,9 +1,21 @@
 import { PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
 import { ControlStore, parseAccess, type AccessConfig } from './store.js';
+import { languageSnapshot, parseLanguageSettings } from './language.js';
 
 export class AccessService {
   constructor(readonly store: ControlStore) {}
   config(guildId: string): AccessConfig { return this.store.get(guildId).access; }
+  language(guildId: string) { return languageSnapshot(this.store.get(guildId).locale); }
+  async updateLanguage(guild: Guild, userId: string, input: unknown, assertCurrent: () => void = () => undefined) {
+    const { locale } = parseLanguageSettings(input);
+    return this.store.mutate(guild.id, async value => {
+      assertCurrent();
+      await this.dashboard(guild, userId);
+      assertCurrent();
+      value.locale = locale;
+      return languageSnapshot(locale);
+    });
+  }
   protectedRole(guildId: string, roleId: string): boolean {
     const c = this.config(guildId); return c.dashboardRoleIds.includes(roleId) || Object.values(c.commandRoles).some(ids => ids.includes(roleId));
   }

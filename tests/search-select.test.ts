@@ -178,7 +178,7 @@ describe('searchable channel, server and role controls', () => {
     const source = app.slice(app.indexOf('async function selectGuild('), app.indexOf('async function refreshGuilds('));
     let confirmations = 0;
     const switchGuild = runInNewContext(`${source}\nselectGuild`, {
-      state, window: ui.window, document: { getElementById: () => ui.select }, toast: () => {},
+      state, window: ui.window, document: { getElementById: () => ui.select }, toast: () => {}, ui: (text: string) => text,
       confirmAction: async () => { confirmations++; return false; },
     });
     await switchGuild('2');

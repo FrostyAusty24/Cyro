@@ -38,10 +38,15 @@ The separate `bin/tts` installation uses these pinned components. Their own noti
 | kokoro-js | 1.2.1 | Apache-2.0 | [Kokoro source and license](https://github.com/hexgrad/kokoro) |
 | @huggingface/transformers | 3.8.1 | Apache-2.0 | [Transformers.js 3.8.1 license](https://github.com/huggingface/transformers.js/blob/3.8.1/LICENSE) |
 | phonemizer | 1.2.1 | Apache-2.0 wrapper; embedded engine has separate licensing | [phonemizer.js](https://github.com/xenova/phonemizer.js) |
+| ephone | 1.0.2 | GPL-3.0-or-later | [ephone source and build instructions](https://github.com/sjmik/ephone-js) |
 | ONNX Runtime | 1.21.0 | MIT | [ONNX Runtime 1.21.0 license](https://github.com/microsoft/onnxruntime/blob/v1.21.0/LICENSE) |
 | Kokoro-82M-v1.0 ONNX model and supplied voices | `1939ad2a8e416c0acfeecc08a694d14ef25f2231`; q8 | Apache-2.0 | [ONNX model card](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) |
 
-The selected voice assets are `bm_daniel`, `am_michael`, `af_heart` and `af_bella`. The phonemizer includes eSpeak NG code: preserve its own [GPL license and source notices](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING) when distributing a built runtime. The wrapper’s Apache label does not relicense that embedded engine. Preserve model, runtime, transitive dependency and native-library notices alongside packaged installations, including container images. The runtime uses locally installed assets for speech; downloading those assets does not send chat text to their publishers.
+The selected voice assets are listed in [src/voice/catalog.ts](src/voice/catalog.ts): twelve English voices and thirteen voices for French, Spanish, Italian, Brazilian Portuguese and Hindi. The phonemizer includes eSpeak NG code: preserve its own [GPL license and source notices](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING) when distributing a built runtime. The wrapper’s Apache label does not relicense that embedded engine.
+
+Non-English speech uses the unmodified, integrity-pinned `ephone` package, authored by sjmik and derived from eSpeak NG. Its full [GPL-3.0-or-later license](scripts/kokoro-runtime/EPHONE-LICENSE.txt) and [runtime source/attribution notice](scripts/kokoro-runtime/THIRD-PARTY-NOTICES.txt) are included here and copied into `bin/tts` by the installer. Its source and complete change history are available at [sjmik/ephone-js](https://github.com/sjmik/ephone-js), with [build instructions](https://github.com/sjmik/ephone-js/tree/master/emscripten). Cyro's MIT license does not relicense this dependency.
+
+Preserve model, runtime, transitive dependency and native-library notices alongside packaged installations, including container images. The runtime uses locally installed assets for speech; downloading those assets does not send chat text to their publishers.
 
 ## Optional YouTube source runtime
 

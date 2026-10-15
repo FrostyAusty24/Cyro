@@ -40,6 +40,9 @@ it('reads safe plain text without expanding mentions, links, spoilers, or comman
   expect(spokenText('hello <@123456789012345678> https://example.com/a ||private|| <:wave:123456789012345678>')).toBe('hello someone link spoiler wave');
   expect(spokenText('/confess private')).toBe('');
   expect(spokenText('x'.repeat(401))).toHaveLength(400);
+  expect(spokenText('Bonjour <@123456789012345678> https://example.com ||secret||', 'fr')).toBe('Bonjour quelqu’un lien contenu masqué');
+  expect(spokenText('Hola <@123456789012345678> https://example.com ||secreto||', 'es')).toBe('Hola alguien enlace contenido oculto');
+  expect(spokenText('x'.repeat(399) + '🎵')).toBe('x'.repeat(399));
 });
 it('reserves one channel and mode per guild while connection is pending', async () => {
   let finish!:()=>void; const wait=new Promise<void>(resolve=>{finish=resolve;});

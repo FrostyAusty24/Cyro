@@ -4,8 +4,18 @@
 // Only one searchable popup can be open, so document listeners never accumulate.
 window.CyroSearchSelect = (() => {
   const controls = new WeakMap();
+  const localeControls = new Set();
   let active = null;
   let sequence = 0;
+  const translate = (source, params) => window.CyroI18n?.translate(source, params) ?? source;
+  window.CyroI18n?.subscribe(() => {
+    active?.close(false);
+    for (const reference of localeControls) {
+      const select = reference.deref();
+      if (!select?.isConnected) localeControls.delete(reference);
+      else controls.get(select)?.sync();
+    }
+  });
   const normalize = value => String(value).normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase();
   function matches(option, query) {
     const haystack = normalize(`${option.label} ${option.value}`);
@@ -40,14 +50,14 @@ window.CyroSearchSelect = (() => {
     const disabled = () => select.disabled || Boolean(select.closest('fieldset:disabled'));
     const options = () => [...select.options];
     const optionDisabled = option => option.disabled || option.parentElement?.tagName === 'OPTGROUP' && option.parentElement.disabled;
-    const labelText = () => select.getAttribute('aria-label') || label;
+    const labelText = () => select.getAttribute('aria-label') || String(label);
     function sync() {
       const selected = options().filter(option => option.selected);
       const names = selected.map(option => option.label);
-      value.textContent = names.length ? names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : select.multiple ? 'Select roles' : `Select ${kind}`;
+      value.textContent = names.length ? names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : translate(select.multiple ? 'Select roles' : `Select ${kind}`);
       trigger.title = names.join(', ');
       trigger.disabled = disabled();
-      trigger.setAttribute('aria-label', `${labelText()}: ${names.length ? names.join(', ') : 'None selected'}`);
+      trigger.setAttribute('aria-label', `${labelText()}: ${names.length ? names.join(', ') : translate('None selected')}`);
       trigger.setAttribute('aria-required', String(select.required));
       const hint = select.getAttribute('aria-describedby');
       if (hint) trigger.setAttribute('aria-describedby', hint);
@@ -103,9 +113,9 @@ window.CyroSearchSelect = (() => {
         return { element: row, option };
       });
       list.replaceChildren(...rows.map(row => row.element));
-      if (!rows.length) list.append(node('p', 'search-select-empty', `No ${kind} match. Try another name or ID.`));
+      if (!rows.length) list.append(node('p', 'search-select-empty', window.CyroI18n ? translate('No results. Try another name or ID.') : `No ${kind} match. Try another name or ID.`));
       const count = options().filter(option => option.selected && option.value).length;
-      summary.textContent = select.multiple ? `${count} selected · Select again to remove` : `${filtered.length} ${filtered.length === 1 ? 'option' : 'options'}`;
+      summary.textContent = window.CyroI18n ? translate(select.multiple ? '{count} selected · Select again to remove' : '{count} options', { count: select.multiple ? count : filtered.length }) : select.multiple ? `${count} selected · Select again to remove` : `${filtered.length} ${filtered.length === 1 ? 'option' : 'options'}`;
       const keepIndex = rows.findIndex(row => row.option === previouslyActive && !optionDisabled(row.option));
       const selectedIndex = rows.findIndex(row => row.option.selected && !optionDisabled(row.option));
       highlight(keepIndex >= 0 ? keepIndex : selectedIndex >= 0 ? selectedIndex : rows.findIndex(row => !optionDisabled(row.option)), false);
@@ -133,8 +143,8 @@ window.CyroSearchSelect = (() => {
       popup.setAttribute('popover', 'manual');
       search = node('input', 'search-select-search');
       search.type = 'text'; search.value = query; search.autocomplete = 'off'; search.spellcheck = false;
-      search.placeholder = `Search ${kind}…`;
-      search.setAttribute('role', 'combobox'); search.setAttribute('aria-label', `Search ${labelText().toLocaleLowerCase()}`);
+      search.placeholder = translate(`Search ${kind}…`);
+      search.setAttribute('role', 'combobox'); search.setAttribute('aria-label', window.CyroI18n ? translate('Search {label}', { label: labelText() }) : `Search ${labelText().toLocaleLowerCase()}`);
       search.setAttribute('aria-autocomplete', 'list'); search.setAttribute('aria-expanded', 'true'); search.setAttribute('aria-controls', `${id}-options`);
       list = node('div', 'search-select-options'); list.id = `${id}-options`;
       list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', labelText());
@@ -142,7 +152,7 @@ window.CyroSearchSelect = (() => {
       summary = node('p', 'search-select-summary'); summary.setAttribute('role', 'status');
       const footer = node('div', 'search-select-footer'); footer.append(summary);
       if (select.multiple) {
-        const done = node('button', 'search-select-done', 'Done'); done.type = 'button';
+        const done = node('button', 'search-select-done', translate('Done')); done.type = 'button';
         done.addEventListener('click', () => close(true)); footer.append(done);
       }
       popup.append(search, list, footer);
@@ -187,6 +197,7 @@ window.CyroSearchSelect = (() => {
     const changes = new MutationObserver(sync);
     changes.observe(select, { attributes: true, childList: true, subtree: true });
     controls.set(select, { wrapper, sync, close });
+    if (window.CyroI18n) localeControls.add(new WeakRef(select));
     sync();
     return wrapper;
   }

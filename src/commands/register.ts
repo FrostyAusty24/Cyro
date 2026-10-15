@@ -7,6 +7,7 @@ import { moderationCommands } from '../moderation/index.js';
 import { tempVoiceCommands } from '../temp-voice/commands.js';
 import { communityToolsCommands } from '../community-tools/commands.js';
 import { voiceCommands } from '../voice/commands.js';
+import { commandDescriptionLocalizations } from '../i18n/commands.js';
 
 export function createRegistrationPlan(config: Pick<AppConfig, 'discordClientId' | 'commandScope' | 'developmentGuildId'>) {
   const { commandScope, developmentGuildId } = commandRegistrationConfig({
@@ -19,6 +20,8 @@ export function createRegistrationPlan(config: Pick<AppConfig, 'discordClientId'
     ...['poll', 'embed'].map(name => new SlashCommandBuilder().setName(name).setDescription(`Open the dashboard ${name === 'poll' ? 'poll builder' : 'message composer'}.`))];
   const body = allCommands.map((builder) => {
     const { dm_permission: _dmPermission, ...command } = builder.toJSON();
+    const translatedDescriptions = commandDescriptionLocalizations(command.name, command.description);
+    if (translatedDescriptions) command.description_localizations = { ...command.description_localizations, ...translatedDescriptions };
     if (['dashboard','twitch','kick','youtube','tiktok','streamalerts','roles-panel'].includes(command.name)) delete command.default_member_permissions;
     return { ...command, contexts: [InteractionContextType.Guild], integration_types: [ApplicationIntegrationType.GuildInstall] };
   });

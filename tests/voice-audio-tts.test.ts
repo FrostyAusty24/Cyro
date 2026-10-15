@@ -8,7 +8,7 @@ afterAll(async () => { await shutdownSpeech(); });
 
 it.skipIf(!ttsAvailable())('renders twelve distinct offline neural voices to WAV', async () => {
   const wavs: Buffer[] = [];
-  for (const voice of TTS_VOICES) {
+  for (const voice of TTS_VOICES.filter(voice => voice.language === 'en')) {
     const wav = await synthesizeSpeech('Welcome to Cyro.', voice.id);
     expect(wav.subarray(0, 4).toString()).toBe('RIFF');
     expect(wav.subarray(8, 12).toString()).toBe('WAVE');
@@ -24,7 +24,7 @@ it('rejects oversized text and unsupported voices before synthesis', async () =>
 });
 
 it.skipIf(!ttsAvailable())('produces audible speech for every voice through the actual Discord Opus encoder', async () => {
-  for (const voice of TTS_VOICES) {
+  for (const voice of TTS_VOICES.filter(voice => voice.language === 'en')) {
     const source = await pcmSpeech('Cyro voice check. Hello from the community.', voice.id);
     const resource = createAudioResource(source.stream, { inputType: StreamType.Raw, inlineVolume: true });
     resource.volume?.setVolume(0.5);

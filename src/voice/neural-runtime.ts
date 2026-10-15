@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 export const NEURAL_RUNTIME_DIR = path.resolve('bin', 'tts');
 export function neuralRuntimeInstalled(directory = NEURAL_RUNTIME_DIR): boolean {
-  return ['installed.json', 'package.json', 'node_modules/kokoro-js/package.json', 'model/config.json', 'model/tokenizer.json', 'model/tokenizer_config.json', 'model/onnx/model_quantized.onnx']
+  return ['installed.json', 'package.json', 'node_modules/kokoro-js/package.json', 'node_modules/ephone/package.json', 'node_modules/ephone/ephone.js', 'node_modules/ephone/lang/all.js', 'model/config.json', 'model/tokenizer.json', 'model/tokenizer_config.json', 'model/onnx/model_quantized.onnx']
     .every(file => existsSync(path.join(directory, file)));
 }
 

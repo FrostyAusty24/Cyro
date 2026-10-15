@@ -28,6 +28,7 @@ import type { StreamMonitor } from '../services/monitor.js';
 import { assertSafeRole } from '../community/config.js';
 import type { StreamAnalytics } from '../streaming/analytics.js';
 import type { CreatorAnalyticsSnapshot } from '../streaming/creators.js';
+import { botText } from '../i18n/index.js';
 
 export class CommandHandler {
   private attached = false;
@@ -79,7 +80,7 @@ export class CommandHandler {
     } catch (error) {
       this.logger.error('Command handler failed.', error instanceof Error ? error.message : error);
       if (interaction.isRepliable() && !interaction.replied) {
-        const content = `❌ ${error instanceof Error ? error.message : 'Something went wrong.'}`;
+        const content = `❌ ${botText(interaction.guildId, error instanceof Error ? error.message : 'Something went wrong.', {}, interaction.locale)}`;
         if (interaction.deferred) await interaction.editReply({ content });
         else await interaction.reply({ content, flags: MessageFlags.Ephemeral });
       }
@@ -91,7 +92,7 @@ export class CommandHandler {
     if (interaction.commandName === 'help' || interaction.commandName === 'ping') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       if (interaction.commandName === 'help') await this.help(interaction);
-      else await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x6dc9ed).setTitle('Cyro is connected').setDescription(`Discord connection: ${this.client.ws.ping >= 0 ? `${Math.round(this.client.ws.ping)} ms` : 'warming up'}.\nUse /help for commands or /dashboard to open server settings.`)], allowedMentions: { parse: [] } });
+      else await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x6dc9ed).setTitle(botText(interaction.guildId, 'Cyro is connected', {}, interaction.locale)).setDescription(botText(interaction.guildId, 'Discord connection: {latency}.\nUse /help for commands or /dashboard to open server settings.', { latency: this.client.ws.ping >= 0 ? `${Math.round(this.client.ws.ping)} ms` : botText(interaction.guildId, 'warming up', {}, interaction.locale) }, interaction.locale))], allowedMentions: { parse: [] } });
       return;
     }
     if (interaction.commandName === 'streamer-leaderboard') {
@@ -123,36 +124,36 @@ export class CommandHandler {
   }
 
   private async help(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
-    const embed = new EmbedBuilder().setColor(0x6dc9ed).setTitle('Welcome to Cyro')
-      .setDescription('**Start with /dashboard** to choose this server’s channels, roles and features. Only people granted dashboard access can edit settings. Features must be enabled by your server first.')
+    const embed = new EmbedBuilder().setColor(0x6dc9ed).setTitle(botText(interaction.guildId, 'Welcome to Cyro', {}, interaction.locale))
+      .setDescription(botText(interaction.guildId, '**Start with /dashboard** to choose this server’s channels, roles and features. Only people granted dashboard access can edit settings. Features must be enabled by your server first.', {}, interaction.locale))
       .addFields(
-        { name: 'Make yourself heard', value: '`/suggestion` — suggest an idea for members to vote on.\n`/bugreport` — report a bot or server problem to the configured team.\n`/confess` — post anonymously in the confession channel.' },
-        { name: 'Voice rooms, music & TTS', value: 'Join the server’s temporary-room lobby to get a room. Use `/room` to lock it, rename it or permit a member.\n`/playmusic` queues a supported link. `/addtts` speaks new messages in your call’s chat. `/ttsvoice` chooses your voice. `/stoptts` stops it.' },
-        { name: 'Community & support', value: 'Use the server’s ticket or application panel to get help or apply. `/rank`, `/leaderboard` and `/invites` show community activity. Staff can use `/staff-leaderboard`.' },
-        { name: 'For server staff', value: '`/dashboard` manages creator alerts, moderation, welcome cards, verification, tickets, applications, sticky messages, polls and more. `/poll` opens the poll builder; `/embed` opens the message composer.' },
-      ).setFooter({ text: 'Cyro by Headache Development · Say it “k-eye-row”.' });
-    const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel('Support community').setStyle(ButtonStyle.Link).setURL('https://discord.gg/dAZheerkkD'));
+        { name: botText(interaction.guildId, 'Make yourself heard', {}, interaction.locale), value: botText(interaction.guildId, '`/suggestion` — suggest an idea for members to vote on.\n`/bugreport` — report a bot or server problem to the configured team.\n`/confess` — post anonymously in the confession channel.', {}, interaction.locale) },
+        { name: botText(interaction.guildId, 'Voice rooms, music & TTS', {}, interaction.locale), value: botText(interaction.guildId, 'Join the server’s temporary-room lobby to get a room. Use `/room` to lock it, rename it or permit a member.\n`/playmusic` queues a supported link. `/addtts` speaks new messages in your call’s chat. `/ttsvoice` chooses your voice. `/stoptts` stops it.', {}, interaction.locale) },
+        { name: botText(interaction.guildId, 'Community & support', {}, interaction.locale), value: botText(interaction.guildId, 'Use the server’s ticket or application panel to get help or apply. `/rank`, `/leaderboard` and `/invites` show community activity. Staff can use `/staff-leaderboard`.', {}, interaction.locale) },
+        { name: botText(interaction.guildId, 'For server staff', {}, interaction.locale), value: botText(interaction.guildId, '`/dashboard` manages creator alerts, moderation, welcome cards, verification, tickets, applications, sticky messages, polls and more. `/poll` opens the poll builder; `/embed` opens the message composer.', {}, interaction.locale) },
+      ).setFooter({ text: botText(interaction.guildId, 'Cyro by Headache Development · Say it “k-eye-row”.', {}, interaction.locale) });
+    const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(botText(interaction.guildId, 'Support community', {}, interaction.locale)).setStyle(ButtonStyle.Link).setURL('https://discord.gg/dAZheerkkD'));
     if (this.dashboardConfig?.dashboardEnabled && this.dashboardConfig.dashboardUrl) {
       const url = new URL('/', this.dashboardConfig.dashboardUrl); url.searchParams.set('guild', interaction.guildId); url.hash = 'help';
-      buttons.addComponents(new ButtonBuilder().setLabel('Open dashboard').setStyle(ButtonStyle.Link).setURL(url.toString()));
+      buttons.addComponents(new ButtonBuilder().setLabel(botText(interaction.guildId, 'Open dashboard', {}, interaction.locale)).setStyle(ButtonStyle.Link).setURL(url.toString()));
     }
     await interaction.editReply({ embeds: [embed], components: [buttons], allowedMentions: { parse: [] } });
   }
 
   private async openDashboard(interaction: ChatInputCommandInteraction<'cached'>): Promise<void> {
     if (!this.dashboardConfig?.dashboardEnabled || !this.dashboardConfig.dashboardUrl) {
-      throw new Error('The dashboard is not enabled. Ask the bot owner to configure it.');
+      throw new Error(botText(interaction.guildId, 'The dashboard is not enabled. Ask the bot owner to configure it.', {}, interaction.locale));
     }
     const url = new URL('/', this.dashboardConfig.dashboardUrl);
     url.searchParams.set('guild', interaction.guildId);
     if (interaction.commandName === 'poll') url.hash = 'polls';
     if (interaction.commandName === 'embed') url.hash = 'messages';
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-    const embed = new EmbedBuilder().setColor(0x32c9ff).setTitle('Cyro dashboard')
-      .setDescription('Open this server’s settings to manage creators, stream alerts, moderation, counting, tickets, and more. Sign in with a Discord account granted dashboard access by the server owner.'
-        + (local ? '\n\n**Local hosting:** open this link on the computer running Cyro. A public dashboard address is needed for access from other devices.' : ''));
+    const embed = new EmbedBuilder().setColor(0x32c9ff).setTitle(botText(interaction.guildId, 'Cyro dashboard', {}, interaction.locale))
+      .setDescription(botText(interaction.guildId, 'Open this server’s settings to manage creators, stream alerts, moderation, counting, tickets, and more. Sign in with a Discord account granted dashboard access by the server owner.', {}, interaction.locale)
+        + (local ? botText(interaction.guildId, '\n\n**Local hosting:** open this link on the computer running Cyro. A public dashboard address is needed for access from other devices.', {}, interaction.locale) : ''));
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setLabel('Open dashboard').setStyle(ButtonStyle.Link).setURL(url.toString()),
+      new ButtonBuilder().setLabel(botText(interaction.guildId, 'Open dashboard', {}, interaction.locale)).setStyle(ButtonStyle.Link).setURL(url.toString()),
     );
     await interaction.editReply({ embeds: [embed], components: [row], allowedMentions: { parse: [] } });
   }

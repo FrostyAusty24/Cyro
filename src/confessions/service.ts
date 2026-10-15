@@ -3,6 +3,7 @@ import type { AccessService } from '../control/access.js';
 import type { Logger } from '../logger.js';
 import { ConfessionsStore } from './store.js';
 import { INTERACTION_MAX_AGE_MS, MAX_RECEIPTS, parseConfessionsConfig, PRIVACY_NOTICE, snowflake, type ConfessionReceipt } from './types.js';
+import { botText } from '../i18n/index.js';
 
 type ConfessionsChannel = TextChannel | NewsChannel;
 const receiptResult = (guildId: string, receipt: ConfessionReceipt) => ({ number: receipt.number, ...(receipt.messageId ? { messageUrl: `https://discord.com/channels/${guildId}/${receipt.channelId}/${receipt.messageId}` } : {}) });
@@ -42,18 +43,18 @@ export class ConfessionsService {
     if (this.stopped || !interaction.isChatInputCommand() || interaction.commandName !== 'confess') return;
     const run = async () => {
       if (!interaction.inCachedGuild()) {
-        await interaction.reply({ content: 'Use /confess inside a Discord server.', flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+        await interaction.reply({ content: botText(interaction.guildId, 'Use /confess inside a Discord server.', {}, interaction.locale), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
         return;
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await this.create(interaction.guild, interaction.user.id, interaction.options.getString('confession', true), interaction.id);
-      await interaction.editReply({ content: `Confession #${result.number} is posted: ${result.messageUrl}\nYour name is hidden on the post. Discord still receives your original command and its author.`, allowedMentions: { parse: [] } });
+      await interaction.editReply({ content: botText(interaction.guildId, 'Confession #{number} is posted: {url}\nYour name is hidden on the post. Discord still receives your original command and its author.', { number: result.number, url: result.messageUrl ?? '' }, interaction.locale), allowedMentions: { parse: [] } });
     };
     const task = run().catch(async error => {
       // Never log the interaction, input, author, or raw API/network error.
       this.logger.warn('Confession interaction could not complete.', { guildId: interaction.guildId });
       if (interaction.replied) return;
-      const content = error instanceof Error && error.name === 'Error' ? error.message.slice(0, 1800) : 'I could not complete that confession. Please check channel permissions or try again shortly.';
+      const content = botText(interaction.guildId, error instanceof Error && error.name === 'Error' ? error.message.slice(0, 1800) : 'I could not complete that confession. Please check channel permissions or try again shortly.', {}, interaction.locale);
       try {
         if (interaction.deferred) await interaction.editReply({ content, allowedMentions: { parse: [] } });
         else await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
@@ -108,7 +109,7 @@ export class ConfessionsService {
       for (const [id, expiresAt] of cooldowns) if (expiresAt <= now) cooldowns.delete(id);
       this.cooldowns.set(guild.id, cooldowns);
       const wait = (cooldowns.get(actorId) ?? 0) - now;
-      if (wait > 0) throw new Error(`Please wait ${Math.ceil(wait / 1000)} seconds before sending another confession.`);
+      if (wait > 0) throw new Error(botText(guild.id, 'Please wait {seconds} seconds before sending another confession.', { seconds: Math.ceil(wait / 1000) }, guild.preferredLocale));
       if (cooldowns.size >= 10000) throw new Error('Confessions are busy. Please try again after a cooldown expires.');
       // Evict only receipts whose Discord interaction can no longer be accepted. Never replay pending sends.
       const evict = saved.receipts.length >= MAX_RECEIPTS ? saved.receipts.find(item => now - interactionTime(item.id) > INTERACTION_MAX_AGE_MS) : undefined;
@@ -119,7 +120,7 @@ export class ConfessionsService {
       await this.store.mutate(guild.id, state => { if (evict) state.receipts = state.receipts.filter(item => item.id !== evict.id); state.receipts.push(receipt); state.nextNumber++; });
       cooldowns.set(actorId, now + saved.config.cooldownSeconds * 1000);
       try {
-        const message = await channel.send({ embeds: [{ title: `Confession #${receipt.number}`, description: text, color: 0x82d9f7 }], allowedMentions: { parse: [] }, nonce: operationId, enforceNonce: true });
+        const message = await channel.send({ embeds: [{ title: botText(guild.id, 'Confession #{number}', { number: receipt.number }, guild.preferredLocale), description: text, color: 0x82d9f7 }], allowedMentions: { parse: [] }, nonce: operationId, enforceNonce: true });
         return await this.store.mutate(guild.id, state => {
           const item = state.receipts.find(value => value.id === operationId)!; item.delivery = 'sent'; item.messageId = message.id; state.published++; return receiptResult(guild.id, item);
         });

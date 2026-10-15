@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { TTS_VOICES } from './tts.js';
-export const VOICE_COMMAND_NAMES=['playmusic','musicqueue','skipmusic','stopmusic','addtts','stoptts','ttsvoice',...TTS_VOICES.map(voice=>`tts${voice.id}`)];
+import { ENGLISH_TTS_VOICES } from './catalog.js';
+export const VOICE_COMMAND_NAMES=['playmusic','musicqueue','skipmusic','stopmusic','addtts','stoptts','ttsvoice',...ENGLISH_TTS_VOICES.map(voice=>`tts${voice.id}`)];
 export const voiceCommands=[
   new SlashCommandBuilder().setName('playmusic').setDescription('Join your voice call and queue a YouTube, direct audio or radio link.').addStringOption(o=>o.setName('link').setDescription('Public YouTube video or direct audio/radio URL; Spotify full-track playback is unavailable').setRequired(true).setMaxLength(2000)),
   new SlashCommandBuilder().setName('musicqueue').setDescription('Show this call’s music queue.'),
@@ -9,5 +10,5 @@ export const voiceCommands=[
   new SlashCommandBuilder().setName('addtts').setDescription('Join your call and speak new messages in its chat.'),
   new SlashCommandBuilder().setName('stoptts').setDescription('Stop text-to-speech and leave your call.'),
   new SlashCommandBuilder().setName('ttsvoice').setDescription('Choose your personal text-to-speech voice in this server.').addStringOption(o=>o.setName('voice').setDescription('Free local neural voice').setRequired(true).addChoices(...TTS_VOICES.map(v=>({name:v.name,value:v.id})))),
-  ...TTS_VOICES.map(v=>new SlashCommandBuilder().setName(`tts${v.id}`).setDescription(`Use ${v.name} as your personal TTS voice.`)),
+  ...ENGLISH_TTS_VOICES.map(v=>new SlashCommandBuilder().setName(`tts${v.id}`).setDescription(`Use ${v.name} as your personal TTS voice.`)),
 ];

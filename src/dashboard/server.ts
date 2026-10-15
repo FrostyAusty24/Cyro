@@ -2,6 +2,7 @@ import type { AccessService } from '../control/access.js';
 import type { PublishingService } from '../control/publishing.js';
 import { GuildIdentityService, IdentityError } from '../control/identity.js';
 import { COMMAND_KEYS, parseAccess } from '../control/store.js';
+import { languageSnapshot } from '../control/language.js';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -241,7 +242,7 @@ export class DashboardServer {
         }
         this.json(res,200,{guilds:visible});return;
       }
-      const match=route.match(/^\/api\/guilds\/(\d{17,20})(?:\/(community|moderation|streams|creators|stream-stats|access|messages|polls|identity|suggestions|status-roles|voice|confessions|temp-voice|community-tools|bug-reports)(?:\/([a-zA-Z0-9-]{1,64})(?:\/(status))?)?)?$/);
+      const match=route.match(/^\/api\/guilds\/(\d{17,20})(?:\/(community|moderation|streams|creators|stream-stats|access|language|messages|polls|identity|suggestions|status-roles|voice|confessions|temp-voice|community-tools|bug-reports)(?:\/([a-zA-Z0-9-]{1,64})(?:\/(status))?)?)?$/);
       if(match) {
         // Consume bounded request data before checking authority; an upload can outlast a role revocation.
         const input=['PATCH','POST'].includes(method)?await this.body(req,match[2]==='identity'&&!match[3]&&method==='PATCH'?3*1024*1024:131_072):undefined;
@@ -257,6 +258,22 @@ export class DashboardServer {
         this.assertActive(res);
         const section=match[2];const id=match[3];
         if (match[4] && section !== 'bug-reports') throw new HttpError(404,'Endpoint not found.');
+        if(section==='language') {
+          if(!o.access)throw new HttpError(503,'Language settings are not available.');
+          if(method==='GET'&&!id){this.json(res,200,o.access.language(guild.id));return;}
+          if(method==='PATCH'&&!id){
+            const assertCurrent=()=>{
+              this.assertActive(res);
+              if(this.sessions.peek(cookies.dashboard_session??'')!==session)throw new HttpError(401,'Your session expired. Sign in again.');
+              if(!this.operational)throw new HttpError(503,'Cyro is reconnecting. Reload before changing these settings.');
+              if(o.client.guilds.cache.get(guild.id)!==guild)throw new HttpError(404,'The bot is not installed in this server.');
+            };
+            try {this.json(res,200,await o.access.updateLanguage(guild,session.user.id,input,assertCurrent));}
+            catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error.message:'Invalid language settings.');}
+            return;
+          }
+          throw new HttpError(405,'Use GET or PATCH for language settings.');
+        }
         if(section==='temp-voice'||section==='community-tools'||section==='bug-reports') {
           const feature=section==='temp-voice'?o.tempVoice:o.communityTools;
           if(!feature)throw new HttpError(503,'Community tools are not available.');
@@ -435,7 +452,7 @@ export class DashboardServer {
           const collect=(value:unknown):void=>{if(!value||typeof value!=='object')return;for(const[key,item]of Object.entries(value)){if(/^(userId|ownerId|actorId|claimedBy|closedBy|reviewedBy|lastUserId|memberId|inviterId)$/.test(key)&&typeof item==='string')memberIds.add(item);else if(item&&typeof item==='object')collect(item);}};
           collect(cs);collect(ms);
           const members=[...memberIds].slice(0,250).flatMap(id=>{const member=guild.members.cache.get(id);return member?[{id,displayName:member.displayName}]:[];});
-          this.json(res,200,{guild:{id:guild.id,name:guild.name,icon:guild.icon,memberCount:guild.memberCount},community:{config:cc,snapshot:cs},moderation:{config:mc,snapshot:ms},streams,creators,streamStats,suggestions,statusRoles,voice,confessions,tempVoice,communityTools,members,access:{config:o.access?.config(guild.id),isOwner:guild.ownerId===session.user.id,commands:COMMAND_KEYS},posts:o.publishing?.list(guild.id)??[],channels:[...channels.values()].filter(c=>c).map(c=>({id:c!.id,name:c!.name,type:c!.type})),roles:[...guild.roles.cache.values()].filter(r=>r.id!==guild.id&&!r.managed).map(r=>({id:r.id,name:r.name,color:r.color,position:r.position}))});return;
+          this.json(res,200,{guild:{id:guild.id,name:guild.name,icon:guild.icon,memberCount:guild.memberCount},community:{config:cc,snapshot:cs},moderation:{config:mc,snapshot:ms},streams,creators,streamStats,suggestions,statusRoles,voice,confessions,tempVoice,communityTools,members,language:o.access?.language?.(guild.id)??languageSnapshot(),access:{config:o.access?.config(guild.id),isOwner:guild.ownerId===session.user.id,commands:COMMAND_KEYS},posts:o.publishing?.list(guild.id)??[],channels:[...channels.values()].filter(c=>c).map(c=>({id:c!.id,name:c!.name,type:c!.type})),roles:[...guild.roles.cache.values()].filter(r=>r.id!==guild.id&&!r.managed).map(r=>({id:r.id,name:r.name,color:r.color,position:r.position}))});return;
         }
         if(method==='PATCH'&&(section==='community'||section==='moderation')&&!id) {
           try{const config=await o[section].updateConfig(guild.id,input);this.json(res,200,{config});}catch(error){throw new HttpError(400,error instanceof Error?error.message:'Invalid configuration.');}return;
@@ -463,7 +480,7 @@ export class DashboardServer {
     const assets:Record<string,[string,string]>={'/':['index.html','text/html'],'/dashboard':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/setup.js':['setup.js','text/javascript'],'/studio.js':['studio.js','text/javascript'],'/styles.css':['styles.css','text/css'],'/favicon.svg':['favicon.svg','image/svg+xml'],'/cyro-logo.png':['cyro-logo.png','image/png']};
     Object.assign(assets,{'/privacy':['privacy.html','text/html'],'/terms':['terms.html','text/html'],'/connections':['connections.html','text/html'],'/connections.js':['connections.js','text/javascript'],'/creator.css':['creator.css','text/css'],'/identity.js':['identity.js','text/javascript'],'/suggestions.js':['suggestions.js','text/javascript'],'/status-roles.js':['status-roles.js','text/javascript'],'/audio.js':['audio.js','text/javascript'],'/confessions.js':['confessions.js','text/javascript'],'/search-select.js':['search-select.js','text/javascript']});
     Object.assign(assets,{'/home.js':['home.js','text/javascript'],'/home.css':['home.css','text/css'],'/home-icons.svg':['home-icons.svg','image/svg+xml']});
-    Object.assign(assets,{'/icons.js':['icons.js','text/javascript'],'/icons.svg':['icons.svg','image/svg+xml']});
+    Object.assign(assets,{'/icons.js':['icons.js','text/javascript'],'/icons.svg':['icons.svg','image/svg+xml'],'/i18n.js':['i18n.js','text/javascript'],'/i18n-catalogs.js':['i18n-catalogs.js','text/javascript'],'/i18n-extra-catalogs.js':['i18n-extra-catalogs.js','text/javascript']});
     Object.assign(assets,{'/help.js':['help.js','text/javascript'],'/temp-voice.js':['temp-voice.js','text/javascript'],'/community-tools.js':['community-tools.js','text/javascript']});
     const asset=assets[route];if(!asset)throw new HttpError(404,'Page not found.');
     const file=await readFile(path.join(o.publicDir,asset[0])).catch(()=>{throw new HttpError(404,'Dashboard file not found.');});

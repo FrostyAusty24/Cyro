@@ -104,8 +104,8 @@ try {
     await mkdir(runtime, { recursive: true });
     const lockHash = digest(await readFile(path.join(definition, 'package-lock.json')));
     let prior; try { prior = JSON.parse(await readFile(marker, 'utf8')); } catch { /* Fresh installation. */ }
-    const installedPackage = path.join(runtime, 'node_modules', 'kokoro-js', 'package.json');
-    const hasPackage = await lstat(installedPackage).then(stat => stat.isFile()).catch(() => false);
+    const installedPackages = ['kokoro-js', 'ephone'].map(name => path.join(runtime, 'node_modules', name, 'package.json'));
+    const hasPackage = (await Promise.all(installedPackages.map(file => lstat(file).then(stat => stat.isFile()).catch(() => false)))).every(Boolean);
     if (!hasPackage || prior?.lockHash !== lockHash || prior?.platform !== process.platform || prior?.arch !== process.arch) {
       console.log('[Cyro voices] Installing pinned CPU-only Kokoro runtime (first install can take a few minutes).');
       await rm(marker, { force: true });
@@ -113,6 +113,10 @@ try {
     }
     for (const asset of assets) await downloadAsset(...asset);
     await copyFile(path.join(definition, 'MODEL-LICENSE.txt'), path.join(runtime, 'model', 'LICENSE.txt'));
+    // The optional multilingual phonemizer is a separate GPL-3.0-or-later dependency.
+    // Keep its complete license and public source attribution with the installed runtime.
+    await copyFile(path.join(definition, 'EPHONE-LICENSE.txt'), path.join(runtime, 'EPHONE-LICENSE.txt'));
+    await copyFile(path.join(definition, 'THIRD-PARTY-NOTICES.txt'), path.join(runtime, 'THIRD-PARTY-NOTICES.txt'));
     await writeFile(marker, JSON.stringify({ engine: 'kokoro', version: '1.2.1', revision, lockHash, platform: process.platform, arch: process.arch, modelSha256: assets[3][2] }) + '\n', { mode: 0o600 });
     console.log('[Cyro voices] Verified Kokoro q8 local neural voice runtime. No speech text is sent to an external service.');
   }

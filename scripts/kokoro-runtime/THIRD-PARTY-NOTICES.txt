@@ -1,0 +1,20 @@
+Cyro optional local speech runtime
+
+Kokoro-82M and kokoro-js are licensed under Apache License 2.0.
+Model: https://huggingface.co/hexgrad/Kokoro-82M
+JavaScript library: https://github.com/hexgrad/kokoro/tree/main/kokoro.js
+The pinned package and MODEL-LICENSE.txt retain their original notices.
+
+ephone 1.0.2 is authored by sjmik and derives from eSpeak NG.
+License: GNU General Public License version 3 or later (GPL-3.0-or-later).
+Full license: EPHONE-LICENSE.txt and node_modules/ephone/COPYING.
+Source and complete change history: https://github.com/sjmik/ephone-js
+Build instructions: https://github.com/sjmik/ephone-js/tree/master/emscripten
+Upstream: https://github.com/espeak-ng/espeak-ng
+Cyro installs the unmodified, integrity-pinned npm package as an optional local
+runtime dependency. It converts text to phonemes; Kokoro generates the speech.
+These third-party components retain their own licenses. Cyro's MIT license does
+not relicense them. Retain their notices when redistributing the runtime.
+
+Non-English phoneme mappings follow the Kokoro v1 phoneme alphabet documented
+by Misaki's EspeakG2P implementation: https://github.com/hexgrad/misaki
