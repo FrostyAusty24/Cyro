@@ -122,7 +122,7 @@ async function main(): Promise<void> {
       if (shuttingDown) return;
       // Suggestion votes and decisions are already durable; attach repairs stale message counts in the background.
       commands.attach(); community.attach(); moderation.attach(); suggestions.attach(); statusRoles.attach(); voice.attach(); confessions.attach(); tempVoice.attach(); communityTools.attach(); retention.attach();
-      readyClient.user.setActivity('your community · /help · /dashboard', { type: ActivityType.Watching });
+      readyClient.user.setActivity('your community', { type: ActivityType.Watching });
       operational = true;
       monitor.start(); retention.start();
       logger.info('Discord bot is ready.', { user: readyClient.user.tag, guilds: readyClient.guilds.cache.size });
