@@ -298,6 +298,16 @@ The staff leaderboard supports member name/ID search, activity filters and expli
 
 The refinement uses the field grouping, restrained controls and filterable table patterns documented by [shadcn/ui Field](https://ui.shadcn.com/docs/components/base/field) and [Data Table](https://ui.shadcn.com/docs/components/base/data-table). These are design references only; Cyro remains vanilla JavaScript with its existing controls and no added React or component-library dependency.
 
+### Public homepage
+
+`public/home.js` and `public/home.css` keep the familiar split hero, icy logo, live aggregate server count and existing login flow. The feature catalogue has ten groups in a two-column grid, collapsing to one column on small screens. Temporary voice rooms and bug reports with sticky messages lead the catalogue. Compact outlined labels identify their room and staff controls without implying a different price tier.
+
+The homepage adapts [shadcn/ui Card](https://ui.shadcn.com/docs/components/base/card), [Item](https://ui.shadcn.com/docs/components/base/item), [Badge](https://ui.shadcn.com/docs/components/base/badge) and [Button](https://ui.shadcn.com/docs/components/base/button) composition and spacing as design references. Each feature has a distinct icon, title, short introduction and readable list. Cards use the shared navy surface and a one-pixel border; the grid has 16px gaps, cards have 26–28px padding, titles are 18px, and body copy is 15px. Mobile cards use 20–23px padding and 14px body copy. This is authored vanilla HTML/JavaScript/CSS, not an installed shadcn or React component layer.
+
+Homepage icons use the locally served Lucide symbol sprite `public/home-icons.svg`, with `currentColor`, a consistent two-pixel stroke and decorative accessibility attributes. Cyan, lavender, mint and gold remain restrained icon accents. The dashboard's existing icon implementation stays independent. Native `details` and `summary` elements provide the FAQ's keyboard interaction; a downward chevron rotates when open. Focus remains visible, icons carry no independent accessible name, and reduced motion disables transitions.
+
+Feature descriptions distinguish disconnecting a room member from banning them, explain individual access to locked rooms, identify bug report authors, and retain music and streaming provider limitations. The free-hosting position, creator connections, support, privacy, terms and public source links stay available.
+
 ### Motion
 
 Navigation state transitions take 150ms, button states take 180ms, and fields, toggles, and the drawer use 200ms. Reduced-motion preference removes transitions and animation. The loading indicator is functional feedback, not a general motion treatment.
