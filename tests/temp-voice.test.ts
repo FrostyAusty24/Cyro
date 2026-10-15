@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Collection, ChannelType, MessageType, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
+import { ActionRow, ButtonComponent, Collection, ChannelType, MessageFlags, MessageType, PermissionFlagsBits, PermissionsBitField, REST, Routes } from 'discord.js';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -10,6 +10,7 @@ import { tempVoiceCommands } from '../src/temp-voice/commands.js';
 
 const guildId = '111111111111111111', ownerId = '222222222222222222', otherId = '333333333333333333', botId = '444444444444444444', lobbyId = '555555555555555555', categoryId = '666666666666666666', channelId = '777777777777777777', roleId = '888888888888888888';
 const P = PermissionFlagsBits;
+let nextPickerId = 922222222222222222n;
 const directories: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const dir of directories.splice(0)) await rm(dir, { recursive: true, force: true }); });
 const temporary = async () => { const dir = await mkdtemp(path.join(os.tmpdir(), 'cyro-temp-voice-')); directories.push(dir); return dir; };
@@ -21,7 +22,9 @@ async function fixture(options: { ready?: boolean } = {}) {
   let nextMessageId = 911111111111111111n;
   const bot = { id: botId, user: { bot: true }, pending: false, permissions: { has: () => true } } as any;
   const guild = { id: guildId, available: true, channels: {}, members: {}, roles: { fetch: vi.fn() }, voiceStates: { cache: new Collection() } } as any;
-  const member = (id: string, name: string, staff = false) => ({ id, guild, displayName: name, user: { bot: false }, pending: false, permissions: { has: (bit: bigint) => staff || bit !== P.ManageChannels }, voice: { channelId: lobbyId, setChannel: vi.fn(async (channel: any) => { const value = members.get(id); value.voice.channelId = channel.id; channel.members.set(id, value); }) } });
+  const member = (id: string, name: string, staff = false) => ({ id, guild, displayName: name, user: { bot: false }, pending: false, permissions: { has: (bit: bigint) => staff || ![P.ManageChannels, P.Administrator].includes(bit) }, voice: { id, guild, channelId: lobbyId,
+    setChannel: vi.fn(async (channel: any) => { const value = members.get(id); value.voice.channelId = channel.id; channel.members.set(id, value); }),
+    disconnect: vi.fn(async () => { const value = members.get(id); channels.get(value.voice.channelId)?.members.delete(id); value.voice.channelId = null; }) } });
   const owner = member(ownerId, 'Example'), other = member(otherId, 'Other'); members.set(ownerId, owner); members.set(otherId, other); bot.guild = guild; members.set(botId, bot);
   const channel = (id: string, type: number, name = id) => {
     const value: any = { id, guild, type, name, parentId: type === ChannelType.GuildVoice ? categoryId : null, createdTimestamp: Date.now(), members: new Collection(), children: { cache: new Collection() }, userLimit: 0, permissionsFor: vi.fn(() => ({ has: () => true })), permissionOverwrites: { cache: new Collection([[guildId, overwrite(guildId, 0, P.ViewChannel | P.Connect)]]) } };
@@ -33,7 +36,8 @@ async function fixture(options: { ready?: boolean } = {}) {
       const message = messages.get(typeof input === 'string' ? input : input.message);
       if (!message) throw Object.assign(new Error('Unknown Message'), { code: 10008 }); return message;
     }) };
-    value.send = vi.fn(async (payload: any) => { const message = { id: String(nextMessageId++), author: { id: botId }, guildId, channelId: id, type: MessageType.Default, webhookId: null, embeds: payload.embeds, components: payload.components }; messages.set(message.id, message); return message; });
+    value.send = vi.fn(async (payload: any) => { const message: any = { id: String(nextMessageId++), author: { id: botId }, guildId, channelId: id, type: MessageType.Default, webhookId: null, embeds: payload.embeds, components: payload.components };
+      message.edit = vi.fn(async (input: any) => { message.embeds = input.embeds; message.components = input.components; return message; }); messages.set(message.id, message); return message; });
     channels.set(id, value); return value;
   };
   const lobby = channel(lobbyId, ChannelType.GuildVoice), category = channel(categoryId, ChannelType.GuildCategory);
@@ -42,21 +46,30 @@ async function fixture(options: { ready?: boolean } = {}) {
     room.permissionOverwrites.cache = new Collection(input.permissionOverwrites.map((value: any) => [value.id, overwrite(value.id, value.type, value.allow, value.deny)])); return room;
   }) };
   guild.members = { fetchMe: vi.fn(async () => bot), fetch: vi.fn(async (input: any) => { const value = members.get(typeof input === 'string' ? input : input.user); if (!value) throw Object.assign(new Error('Unknown member'), { code: 10007 }); return value; }) };
-  const client = { guilds: { cache: new Collection([[guildId, guild]]) }, user: { id: botId }, isReady: () => options.ready !== false, on: vi.fn(), off: vi.fn() } as any;
+  guild.voiceStates.fetch = vi.fn(async (id: string) => { const member = members.get(id); if (!member?.voice?.channelId) throw Object.assign(new Error('Unknown voice state'), { code: 10065 }); return member.voice; });
+  const client = { token: 'unit-test-only-token', guilds: { cache: new Collection([[guildId, guild]]) }, user: { id: botId }, isReady: () => options.ready !== false, on: vi.fn(), off: vi.fn() } as any;
+  const disconnectRequest = vi.spyOn(REST.prototype, 'patch').mockImplementation(async (route: any) => { const target = members.get(route.split('/').at(-1)); if (!target) throw new Error('Unknown target'); await target.voice.disconnect(); return {}; });
   const access = { member: vi.fn(async (target: any, id: string) => target.members.fetch({ user: id, force: true })), commandMember: vi.fn() } as any;
   const logger = { warn: vi.fn(), info: vi.fn() } as any;
   const service = new TempVoiceService(client, dir, logger, access); await service.init();
   await service.updateConfig(guild, { ...defaultTempVoiceConfig(), enabled: true, lobbyChannelId: lobbyId, categoryId });
-  return { dir, guild, client, access, service, owner, other, bot, lobby, category, channel, channels, members };
+  return { dir, guild, client, access, service, owner, other, bot, lobby, category, channel, channels, members, disconnectRequest };
 }
 
-function panelButton(f: Awaited<ReturnType<typeof fixture>>, code: 'l' | 'u' | 'n' | 'm', actorId = ownerId) {
+function panelButton(f: Awaited<ReturnType<typeof fixture>>, code: 'l' | 'u' | 'n' | 'm' | 'a' | 'r', actorId = ownerId) {
   const channel = f.channels.get(channelId), message = channel.messages.cache.last();
-  const customId = message.components[0].toJSON().components.find((button: any) => button.custom_id.endsWith(`:${code}`)).custom_id;
+  const customId = message.components.flatMap((row: any) => row.toJSON().components).find((button: any) => button.custom_id.endsWith(`:${code}`)).custom_id;
+  const pickerMessage = { id: String(nextPickerId++), author: { id: botId }, guildId, channelId, webhookId: botId, type: MessageType.ChatInputCommand, flags: { has: (flag: bigint) => flag === MessageFlags.Ephemeral } };
   const interaction: any = { customId, guild: f.guild, guildId, channelId, user: { id: actorId }, member: f.members.get(actorId), message, deferred: false, replied: false,
-    isChatInputCommand: () => false, isButton: () => true, isModalSubmit: () => false, inCachedGuild: () => true,
-    deferReply: vi.fn(async () => { interaction.deferred = true; }), editReply: vi.fn(async () => undefined),
+    isChatInputCommand: () => false, isButton: () => true, isModalSubmit: () => false, isUserSelectMenu: () => false, inCachedGuild: () => true, pickerMessage,
+    deferReply: vi.fn(async () => { interaction.deferred = true; }), editReply: vi.fn(async () => pickerMessage),
     reply: vi.fn(async () => { interaction.replied = true; }), showModal: vi.fn(async () => { interaction.replied = true; }) };
+  return interaction;
+}
+function pickerSubmission(button: any, targetId = otherId) {
+  const interaction: any = { ...button, customId: button.editReply.mock.calls[0][0].components[0].toJSON().components[0].custom_id, message: button.pickerMessage, values: [targetId], deferred: false, replied: false,
+    isButton: () => false, isModalSubmit: () => false, isUserSelectMenu: () => true,
+    deferUpdate: vi.fn(async () => { interaction.deferred = true; }), editReply: vi.fn(async () => undefined), reply: vi.fn(async () => { interaction.replied = true; }) };
   return interaction;
 }
 function modalSubmission(button: any, value: string) {
@@ -320,5 +333,132 @@ describe('temporary voice room panels', () => {
     const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); let reads = 0;
     f.access.member.mockImplementation(async () => { if (++reads > 1) f.owner.voice.channelId = lobbyId; return f.owner; });
     const lock = panelButton(f, 'l'); await f.service.handleInteraction(lock); expect(lock.editReply.mock.calls[0][0].content).toContain('access changed'); expect(f.channels.get(channelId).permissionOverwrites.set).not.toHaveBeenCalled();
+  });
+});
+
+describe('room member picker controls', () => {
+  it('upgrades an occupied 2.20 panel in place with two new buttons and preserves its receipt', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const room = f.channels.get(channelId), panel = room.messages.cache.first(), id = panel.id;
+    panel.components = [new ActionRow<ButtonComponent>(panel.components[0].toJSON())]; panel.embeds[0].description = 'Old four-button panel';
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init(); await restored.reconcile();
+    expect(panel.edit).toHaveBeenCalledOnce(); expect(panel.id).toBe(id); expect(room.send).toHaveBeenCalledOnce();
+    expect(panel.components[1].toJSON().components.map((button: any) => button.label)).toEqual(['Remove member', 'Allow member']);
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now + 61_000); await restored.reconcile(); expect(panel.edit).toHaveBeenCalledOnce();
+  });
+  it('reconciles an uncertain panel edit without posting or editing the accepted upgrade again', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const room = f.channels.get(channelId), panel = room.messages.cache.first(), edit = panel.edit.getMockImplementation(); panel.components = [panel.components[0]];
+    panel.edit.mockImplementation(async (payload: any) => { await edit(payload); throw new Error('Connection reset after edit'); });
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init(); await restored.reconcile(); expect(restored.snapshot(guildId).warnings).toHaveLength(1);
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now + 61_000); await restored.reconcile(); expect(panel.edit).toHaveBeenCalledOnce(); expect(room.send).toHaveBeenCalledOnce(); expect(restored.snapshot(guildId).warnings).toEqual([]);
+  });
+  it('offers a private searchable single-user picker only after checking fresh room authority', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'r'); await f.service.handleInteraction(button);
+    expect(button.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral }); expect(f.access.member).toHaveBeenCalled();
+    const payload = button.editReply.mock.calls[0][0]; expect(payload.embeds[0].description).toContain('does not kick or ban'); expect(payload.embeds[0].description).toContain('2 minutes');
+    expect(payload.components[0].toJSON().components[0]).toMatchObject({ type: 5, min_values: 1, max_values: 1 }); expect(payload.components[0].toJSON().components[0].custom_id.length).toBeLessThanOrEqual(100);
+    f.other.voice.channelId = channelId; const outsider = panelButton(f, 'a', otherId); await f.service.handleInteraction(outsider); expect(outsider.editReply.mock.calls[0][0].content).toContain('Only this room');
+  });
+  it('allows one eligible member into a locked room without moving them or broadening visibility', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); await f.service.control(f.guild, ownerId, 'lock');
+    const room = f.channels.get(channelId), before = room.permissionOverwrites.cache.get(guildId).allow.bitfield;
+    const button = panelButton(f, 'a'); await f.service.handleInteraction(button); const selection = pickerSubmission(button); await f.service.handleInteraction(selection);
+    expect(room.permissionOverwrites.cache.get(otherId).allow.has(P.Connect)).toBe(true); expect(room.permissionOverwrites.cache.get(guildId).allow.bitfield).toBe(before);
+    expect(f.other.voice.channelId).toBe(lobbyId); expect(f.other.voice.setChannel).not.toHaveBeenCalled(); expect(selection.editReply.mock.calls[0][0]).toMatchObject({ components: [], embeds: [{ description: expect.stringContaining('permitted') }] });
+    const updates = room.permissionOverwrites.set.mock.calls.length; const replay = pickerSubmission(button); await f.service.handleInteraction(replay); expect(replay.reply.mock.calls[0][0].content).toContain('already used'); expect(room.permissionOverwrites.set).toHaveBeenCalledTimes(updates);
+  });
+  it('disconnects a current room member exactly once without a ban or permission change', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId; f.channels.get(channelId).members.set(otherId, f.other);
+    const button = panelButton(f, 'r'); await f.service.handleInteraction(button); const selection = pickerSubmission(button); await f.service.handleInteraction(selection);
+    expect(f.guild.voiceStates.fetch).toHaveBeenCalledWith(otherId, { force: true }); expect(f.other.voice.disconnect).toHaveBeenCalledOnce(); expect(f.other.voice.channelId).toBeNull();
+    expect(f.disconnectRequest).toHaveBeenCalledWith(Routes.guildMember(guildId, otherId), expect.objectContaining({ body: { channel_id: null }, signal: expect.any(AbortSignal) }));
+    const rest = f.disconnectRequest.mock.contexts[0] as REST; expect(rest.options.retries).toBe(0); expect(typeof rest.options.rejectOnRateLimit).toBe('function'); expect((rest.options.rejectOnRateLimit as Function)({})).toBe(true);
+    expect(f.channels.get(channelId).permissionOverwrites.set).not.toHaveBeenCalled(); expect(selection.editReply.mock.calls[0][0].embeds[0].description).toContain('can rejoin');
+    const replay = pickerSubmission(button); await f.service.handleInteraction(replay); expect(replay.reply.mock.calls[0][0].content).toContain('already used'); expect(f.other.voice.disconnect).toHaveBeenCalledOnce();
+    const saved = JSON.parse(await readFile(path.join(f.dir, 'temp-voice.json'), 'utf8')); expect(saved.guilds[guildId].rooms[0].blocked).toEqual([]);
+  });
+  it.each(['actor', 'guild', 'channel', 'message', 'author', 'public'])('rejects a picker with the wrong %s binding without consuming its rightful owner’s choice', async which => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'a'); await f.service.handleInteraction(button); const invalid = pickerSubmission(button);
+    if (which === 'actor') invalid.user = { id: otherId }; if (which === 'guild') invalid.guildId = otherId; if (which === 'channel') invalid.channelId = lobbyId;
+    if (which === 'message') invalid.message = { ...invalid.message, id: '999999999999999999' }; if (which === 'author') invalid.message = { ...invalid.message, author: { id: otherId } }; if (which === 'public') invalid.message = { ...invalid.message, flags: { has: () => false } };
+    await f.service.handleInteraction(invalid); expect(invalid.reply.mock.calls[0][0].content).toContain('another person or room'); expect(f.channels.get(channelId).permissionOverwrites.set).not.toHaveBeenCalled();
+    const valid = pickerSubmission(button); await f.service.handleInteraction(valid); expect(valid.editReply.mock.calls[0][0].embeds[0].description).toContain('permitted');
+  });
+  it('rejects a picker after its original panel was replaced', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const button = panelButton(f, 'a'); await f.service.handleInteraction(button);
+    f.channels.get(channelId).messages.cache.clear(); const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now + 61_000); await f.service.reconcile();
+    const submit = pickerSubmission(button); await f.service.handleInteraction(submit); expect(submit.reply.mock.calls[0][0].content).toContain('no longer active'); expect(f.channels.get(channelId).permissionOverwrites.set).not.toHaveBeenCalled();
+  });
+  it('rejects expired, previously replaced and pre-restart member pickers', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); const old = panelButton(f, 'a'); await f.service.handleInteraction(old); const fresh = panelButton(f, 'a'); await f.service.handleInteraction(fresh);
+    const replaced = pickerSubmission(old); await f.service.handleInteraction(replaced); expect(replaced.reply.mock.calls[0][0].content).toContain('expired');
+    const restored = new TempVoiceService(f.client, f.dir, { warn: vi.fn() } as any, f.access); await restored.init(); const restarted = pickerSubmission(fresh); await restored.handleInteraction(restarted); expect(restarted.reply.mock.calls[0][0].content).toContain('expired');
+    const now = Date.now(); vi.spyOn(Date, 'now').mockReturnValue(now + 120_001); const expired = pickerSubmission(fresh); await f.service.handleInteraction(expired); expect(expired.reply.mock.calls[0][0].content).toContain('expired');
+    expect(f.channels.get(channelId).permissionOverwrites.set).not.toHaveBeenCalled();
+  });
+  it('honors picker expiry even while an action is waiting on authorization', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId; const button = panelButton(f, 'r'); await f.service.handleInteraction(button);
+    const now = Date.now(), member = f.access.member.getMockImplementation(); f.access.member.mockImplementation(async (...args: any[]) => { vi.spyOn(Date, 'now').mockReturnValue(now + 120_001); return member(...args); });
+    const selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toContain('expired'); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+  });
+  it('refuses a target in another channel or one who moves during the final voice-state refresh', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); let button = panelButton(f, 'r'); await f.service.handleInteraction(button);
+    let selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toContain('no longer in this room');
+    f.other.voice.channelId = channelId; button = panelButton(f, 'r'); await f.service.handleInteraction(button);
+    f.guild.voiceStates.fetch.mockImplementation(async () => { f.other.voice.channelId = lobbyId; return f.other.voice; });
+    selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toContain('no longer in this room'); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+  });
+  it('refuses an owner who leaves or loses command access while the target voice-state refresh is running', async () => {
+    for (const loss of ['leave', 'command']) {
+      const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId; const button = panelButton(f, 'r'); await f.service.handleInteraction(button);
+      f.guild.voiceStates.fetch.mockImplementation(async () => { if (loss === 'leave') f.owner.voice.channelId = lobbyId; else f.access.commandMember.mockImplementation(() => { throw new Error('Command access revoked'); }); return f.other.voice; });
+      const selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toMatch(/access changed|revoked/); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+    }
+  });
+  it('refuses removals after owner controls are disabled or the owner switches to another room', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId; const button = panelButton(f, 'r'); await f.service.handleInteraction(button);
+    await f.service.updateConfig(f.guild, { ...f.service.getConfig(guildId), ownerControls: false }); const disabled = pickerSubmission(button); await f.service.handleInteraction(disabled); expect(disabled.editReply.mock.calls[0][0].content).toContain('disabled'); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+  });
+  it.each(['pending', 'bot', 'owner', 'self', 'missing'])('refuses an ineligible %s target', async kind => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId;
+    const actor = kind === 'owner' ? otherId : ownerId; if (kind === 'owner') f.other.permissions.has = () => true;
+    const button = panelButton(f, 'r', actor); await f.service.handleInteraction(button);
+    let target = otherId; if (kind === 'pending') f.other.pending = true; if (kind === 'bot') f.other.user.bot = true; if (kind === 'owner' || kind === 'self') target = ownerId; if (kind === 'missing') f.members.delete(otherId);
+    const selection = pickerSubmission(button, target); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toBeTruthy(); expect(f.other.voice.disconnect).not.toHaveBeenCalled(); expect(f.owner.voice.disconnect).not.toHaveBeenCalled();
+  });
+  it.each(['guild-owner', 'admin', 'manage-channels'])('protects a %s target from an ordinary room owner', async kind => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId;
+    if (kind === 'guild-owner') f.guild.ownerId = otherId; else f.other.permissions.has = (bit: bigint) => bit === (kind === 'admin' ? P.Administrator : P.ManageChannels);
+    const button = panelButton(f, 'r'); await f.service.handleInteraction(button); const selection = pickerSubmission(button); await f.service.handleInteraction(selection);
+    expect(selection.editReply.mock.calls[0][0].content).toMatch(/server owner|server staff/); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+  });
+  it('requires a staff actor’s own Move Members permission for staff targets and always protects the server owner', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId; f.owner.permissions.has = () => true; f.other.permissions.has = () => true;
+    const room = f.channels.get(channelId); room.permissionsFor.mockImplementation((member: any) => ({ has: (bits: bigint | bigint[]) => member.id !== ownerId || !(Array.isArray(bits) ? bits : [bits]).includes(P.MoveMembers) }));
+    let button = panelButton(f, 'r'); await f.service.handleInteraction(button); let selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toContain('own Move Members'); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+    room.permissionsFor.mockImplementation(() => ({ has: () => true })); f.guild.ownerId = otherId;
+    button = panelButton(f, 'r'); await f.service.handleInteraction(button); selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toContain('server owner'); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+    f.guild.ownerId = '999999999999999999'; button = panelButton(f, 'r'); await f.service.handleInteraction(button); selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(f.other.voice.disconnect).toHaveBeenCalledOnce();
+  });
+  it('requires Cyro’s Move Members permission both before and after the final read', async () => {
+    for (const loss of ['before', 'during']) {
+      const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId; const room = f.channels.get(channelId), button = panelButton(f, 'r'); await f.service.handleInteraction(button);
+      const deny = () => room.permissionsFor.mockImplementation((member: any) => ({ has: (bits: bigint | bigint[]) => member.id !== botId || !(Array.isArray(bits) ? bits : [bits]).includes(P.MoveMembers) }));
+      if (loss === 'before') deny(); else f.guild.voiceStates.fetch.mockImplementation(async () => { deny(); return f.other.voice; });
+      const selection = pickerSubmission(button); await f.service.handleInteraction(selection); expect(selection.editReply.mock.calls[0][0].content).toContain('Cyro needs Move Members'); expect(f.other.voice.disconnect).not.toHaveBeenCalled();
+    }
+  });
+  it.each(['definite', 'uncertain'])('never retries a %s disconnect failure from the same picker', async failure => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); f.other.voice.channelId = channelId;
+    f.other.voice.disconnect.mockRejectedValue(failure === 'definite' ? Object.assign(new Error('Forbidden'), { code: 50013 }) : new Error('Socket closed after sending request'));
+    const button = panelButton(f, 'r'); await f.service.handleInteraction(button); const selection = pickerSubmission(button); await f.service.handleInteraction(selection);
+    expect(selection.editReply.mock.calls[0][0].content).toContain(failure === 'definite' ? 'Discord could not remove' : 'will not retry');
+    const replay = pickerSubmission(button); await f.service.handleInteraction(replay); expect(replay.reply.mock.calls[0][0].content).toContain('already used'); await f.service.reconcile(); expect(f.other.voice.disconnect).toHaveBeenCalledOnce();
+  });
+  it('rolls back a pending allow when the selected member stops being eligible during authorization', async () => {
+    const f = await fixture(); await f.service.joinLobby(f.guild, ownerId); await f.service.control(f.guild, ownerId, 'lock'); const button = panelButton(f, 'a'); await f.service.handleInteraction(button);
+    let reads = 0; const fetch = f.guild.members.fetch.getMockImplementation(); f.guild.members.fetch.mockImplementation(async (input: any) => { if (input.user === otherId && ++reads === 2) f.other.pending = true; return fetch(input); });
+    const room = f.channels.get(channelId), mutations = room.permissionOverwrites.set.mock.calls.length, selection = pickerSubmission(button); await f.service.handleInteraction(selection);
+    expect(selection.editReply.mock.calls[0][0].content).toContain('no longer eligible'); expect(room.permissionOverwrites.set).toHaveBeenCalledTimes(mutations);
+    const saved = JSON.parse(await readFile(path.join(f.dir, 'temp-voice.json'), 'utf8')); expect(saved.guilds[guildId].rooms[0].allowed).toEqual([]); expect(saved.guilds[guildId].rooms[0].permissionsPending).toBe(false);
   });
 });

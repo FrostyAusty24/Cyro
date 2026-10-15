@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Events, MessageFlags, MessageType, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle, type CategoryChannel, type Client, type Guild, type GuildMember, type Interaction, type Message, type OverwriteResolvable, type VoiceChannel, type VoiceState } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Events, MessageFlags, MessageType, ModalBuilder, PermissionFlagsBits, REST, Routes, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, type CategoryChannel, type Client, type Guild, type GuildMember, type Interaction, type Message, type OverwriteResolvable, type VoiceChannel, type VoiceState } from 'discord.js';
 import type { AccessService } from '../control/access.js';
 import type { Logger } from '../logger.js';
 import { TempVoiceStore } from './store.js';
@@ -9,12 +9,14 @@ type Overwrite = { id: string; type: 0 | 1; allow: bigint; deny: bigint };
 const CONNECT = PermissionFlagsBits.Connect;
 const BOT_PERMISSIONS = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.MoveMembers];
 const PANEL_PERMISSIONS = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory];
-type RoomAction = 'info' | 'lock' | 'unlock' | 'name' | 'limit' | 'permit' | 'revoke';
+type RoomAction = 'info' | 'lock' | 'unlock' | 'name' | 'limit' | 'permit' | 'revoke' | 'remove';
 type PanelBinding = { guildId: string; channelId: string; reference: string; messageId: string };
+type MemberPicker = { actorId: string; binding: PanelBinding; action: 'permit' | 'remove'; expiresAt: number; messageId: string | null };
 const panelFooter = (reference: string) => `Voice room controls · ${reference}`;
-const buttonPattern = /^tv:(\d{17,20}):(\d{17,20}):([a-f0-9]{24}):([lunm])$/;
+const buttonPattern = /^tv:(\d{17,20}):(\d{17,20}):([a-f0-9]{24}):([lunmar])$/;
 const modalPattern = /^tvm:(\d{17,20}):(\d{17,20}):([a-f0-9]{24}):(\d{17,20}):([nm])$/;
-const panelAction = (code: string): RoomAction => ({ l: 'lock', u: 'unlock', n: 'name', m: 'limit' } as const)[code as 'l' | 'u' | 'n' | 'm'];
+const pickerPattern = /^tvs:([a-f0-9]{24})$/;
+const panelAction = (code: string): RoomAction => ({ l: 'lock', u: 'unlock', n: 'name', m: 'limit', a: 'permit', r: 'remove' } as const)[code as 'l' | 'u' | 'n' | 'm' | 'a' | 'r'];
 const missingChannel = (error: unknown) => (error as { code?: number })?.code === 10003;
 const copyOverwrites = (channel: CategoryChannel | VoiceChannel): Overwrite[] => [...channel.permissionOverwrites.cache.values()].map(value => ({ id: value.id, type: value.type, allow: value.allow.bitfield, deny: value.deny.bitfield }));
 
@@ -42,6 +44,9 @@ export class TempVoiceService {
   private readonly warnings = new Map<string, string>();
   private readonly panelWarnings = new Map<string, string>();
   private readonly panelChecks = new Map<string, number>();
+  private readonly memberPickers = new Map<string, MemberPicker>();
+  private readonly disconnectAbort = new AbortController();
+  private disconnectRest?: REST;
   private readonly cooldowns = new Map<string, number>();
   private stopped = false;
   private attached = false;
@@ -98,13 +103,16 @@ export class TempVoiceService {
     const prefix = `tv:${guild.id}:${room.channelId}:${room.panel!.reference}`;
     return {
       embeds: [{ title: 'Your voice room', color: 0x85cae5,
-        description: `Created for <@${room.ownerId}>.\n\nUse the buttons to manage this room while you are connected. The room owner and staff with Manage Channels can use these controls.\n\n**Lock** keeps new members out, except permitted members and server administrators. **Unlock** restores normal access. Current members stay connected.\n\nAn empty room closes automatically.`,
+        description: `Created for <@${room.ownerId}>.\n\nUse the buttons to manage this room while you are connected. The room owner and staff with Manage Channels can use these controls.\n\n**Lock** keeps new members out, except permitted members and server administrators. **Unlock** restores normal access. Current members stay connected.\n\n**Allow member** lets someone join a locked room. **Remove member** disconnects them from this room only; it does not ban them or prevent them rejoining.\n\nAn empty room closes automatically.`,
         footer: { text: panelFooter(room.panel!.reference) } }],
       components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`${prefix}:l`).setLabel('Lock').setEmoji('🔒').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`${prefix}:u`).setLabel('Unlock').setEmoji('🔓').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`${prefix}:n`).setLabel('Rename').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`${prefix}:m`).setLabel('Member limit').setEmoji('👥').setStyle(ButtonStyle.Primary),
+      ), new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`${prefix}:r`).setLabel('Remove member').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`${prefix}:a`).setLabel('Allow member').setStyle(ButtonStyle.Secondary),
       )], allowedMentions: { parse: [] as [] },
     };
   }
@@ -122,6 +130,7 @@ export class TempVoiceService {
         catch (error) { if ((error as { code?: number }).code !== 10008) throw error; message = null; }
         if (message) {
           if (!this.ownedPanel(message, guild.id, channel.id, room.panel.reference)) throw new Error('The saved voice control panel could not be verified. Staff should check this room before changing its saved panel receipt.');
+          await this.upgradePanel(guild, room, message);
           this.panelWarnings.delete(room.id); return;
         }
         // Only Discord's definite Unknown Message response allows a replacement. Timeouts do not.
@@ -131,7 +140,8 @@ export class TempVoiceService {
         const recent = await channel.messages.fetch({ limit: 100 });
         const matches = recent.filter(message => this.ownedPanel(message, guild.id, channel.id, room.panel!.reference));
         if (matches.size !== 1) throw new Error('A voice control panel has unconfirmed delivery. Cyro is checking recent room messages and will not post a duplicate. Staff can still use /room.');
-        room.panel.messageId = matches.first()!.id; await this.saveRoom(guild.id, room);
+        const message = matches.first()!; room.panel.messageId = message.id; await this.saveRoom(guild.id, room);
+        await this.upgradePanel(guild, room, message);
         this.panelWarnings.delete(room.id); return;
       }
       room.panel = { reference: randomBytes(12).toString('hex'), messageId: null, attemptedAt: Date.now() };
@@ -157,6 +167,23 @@ export class TempVoiceService {
     const room = this.store.get(guild.id).rooms.find(value => value.channelId === binding.channelId);
     if (binding.guildId !== guild.id || !room || room.state !== 'active' || room.panel?.reference !== binding.reference || room.panel.messageId !== binding.messageId) throw new Error('This control panel is no longer active. Use the panel in your current temporary room.');
     return room;
+  }
+  private prunePickers(): void { for (const [token, picker] of this.memberPickers) if (picker.expiresAt <= Date.now()) this.memberPickers.delete(token); }
+  private disconnectMember(guildId: string, targetId: string, actorId: string): Promise<unknown> {
+    if (!this.client.token) throw new Error('Cyro cannot authenticate this room change. Ask the bot operator to check its connection.');
+    // The shared Discord client retries network/5xx failures. A delayed replay could disconnect a
+    // member after they joined a different call, so this single-purpose client rejects every retry.
+    this.disconnectRest ??= new REST({ version: '10', retries: 0, rejectOnRateLimit: () => true, timeout: 10_000, hashSweepInterval: 0, handlerSweepInterval: 0 }).setToken(this.client.token);
+    return this.disconnectRest.patch(Routes.guildMember(guildId, targetId), { body: { channel_id: null }, reason: `Cyro room owner control requested by ${actorId}`, signal: AbortSignal.any([this.disconnectAbort.signal, AbortSignal.timeout(10_000)]) });
+  }
+  private async upgradePanel(guild: Guild, room: TempRoom, message: Message): Promise<void> {
+    const expected = this.panelPayload(guild, room);
+    const ids = message.components.flatMap(row => { const data = row.toJSON(); return 'components' in data ? data.components.map(component => 'custom_id' in component ? component.custom_id : null) : []; });
+    const desired = expected.components.flatMap(row => row.toJSON().components.map(component => 'custom_id' in component ? component.custom_id : null));
+    if (ids.length === desired.length && desired.every((id, index) => ids[index] === id) && message.embeds[0]?.description === expected.embeds[0]!.description) return;
+    this.assertRunning();
+    // Editing a verified, saved message is idempotent. A failed edit never starts another post.
+    await message.edit(expected);
   }
   private async applyPermissions(guild: Guild, channel: VoiceChannel, room: TempRoom, authorize?: () => Promise<void>): Promise<void> {
     const previous = this.store.get(guild.id).rooms.find(item => item.id === room.id);
@@ -266,10 +293,12 @@ export class TempVoiceService {
     this.sweep = (async () => { for (const id of await this.store.guildIds()) { const guild = this.client.guilds.cache.get(id); if (!guild || !this.operational(guild)) continue; await this.enqueue(id, () => this.reconcileGuild(guild)).catch(() => { this.warnings.set(id, 'Some temporary room changes are waiting. Check Cyro’s channel permissions; it will retry safely.'); this.logger.warn('Temporary voice reconciliation could not complete.', { guildId: id }); }); } })().finally(() => { this.sweep = undefined; }); return this.sweep;
   }
   /** Service boundary used by commands and tests; always refreshes membership and room ownership. */
-  async control(guild: Guild, actorId: string, action: RoomAction, value?: string | number, binding?: PanelBinding): Promise<string> {
+  async control(guild: Guild, actorId: string, action: RoomAction, value?: string | number, binding?: PanelBinding, deadline?: number): Promise<string> {
     this.assertRunning();
-    if (!['info', 'lock', 'unlock', 'name', 'limit', 'permit', 'revoke'].includes(action)) throw new Error('Choose a valid room action.');
+    if (!['info', 'lock', 'unlock', 'name', 'limit', 'permit', 'revoke', 'remove'].includes(action)) throw new Error('Choose a valid room action.');
     return this.enqueue(guild.id, async () => {
+      const checkDeadline = () => { if (deadline !== undefined && Date.now() >= deadline) throw new Error('This member picker has expired. Open the room button again.'); };
+      checkDeadline();
       if (binding) this.panelRoom(guild, binding);
       const actor = await this.access.member(guild, actorId); this.access.commandMember(actor, 'room', true);
       if (actor.guild.id !== guild.id || actor.id !== actorId || actor.user.bot || actor.pending) throw new Error('Use this command as a current server member.');
@@ -285,14 +314,17 @@ export class TempVoiceService {
         const panel = await channel.messages.fetch({ message: binding.messageId, force: true });
         if (!this.ownedPanel(panel, guild.id, channel.id, binding.reference)) throw new Error('This control panel could not be verified. Use the current Cyro panel in your room.');
       }
-      const authorize = async () => {
-        const current = await this.access.member(guild, actorId); this.access.commandMember(current, 'room', true);
+      let currentActor = actor;
+      const checkActor = (current: GuildMember) => {
+        checkDeadline();
+        this.access.commandMember(current, 'room', true);
         if (binding) this.panelRoom(guild, binding);
         const currentRoom = this.store.get(guild.id).rooms.find(item => item.id === room.id);
         const isStaff = current.permissions.has(PermissionFlagsBits.ManageChannels);
         if (current.guild.id !== guild.id || current.id !== actorId || current.user.bot || current.pending || current.voice.channelId !== channel.id || !currentRoom || currentRoom.state !== 'active'
           || (currentRoom.ownerId !== actorId && !isStaff) || (!this.getConfig(guild.id).ownerControls && !isStaff) || !channel.permissionsFor(current)?.has(isStaff ? [PermissionFlagsBits.ViewChannel] : [PermissionFlagsBits.ViewChannel, CONNECT])) throw new Error('Your room access changed. Rejoin your room and try again.');
       };
+      const authorize = async () => { currentActor = await this.access.member(guild, actorId); checkActor(currentActor); };
       if (action === 'info') return `Room owner: <@${room.ownerId}>. ${room.locked ? 'Locked' : 'Open'} · ${channel.userLimit ? `${channel.userLimit} members` : 'No member limit'}. Use /room lock, unlock, name, limit, permit, or revoke. Empty rooms close automatically. Administrators can bypass room locks.`;
       if (action === 'name') {
         if (typeof value !== 'string' || !value.trim() || value.length > 80) throw new Error('Choose a room name between 1 and 80 characters.');
@@ -301,26 +333,63 @@ export class TempVoiceService {
         const name = roomName(value, ''); await channel.setName(name, 'Cyro temporary room owner renamed their room'); room.name = name; await this.saveRoom(guild.id, room); return `Room renamed to ${name}.`;
       }
       if (action === 'limit') { if (!Number.isInteger(value) || Number(value) < 0 || Number(value) > 99) throw new Error('Choose a member limit between 0 and 99.'); await authorize(); this.assertRunning(); await channel.setUserLimit(Number(value), 'Cyro temporary room member limit'); return Number(value) ? `Room limit set to ${value} members.` : 'Room member limit removed.'; }
+      if (action === 'remove') {
+        if (typeof value !== 'string' || !/^\d{17,20}$/.test(value)) throw new Error('Choose a server member.');
+        const bot = await guild.members.fetchMe({ force: true });
+        if (!channel.permissionsFor(bot)?.has(PermissionFlagsBits.MoveMembers)) throw new Error('Cyro needs Move Members in this room to disconnect someone.');
+        await authorize();
+        const target = await guild.members.fetch({ user: value, force: true });
+        const checkTarget = () => {
+          if (target.guild.id !== guild.id || target.id !== value || target.pending || target.user.bot || target.id === actorId || target.id === room.ownerId || target.id === this.client.user?.id) throw new Error('Choose another current human member in this room. You cannot remove yourself, the room owner, or Cyro.');
+          if (target.id === guild.ownerId) throw new Error('The server owner cannot be removed with room controls.');
+          if ((target.permissions.has(PermissionFlagsBits.Administrator) || target.permissions.has(PermissionFlagsBits.ManageChannels))
+            && (!currentActor.permissions.has(PermissionFlagsBits.ManageChannels) || !channel.permissionsFor(currentActor)?.has(PermissionFlagsBits.MoveMembers))) throw new Error('Removing server staff requires Manage Channels and your own Move Members permission in this room.');
+          if (target.voice.channelId !== channel.id) throw new Error('That member is no longer in this room. No one was disconnected.');
+        };
+        checkTarget();
+        const voice = await guild.voiceStates.fetch(target.id, { force: true });
+        // The last awaited read refreshes the actual voice location. Check both actors again without
+        // yielding, so a gateway move or access change during the reads cannot affect another call.
+        checkActor(currentActor); checkTarget();
+        if (voice.guild.id !== guild.id || voice.id !== target.id || voice.channelId !== channel.id) throw new Error('That member is no longer in this room. No one was disconnected.');
+        if (!channel.permissionsFor(bot)?.has(PermissionFlagsBits.MoveMembers)) throw new Error('Cyro needs Move Members in this room to disconnect someone.');
+        this.assertRunning();
+        try { await this.disconnectMember(guild.id, target.id, actorId); }
+        catch (error) {
+          if ((error as { name?: string }).name === 'RateLimitError' || [50001, 50013, 50035, 10007, 10065, 40032].includes((error as { code?: number }).code ?? 0)) throw new Error('Discord could not remove that member. Check that they are still in this room and Cyro has Move Members, then open a new picker.');
+          throw new Error('Discord did not confirm the disconnect. Cyro will not retry it automatically. Check the room before opening a new picker.');
+        }
+        return 'Member disconnected from this room only. They were not kicked or banned from the server and can rejoin if the room permits it.';
+      }
+      let authorizeMutation = authorize;
       if (action === 'permit' || action === 'revoke') {
         if (typeof value !== 'string' || !/^\d{17,20}$/.test(value)) throw new Error('Choose a server member.');
         const target = await guild.members.fetch({ user: value, force: true });
-        if (target.guild.id !== guild.id || target.pending || target.user.bot || target.id === room.ownerId) throw new Error('Choose another current human member who has completed server screening.');
+        if (target.guild.id !== guild.id || target.id !== value || target.pending || target.user.bot || target.id === actorId || target.id === room.ownerId) throw new Error('Choose another current human member who has completed server screening.');
         const category = await guild.channels.fetch(room.categoryId);
         if (!category || category.type !== ChannelType.GuildCategory || category.guild.id !== guild.id || !category.permissionsFor(target)?.has([PermissionFlagsBits.ViewChannel, CONNECT])) throw new Error('That member must already have access to this room’s category.');
+        authorizeMutation = async () => {
+          await authorize();
+          const freshTarget = await guild.members.fetch({ user: value, force: true });
+          const freshCategory = await guild.channels.fetch(room.categoryId, { force: true });
+          checkActor(currentActor);
+          if (freshTarget.guild.id !== guild.id || freshTarget.id !== value || freshTarget.pending || freshTarget.user.bot || freshTarget.id === actorId || freshTarget.id === room.ownerId) throw new Error('That member is no longer eligible. Choose a current member who has completed server screening.');
+          if (!freshCategory || freshCategory.type !== ChannelType.GuildCategory || freshCategory.guild.id !== guild.id || !freshCategory.permissionsFor(freshTarget)?.has([PermissionFlagsBits.ViewChannel, CONNECT])) throw new Error('That member must still have access to this room’s category.');
+        };
         room.allowed = room.allowed.filter(id => id !== value); room.blocked = room.blocked.filter(id => id !== value);
         (action === 'permit' ? room.allowed : room.blocked).push(value);
         if (room.allowed.length > 50 || room.blocked.length > 50) throw new Error('A room supports up to 50 allowed and 50 blocked members.');
       } else room.locked = action === 'lock';
-      await authorize(); this.assertRunning(); await this.applyPermissions(guild, channel, room, authorize);
+      await authorize(); this.assertRunning(); await this.applyPermissions(guild, channel, room, authorizeMutation);
       return action === 'lock' ? 'Room locked. Permitted members and Discord administrators can still join; current members stay in the call.' : action === 'unlock' ? 'Room unlocked. Normal join permissions are restored; individually blocked members remain blocked.' : action === 'permit' ? 'Member permitted to join while the room is locked. Existing category visibility still applies.' : 'Member blocked from joining. This does not disconnect someone already in the call, and Discord administrators bypass channel denies.';
     });
   }
   async handleInteraction(interaction: Interaction): Promise<boolean> {
-    if (!interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isModalSubmit()) return false;
-    if (interaction.isChatInputCommand() ? interaction.commandName !== 'room' : !/^(?:tv|tvm):/.test(interaction.customId)) return false;
+    if (!interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isModalSubmit() && !interaction.isUserSelectMenu()) return false;
+    if (interaction.isChatInputCommand() ? interaction.commandName !== 'room' : !/^(?:tv|tvm|tvs):/.test(interaction.customId)) return false;
     try {
       if (!interaction.inCachedGuild()) { await interaction.reply({ content: 'Use room controls inside your Discord server.', flags: MessageFlags.Ephemeral }); return true; }
-      let action: RoomAction, value: string | number | undefined, binding: PanelBinding | undefined;
+      let action: RoomAction, value: string | number | undefined, binding: PanelBinding | undefined, deadline: number | undefined;
       if (interaction.isChatInputCommand()) {
         action = interaction.options.getSubcommand() as RoomAction;
         value = action === 'name' ? interaction.options.getString('name', true) : action === 'limit' ? interaction.options.getInteger('members', true) : ['permit', 'revoke'].includes(action) ? interaction.options.getUser('member', true).id : undefined;
@@ -331,6 +400,24 @@ export class TempVoiceService {
         const room = this.panelRoom(interaction.guild, binding);
         if (interaction.channelId !== binding.channelId || !this.ownedPanel(interaction.message, binding.guildId, binding.channelId, binding.reference)) throw new Error('Use the original Cyro control panel inside its voice room.');
         action = panelAction(parsed[4]!);
+        if (action === 'permit' || action === 'remove') {
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+          // A picker does not mutate Discord. Fresh /room authorization still runs before offering it.
+          await this.control(interaction.guild, interaction.user.id, 'info', undefined, binding);
+          this.prunePickers();
+          for (const [token, picker] of this.memberPickers) if (picker.actorId === interaction.user.id && picker.binding.guildId === binding.guildId) this.memberPickers.delete(token);
+          if (this.memberPickers.size >= 1000) throw new Error('Too many room member pickers are open. Wait a moment and try again.');
+          const token = randomBytes(12).toString('hex'), picker: MemberPicker = { actorId: interaction.user.id, binding, action, expiresAt: Date.now() + 120_000, messageId: null };
+          this.memberPickers.set(token, picker);
+          try {
+            const reply = await interaction.editReply({ embeds: [{ title: action === 'remove' ? 'Remove a room member' : 'Allow a room member', color: 0x85cae5,
+              description: action === 'remove' ? 'Search for one member currently in this room. Cyro will disconnect them from this room only. This does not kick or ban them from the server, or block them from rejoining.\n\nThis picker expires in 2 minutes and can be used once.'
+                : 'Search for one server member to let into your locked room. They must already have access to this room’s category.\n\nThis picker expires in 2 minutes and can be used once.' }],
+              components: [new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(new UserSelectMenuBuilder().setCustomId(`tvs:${token}`).setPlaceholder(action === 'remove' ? 'Search for a member in this room' : 'Search for a member to allow').setMinValues(1).setMaxValues(1))], allowedMentions: { parse: [] } });
+            picker.messageId = reply.id;
+          } catch (error) { this.memberPickers.delete(token); throw error; }
+          return true;
+        }
         if (action === 'name' || action === 'limit') {
           // A modal must be the initial response. This local receipt check makes no network calls;
           // submitting the form runs the same fresh authorization and final checks as /room.
@@ -353,14 +440,26 @@ export class TempVoiceService {
         if (interaction.channelId !== binding.channelId || !interaction.isFromMessage() || interaction.message.id !== binding.messageId || !this.ownedPanel(interaction.message, binding.guildId, binding.channelId, binding.reference)) throw new Error('This form does not belong to the current room panel. Open its button again.');
         action = panelAction(parsed[5]!); value = interaction.fields.getTextInputValue('value').trim();
         if (action === 'limit') { if (!/^\d{1,2}$/.test(value)) throw new Error('Enter a whole number from 0 to 99. Use 0 for no member limit.'); value = Number(value); }
+      } else if (interaction.isUserSelectMenu()) {
+        this.prunePickers();
+        const token = pickerPattern.exec(interaction.customId)?.[1], picker = token ? this.memberPickers.get(token) : undefined;
+        if (!token || !picker) throw new Error('This member picker has expired or was already used. Open the room button again.');
+        if (picker.actorId !== interaction.user.id || picker.binding.guildId !== interaction.guildId || picker.binding.channelId !== interaction.channelId || picker.messageId !== interaction.message.id
+          || interaction.message.author.id !== this.client.user?.id || interaction.message.guildId !== interaction.guildId || interaction.message.channelId !== interaction.channelId || !interaction.message.flags.has(MessageFlags.Ephemeral)) throw new Error('This member picker belongs to another person or room. Open your own room control.');
+        this.panelRoom(interaction.guild, picker.binding);
+        // Consume before yielding, including on definite/uncertain API failures. No replay can repeat a disconnect.
+        this.memberPickers.delete(token);
+        if (interaction.values.length !== 1 || !/^\d{17,20}$/.test(interaction.values[0]!)) throw new Error('Choose exactly one current server member. Open the room button again.');
+        action = picker.action; binding = picker.binding; deadline = picker.expiresAt; value = interaction.values[0]!;
+        await interaction.deferUpdate();
       } else return false;
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const content = await this.control(interaction.guild, interaction.user.id, action, value, binding);
-      await interaction.editReply({ embeds: [{ title: action === 'info' ? 'Your temporary room' : 'Room updated', description: content, color: 0x85cae5 }], allowedMentions: { parse: [] } });
+      if (!interaction.deferred) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const content = await this.control(interaction.guild, interaction.user.id, action, value, binding, deadline);
+      await interaction.editReply({ components: [], embeds: [{ title: action === 'info' ? 'Your temporary room' : 'Room updated', description: content, color: 0x85cae5 }], allowedMentions: { parse: [] } });
     } catch (error) {
       this.logger.warn('Temporary voice control could not complete.', { guildId: interaction.guildId });
       const content = error instanceof Error && error.name === 'Error' ? error.message.slice(0, 1800) : 'Cyro could not change this room. Check its channel permissions and try again.';
-      try { if (interaction.deferred) await interaction.editReply({ content, allowedMentions: { parse: [] } }); else if (!interaction.replied) await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } }); } catch { /* Interaction may have expired. */ }
+      try { if (interaction.deferred) await interaction.editReply({ content, embeds: [], components: [], allowedMentions: { parse: [] } }); else if (!interaction.replied) await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } }); } catch { /* Interaction may have expired. */ }
     }
     return true;
   }
@@ -375,9 +474,9 @@ export class TempVoiceService {
   attach(): void {
     if (this.attached || this.stopped) return; this.attached = true;
     this.client.on(Events.VoiceStateUpdate, this.onVoice); this.client.on(Events.InteractionCreate, this.onInteraction); this.client.on(Events.ClientReady, this.onReady); this.client.on(Events.GuildCreate, this.onReady);
-    this.timer = setInterval(() => { for (const [key, until] of this.cooldowns) if (until < Date.now()) this.cooldowns.delete(key); this.onReady(); }, 15_000); this.timer.unref(); this.onReady();
+    this.timer = setInterval(() => { for (const [key, until] of this.cooldowns) if (until < Date.now()) this.cooldowns.delete(key); this.prunePickers(); this.onReady(); }, 15_000); this.timer.unref(); this.onReady();
   }
-  stop(): void { this.stopped = true; if (this.timer) clearInterval(this.timer); if (!this.attached) return; this.attached = false; this.client.off(Events.VoiceStateUpdate, this.onVoice); this.client.off(Events.InteractionCreate, this.onInteraction); this.client.off(Events.ClientReady, this.onReady); this.client.off(Events.GuildCreate, this.onReady); }
+  stop(): void { this.stopped = true; this.memberPickers.clear(); this.disconnectAbort.abort(); this.disconnectRest?.clearHashSweeper(); this.disconnectRest?.clearHandlerSweeper(); if (this.timer) clearInterval(this.timer); if (!this.attached) return; this.attached = false; this.client.off(Events.VoiceStateUpdate, this.onVoice); this.client.off(Events.InteractionCreate, this.onInteraction); this.client.off(Events.ClientReady, this.onReady); this.client.off(Events.GuildCreate, this.onReady); }
   async flush(): Promise<void> { while (this.queues.size || this.active.size || this.sweep) await Promise.allSettled([...this.queues.values(), ...this.active, ...(this.sweep ? [this.sweep] : [])]); await this.store.flush(); }
   async guildIds(): Promise<string[]> { return this.store.guildIds(); }
   async purgeGuild(guildId: string, guard: () => boolean = () => true): Promise<void> { await this.enqueue(guildId, () => this.store.purgeGuild(guildId, guard)); this.warnings.delete(guildId); }

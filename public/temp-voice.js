@@ -26,7 +26,7 @@ async function renderTempVoice(main) {
       textField(session, 'Room name', 'nameTemplate', 'Use {name} for the member’s server display name, for example “{name}’s room”.', { maxlength: 80, required: true }),
       textField(session, 'Default member limit', 'userLimit', '0 means no limit. Room owners can change this with the Member limit button in their room’s chat.', { type: 'number', min: 0, max: 99, required: true }),
       textField(session, 'Maximum active rooms', 'maxRooms', 'Between 1 and 25 rooms per server. A member can own one room at a time.', { type: 'number', min: 1, max: 25, required: true }))]),
-    panel('Room controls', toggleSection(session, 'Let owners manage their room', 'Each room gets a control panel in its text chat: Lock, Unlock, Rename and Member limit. Owners can also use /room to allow or block individual members. Staff with Manage Channels can manage a room they have joined.', 'ownerControls')),
+    panel('Room controls', toggleSection(session, 'Let owners manage their room', 'Each room gets Lock, Unlock, Rename, Member limit, Allow member and Remove member buttons in its text chat. Staff with Manage Channels can manage a room they have joined.', 'ownerControls')),
     el('div', { className: 'save-bar' }, status, save));
   const rooms = el('div', { className: 'form-section stack temp-room-list' });
   const warnings = el('div', { className: 'stack', role: 'status' });
@@ -59,7 +59,8 @@ async function renderTempVoice(main) {
   const help = contextCard('How members use rooms', 'Join the lobby, then open the text chat attached to your new voice room. Cyro’s control panel is waiting there. Joining the lobby again returns you to your existing room.', 'voice', el('div', { className: 'stack' },
     el('p', {}, el('strong', {}, 'Lock'), ' stops new members joining. ', el('strong', {}, 'Unlock'), ' restores normal access.'),
     el('p', {}, el('strong', {}, 'Rename'), ' opens a name form. ', el('strong', {}, 'Member limit'), ' lets you choose 1–99 people, or 0 for no limit.'),
-    el('p', {}, el('code', {}, '/room permit'), ' lets a member into a locked room. ', el('code', {}, '/room revoke'), ' blocks future joins without disconnecting them.'),
+    el('p', {}, el('strong', {}, 'Allow member'), ' opens a searchable member picker to let someone join a locked room. They still need access to the room’s category.'),
+    el('p', {}, el('strong', {}, 'Remove member'), ' opens a member picker to disconnect someone from this room. It does not ban them or stop them rejoining if they still have access. ', el('code', {}, '/room revoke'), ' blocks future joins without disconnecting them.'),
     el('p', {}, 'Stay connected to your room to use its buttons or commands. Locks keep the channel visible according to the category settings. Discord administrators can bypass locks.'), link('Access & commands', 'access')));
   const permissions = contextCard('Before you enable it', 'Cyro needs View Channel, Connect, Manage Channels, Manage Permissions, and Move Members in the category. In the lobby it needs View Channel, Connect, and Move Members.', 'shield', el('div', { className: 'stack' }, el('p', {}, 'The control panel also needs Send Messages, Embed Links and Read Message History in the room’s text chat. Members need View Channel and Read Message History to find it.'), el('p', {}, 'Room owners do not receive server-wide management permissions. Category settings are copied when each room is created; later category edits do not automatically sync to that room.')));
   loading.replaceWith(warnings, el('div', { className: 'settings-grid' }, form, el('aside', { className: 'stack' }, help, permissions)), panel('Open rooms', [rooms, el('div', { className: 'form-section' }, refreshNote)], refresh));
