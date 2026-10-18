@@ -21,3 +21,27 @@ it('requires a real DNS name rather than a reserved example or IP literal', () =
     expect(inspectHosting({ DASHBOARD_URL: `https://${host}` }).find(check => check.id === 'public-origin')?.status).toBe('fail');
   }
 });
+
+it('leaves fallback disabled by default and reports configuration without reading private TLS files', () => {
+  expect(inspectHosting({}).some(check => check.id.startsWith('fallback-'))).toBe(false);
+  const env = { DASHBOARD_ENABLED: 'true', DASHBOARD_URL: 'https://cyrobot.ca',
+    DASHBOARD_FALLBACK_ENABLED: 'true', DASHBOARD_FALLBACK_URL: 'https://203.0.113.10:1029',
+    DASHBOARD_FALLBACK_PORT: '1029', DASHBOARD_FALLBACK_CERT_FILE: '/private/certificate.pem', DASHBOARD_FALLBACK_KEY_FILE: '/private/secret-key.pem',
+    PORT: '1029', CYRO_INTERNAL_DASHBOARD_PORT: '3000' };
+  const checks = inspectHosting(env);
+  expect(checks.find(check => check.id === 'fallback-config')?.status).toBe('pass');
+  expect(checks.filter(check => check.id.startsWith('fallback-') && check.status === 'manual').map(check => check.id))
+    .toEqual(['fallback-tls', 'fallback-network', 'fallback-oauth', 'fallback-outage']);
+  expect(JSON.stringify(checks)).not.toContain('secret-key.pem');
+  expect(JSON.stringify(checks)).not.toContain('203.0.113.10');
+  expect(inspectHosting({ ...env, CYRO_INTERNAL_DASHBOARD_PORT: '1029' }).find(check => check.id === 'fallback-config')?.status).toBe('fail');
+  expect(inspectHosting({ ...env, CYRO_INTERNAL_DASHBOARD_PORT: 'invalid' }).find(check => check.id === 'fallback-config')?.status).toBe('fail');
+});
+
+it('reports unsafe fallback settings without echoing attacker-controlled credential or environment values', () => {
+  const checks = inspectHosting({ DASHBOARD_ENABLED: 'true', DASHBOARD_URL: 'https://cyrobot.ca',
+    DASHBOARD_FALLBACK_ENABLED: 'true', DASHBOARD_FALLBACK_URL: 'https://user:private-credential@backup.cyrobot.ca',
+    DASHBOARD_FALLBACK_CERT_FILE: '/private/cert', DASHBOARD_FALLBACK_KEY_FILE: '/private/key' });
+  expect(checks.find(check => check.id === 'fallback-config')?.status).toBe('fail');
+  expect(JSON.stringify(checks)).not.toContain('private-credential');
+});

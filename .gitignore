@@ -16,6 +16,11 @@ backups/
 *.tgz
 *.pem
 *.key
+private/
+*.pfx
+*.p12
+# Deliberately public localhost-only TLS fixtures; never use them in production.
+!tests/fixtures/dashboard-fallback/*.pem
 coverage/
 .test-tmp/
 .tmp/

@@ -1,5 +1,8 @@
 import 'dotenv/config';
 import path from 'node:path';
+import { parseDashboardFallback, type DashboardFallbackConfig } from './dashboard/fallback-config.js';
+
+export { parseDashboardFallback } from './dashboard/fallback-config.js';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -26,6 +29,8 @@ export interface AppConfig {
   dashboardUrl?: string;
   discordClientSecret?: string;
   dashboardTrustProxy?: boolean;
+  dashboardFallback?: DashboardFallbackConfig;
+  dashboardFallbackWarning?: string;
 }
 
 function required(name: string): string {
@@ -72,6 +77,15 @@ export function loadConfig(): AppConfig {
   if ((parsedUrl.protocol !== 'https:' && !(parsedUrl.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(parsedUrl.hostname))) || parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash || parsedUrl.username || parsedUrl.password) {
     throw new Error('DASHBOARD_URL must be an HTTPS origin, or http://localhost:3000 for local development.');
   }
+  const dashboardPort = numberInRange('PORT', numberInRange('DASHBOARD_PORT', 3000, 1, 65535), 1, 65535);
+  let dashboardFallback: DashboardFallbackConfig | undefined;
+  let dashboardFallbackWarning: string | undefined;
+  try { dashboardFallback = parseDashboardFallback(process.env, parsedUrl.origin, dashboardPort); }
+  catch {
+    // A broken optional access route must not prevent Discord or the primary dashboard from starting.
+    // Keep the warning fixed: URLs and file paths can contain private user-controlled values.
+    dashboardFallbackWarning = 'Direct HTTPS fallback is disabled because its settings are invalid. Run check-hosting and review FALLBACK_HOSTING.md; the bot and primary dashboard can still start.';
+  }
 
   return {
     discordToken: required('DISCORD_TOKEN'),
@@ -91,9 +105,11 @@ export function loadConfig(): AppConfig {
     logLevel,
     dashboardEnabled: bool('DASHBOARD_ENABLED', false),
     dashboardHost: optional('DASHBOARD_HOST') ?? '127.0.0.1',
-    dashboardPort: numberInRange('PORT', numberInRange('DASHBOARD_PORT', 3000, 1, 65535), 1, 65535),
+    dashboardPort,
     dashboardUrl: parsedUrl.origin,
     discordClientSecret: optional('DISCORD_CLIENT_SECRET'),
     dashboardTrustProxy: bool('DASHBOARD_TRUST_PROXY', false),
+    dashboardFallback,
+    dashboardFallbackWarning,
   };
 }

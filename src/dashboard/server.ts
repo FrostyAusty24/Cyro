@@ -7,6 +7,8 @@ import { GuildIdentityService, IdentityError } from '../control/identity.js';
 import { COMMAND_KEYS, parseAccess } from '../control/store.js';
 import { languageSnapshot } from '../control/language.js';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
+import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isIP } from 'node:net';
@@ -16,6 +18,7 @@ import type { Logger } from '../logger.js';
 import { SessionStore, canManageGuild, safeEqual } from './auth.js';
 import { createOAuthApi, inviteUrl, type OAuthApi } from './discord-api.js';
 import { DashboardTikTok, TikTokDashboardError, TikTokCancellation } from './tiktok.js';
+import { fallbackTlsOptions } from './fallback.js';
 
 interface Module {
   getConfig(guildId:string):Promise<unknown>;
@@ -56,7 +59,8 @@ interface CommunityTools extends ManagedCommunityFeature {
 interface TimeClock extends CommunityFeature {
   publishPanel(guild:Guild,actorId:string,operationId?:string,authorize?:()=>Promise<void>):Promise<unknown>;
 }
-interface Options {timeClock?:TimeClock;tempVoice?:ManagedCommunityFeature;communityTools?:CommunityTools;access?:AccessService;publishing?:PublishingService;suggestions?:Suggestions;statusRoles?:StatusRoles;voice?:CommunityFeature;confessions?:CommunityFeature;client:Client;config:AppConfig;logger:Logger;community:Module;moderation:Module;streams:Streams;creators?:Streams;tiktok?:DashboardTikTok;streamStats?:{snapshot(guildId:string):Promise<unknown>};publicDir:string;sessions?:SessionStore;oauth?:OAuthApi;isOperational?:()=>boolean;drainTimeoutMs?:number;requestTimeoutMs?:number}
+interface Options {timeClock?:TimeClock;tempVoice?:ManagedCommunityFeature;communityTools?:CommunityTools;access?:AccessService;publishing?:PublishingService;suggestions?:Suggestions;statusRoles?:StatusRoles;voice?:CommunityFeature;confessions?:CommunityFeature;client:Client;config:AppConfig;logger:Logger;community:Module;moderation:Module;streams:Streams;creators?:Streams;tiktok?:DashboardTikTok;streamStats?:{snapshot(guildId:string):Promise<unknown>};publicDir:string;sessions?:SessionStore;oauth?:OAuthApi;fallbackOAuth?:OAuthApi;isOperational?:()=>boolean;drainTimeoutMs?:number;requestTimeoutMs?:number}
+interface DashboardTransport { origin:string; sessions:SessionStore; oauth:OAuthApi; direct:boolean }
 export class HttpError extends BotMessageError {
   constructor(public status:number,message:string|Error) {const value=dashboardError(message);super(value.i18n.key,value.i18n.params);}
 }
@@ -77,8 +81,10 @@ export async function requireGuildManager(client:Client,guildId:string,userId:st
 }
 export class DashboardServer {
   private server?:Server;
-  private sessions:SessionStore;
-  private oauth:OAuthApi;
+  private fallbackServer?:HttpsServer;
+  private fallbackStarting?:Promise<number|undefined>;
+  private primary:DashboardTransport;
+  private requestContext = new AsyncLocalStorage<DashboardTransport>();
   private rates = new Map<string,{count:number;reset:number}>();
   private pending = new Set<Promise<unknown>>();
   private stopping = false;
@@ -86,11 +92,15 @@ export class DashboardServer {
   private identity = new GuildIdentityService();
   private roleConfigQueues = new Map<string,Promise<unknown>>();
   constructor(private options:Options) {
-    this.sessions = options.sessions ?? new SessionStore();
-    this.oauth = options.oauth ?? createOAuthApi(options.config.discordClientId,options.config.discordClientSecret ?? '',`${this.origin}/auth/callback`);
+    const origin=options.config.dashboardUrl ?? 'http://localhost:3000';
+    this.primary={origin,sessions:options.sessions ?? new SessionStore(),oauth:options.oauth ?? createOAuthApi(options.config.discordClientId,options.config.discordClientSecret ?? '',`${origin}/auth/callback`),direct:false};
   }
-  private get origin():string { return this.options.config.dashboardUrl ?? 'http://localhost:3000'; }
+  private get transport():DashboardTransport {return this.requestContext.getStore()??this.primary;}
+  private get sessions():SessionStore {return this.transport.sessions;}
+  private get oauth():OAuthApi {return this.transport.oauth;}
+  private get origin():string { return this.transport.origin; }
   private get secure():boolean { return this.origin.startsWith('https://'); }
+  get fallbackUrl():string|undefined {return !this.stopping&&this.fallbackServer?.listening?this.options.config.dashboardFallback?.url:undefined;}
   private get operational():boolean { return !this.stopping && this.options.client.isReady() && (this.options.isOperational?.() ?? true); }
   private track<T>(operation:Promise<T>):Promise<T> {
     const tracked=operation.finally(()=>{this.pending.delete(tracked);});
@@ -104,9 +114,40 @@ export class DashboardServer {
     return task;
   }
   async start(port = this.options.config.dashboardPort ?? 3000,host = this.options.config.dashboardHost ?? '127.0.0.1'):Promise<number> {
-    if(this.server || this.pending.size)throw new Error('Dashboard is already running or still draining.');
+    if(this.server || this.fallbackServer || this.fallbackStarting || this.pending.size)throw new Error('Dashboard is already running or still draining.');
     this.stopping=false; this.stopPromise=undefined;
-    this.server = createServer((req,res) => {
+    const server=createServer((req,res)=>this.dispatch(req,res,this.primary));
+    this.server=server;
+    try{return await this.listen(server,port,host);}catch(error){this.server=undefined;throw error;}
+  }
+  /** A separate, opt-in listener: failure here does not close the working tunnel listener. */
+  startFallback():Promise<number|undefined> {
+    if(this.fallbackStarting)return this.fallbackStarting;
+    const config=this.options.config.dashboardFallback;
+    if(!config)return Promise.resolve(undefined);
+    if(!this.server||this.stopping)return Promise.reject(new Error('Start the primary dashboard before its fallback.'));
+    if(this.fallbackServer)return Promise.reject(new Error('Dashboard fallback is already running.'));
+    const operation=(async()=>{
+      const tls=await fallbackTlsOptions(config);
+      if(this.stopping||!this.server)throw new Error('Dashboard is shutting down.');
+      const transport:DashboardTransport={origin:config.url,sessions:new SessionStore(),oauth:this.options.fallbackOAuth??createOAuthApi(this.options.config.discordClientId,this.options.config.discordClientSecret??'',`${config.url}/auth/callback`),direct:true};
+      const server=createHttpsServer(tls,(req,res)=>this.dispatch(req,res,transport));
+      this.fallbackServer=server;
+      try{return await this.listen(server,config.port,config.host);}catch(error){this.fallbackServer=undefined;throw error;}
+    })();
+    this.fallbackStarting=operation;
+    void operation.finally(()=>{if(this.fallbackStarting===operation)this.fallbackStarting=undefined;}).catch(()=>undefined);
+    return operation;
+  }
+  private async listen(server:Server|HttpsServer,port:number,host:string):Promise<number> {
+    server.requestTimeout=20_000; server.headersTimeout=10_000; server.keepAliveTimeout=5000;
+    server.on('error',error=>this.options.logger.error('Dashboard listener error.',{message:error.message}));
+    await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(port,host,()=>{server.off('error',reject);resolve();});});
+    const address=server.address();
+    return typeof address==='object' && address?address.port:port;
+  }
+  private dispatch(req:IncomingMessage,res:ServerResponse,transport:DashboardTransport):void {
+    this.requestContext.run(transport,()=>{
       const timer=setTimeout(()=>{
         if(!res.writableEnded&&!res.destroyed){this.json(res,503,{error:'The request timed out. Reload the server state before trying again.'});if(!req.complete)req.destroy();}
       },this.options.requestTimeoutMs??20_000);
@@ -121,20 +162,26 @@ export class DashboardServer {
       }
       this.json(res,status,dashboardError(displayError));
     }).finally(()=>clearTimeout(timer))); });
-    this.server.requestTimeout=20_000; this.server.headersTimeout=10_000; this.server.keepAliveTimeout=5000;
-    await new Promise<void>((resolve,reject)=>{this.server!.once('error',reject);this.server!.listen(port,host,()=>{this.server!.off('error',reject);resolve();});});
-    const address=this.server.address();
-    return typeof address==='object' && address?address.port:port;
   }
   stop():Promise<void> {
     if(this.stopPromise)return this.stopPromise;
-    if(!this.server)return Promise.resolve();
-    const server=this.server; this.server=undefined; this.stopping=true;
-    const closed=new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
-    server.closeIdleConnections();
-    const drain=async()=>{while(this.pending.size)await Promise.allSettled([...this.pending]);await closed;};
+    if(!this.server&&!this.fallbackServer&&!this.fallbackStarting)return Promise.resolve();
+    this.stopping=true;
+    const starting=this.fallbackStarting;
+    const servers:(Server|HttpsServer)[]=this.server?[this.server]:[];
+    this.server=undefined;
+    const close=(server:Server|HttpsServer)=>new Promise<void>((resolve,reject)=>{server.close(error=>error?reject(error):resolve());server.closeIdleConnections();});
+    const closed=servers.map(close);
+    const drain=async()=>{
+      // A certificate read may still be in flight, or listen() may have started but
+      // not emitted listening yet. Join startup before collecting/closing sockets.
+      if(starting)await starting.catch(()=>undefined);
+      if(this.fallbackServer){servers.push(this.fallbackServer);closed.push(close(this.fallbackServer));this.fallbackServer=undefined;}
+      while(this.pending.size)await Promise.allSettled([...this.pending]);
+      await Promise.all(closed);
+    };
     this.stopPromise=new Promise<void>((resolve,reject)=>{
-      const timer=setTimeout(()=>{server.closeAllConnections();reject(new Error(`Dashboard drain deadline exceeded with ${this.pending.size} unfinished operation(s).`));},this.options.drainTimeoutMs??25_000);
+      const timer=setTimeout(()=>{for(const server of servers)server.closeAllConnections();reject(new Error(`Dashboard drain deadline exceeded with ${this.pending.size} unfinished operation(s).`));},this.options.drainTimeoutMs??25_000);
       drain().then(()=>{clearTimeout(timer);resolve();},error=>{clearTimeout(timer);reject(error);});
     });
     return this.stopPromise;
@@ -160,19 +207,21 @@ export class DashboardServer {
     const now=Date.now();
     if(this.rates.size>5000) for(const[key,bucket]of this.rates) if(bucket.reset<=now)this.rates.delete(key);
     const forwarded=req.headers['x-forwarded-for'];
-    const address=clientAddress(req.socket.remoteAddress??'unknown',typeof forwarded==='string'?forwarded:undefined,Boolean(this.options.config.dashboardTrustProxy));
+    const address=clientAddress(req.socket.remoteAddress??'unknown',typeof forwarded==='string'?forwarded:undefined,!this.transport.direct&&Boolean(this.options.config.dashboardTrustProxy));
     const cookie=this.cookies(req).dashboard_session;
     const identity=!login&&cookie&&this.sessions.peek(cookie)?`session:${cookie}`:address;
-    const key=`${login?'login':'api'}:${identity}`;
+    const key=`${this.transport.direct?'direct':'primary'}:${login?'login':'api'}:${identity}`;
     let bucket=this.rates.get(key);
     if(!bucket||bucket.reset<=now) {if(this.rates.size>=10000)throw new HttpError(429,'Dashboard is busy. Try again shortly.');bucket={count:0,reset:now+(login?600_000:60_000)};this.rates.set(key,bucket);}
     if(++bucket.count>(login?30:300))throw new HttpError(429,'Too many requests. Please wait before trying again.');
   }
   private async handle(req:IncomingMessage,res:ServerResponse):Promise<void> {
+    if(this.transport.direct&&req.headers.host!==new URL(this.origin).host){res.writeHead(421,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});res.end('The request host does not match this dashboard address.');return;}
     res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://cdn.discordapp.com data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     if(this.secure)res.setHeader('Strict-Transport-Security','max-age=31536000');
     const url=new URL(req.url??'/',this.origin);const route=url.pathname;const method=req.method??'GET';
+    if(this.transport.direct&&url.origin!==this.origin){res.writeHead(421);res.end();return;}
     const o=this.options;
     if(method==='GET' && route==='/healthz') {this.json(res,200,{ok:true});return;}
     if(method==='GET' && route==='/readyz') {const ready=this.operational;this.json(res,ready?200:503,{ready});return;}
@@ -213,6 +262,7 @@ export class DashboardServer {
       res.setHeader('Set-Cookie',[this.cookie('dashboard_oauth','',0),this.cookie('dashboard_session',id,Math.min(token.expires_in,28800))]);this.redirect(res,returnTo);return;
     }
     if(method==='GET'&&route==='/auth/tiktok/callback') {
+      if(this.transport.direct){this.json(res,409,{error:'Connect TikTok using the main dashboard address when it is available. Existing connections are still managed here.',fallbackUnavailable:'tiktok-connect'});return;}
       const sessionId=cookies.dashboard_session??'';const session=this.sessions.peek(sessionId);
       if(!session){this.redirect(res,'/connections?tiktok=session-expired');return;}
       const assertActive=()=>{this.assertActive(res);if(!this.operational)throw new HttpError(503,'Cyro is reconnecting.');if(this.sessions.peek(sessionId)!==session)throw new HttpError(401,'Sign in again.');};
@@ -237,6 +287,7 @@ export class DashboardServer {
       if(method==='GET'&&route==='/api/me') {this.json(res,200,{user:session.user,csrfToken:session.csrfToken});return;}
       if(!this.operational)throw new HttpError(503,'The bot is starting up or reconnecting. Please try again shortly.');
       if(route.startsWith('/api/tiktok/')) {
+        if(this.transport.direct&&method==='POST'&&route==='/api/tiktok/connect'){this.json(res,409,{error:'Connect TikTok using the main dashboard address when it is available. Existing connections are still managed here.',fallbackUnavailable:'tiktok-connect'});return;}
         if(!o.tiktok)throw new HttpError(503,'TikTok connections are unavailable.');
         const input=method==='POST'?await this.body(req):undefined;
         this.assertActive(res);

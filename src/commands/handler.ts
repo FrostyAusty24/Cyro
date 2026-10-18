@@ -42,7 +42,7 @@ export class CommandHandler {
     private readonly monitor: StreamMonitor,
     private readonly logger: Logger,
     private readonly analytics?: {snapshot(guildId:string):Promise<Awaited<ReturnType<StreamAnalytics['snapshot']>> & Partial<Pick<CreatorAnalyticsSnapshot,'creatorLeaderboards'>>>},
-    private readonly dashboardConfig?: Pick<AppConfig, 'dashboardEnabled' | 'dashboardUrl'>,
+    private readonly dashboardConfig?: Pick<AppConfig, 'dashboardEnabled' | 'dashboardUrl'> & { getFallbackUrl?: () => string | undefined },
     private readonly access?: AccessService,
   ) {}
 
@@ -156,6 +156,13 @@ export class CommandHandler {
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setLabel(botText(interaction.guildId, 'Open dashboard', {}, interaction.locale)).setStyle(ButtonStyle.Link).setURL(url.toString()),
     );
+    const fallbackOrigin = this.dashboardConfig.getFallbackUrl?.();
+    if (fallbackOrigin) {
+      const fallback = new URL('/', fallbackOrigin);
+      fallback.search = url.search;
+      fallback.hash = url.hash;
+      row.addComponents(new ButtonBuilder().setLabel(botText(interaction.guildId, 'Backup dashboard', {}, interaction.locale)).setStyle(ButtonStyle.Link).setURL(fallback.toString()));
+    }
     await interaction.editReply({ embeds: [embed], components: [row], allowedMentions: { parse: [] } });
   }
 

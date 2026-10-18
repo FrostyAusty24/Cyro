@@ -2,6 +2,7 @@ import { BOT_TRANSLATIONS } from './messages.js';
 import { BotMessageError, type TextParams } from './index.js';
 
 const CONNECTION_ERROR_ROWS: Row[] = [
+['Connect TikTok using the main dashboard address when it is available. Existing connections are still managed here.', 'Connectez TikTok depuis l’adresse principale du tableau de bord lorsqu’elle est disponible. Vous pouvez toujours gérer les connexions existantes ici.', 'Conecta TikTok desde la dirección principal del panel cuando esté disponible. Puedes seguir gestionando las conexiones existentes aquí.', 'Verbinde TikTok über die Hauptadresse des Dashboards, sobald sie verfügbar ist. Bestehende Verbindungen kannst du weiterhin hier verwalten.', 'Conecte o TikTok pelo endereço principal do painel quando estiver disponível. As conexões existentes ainda podem ser gerenciadas aqui.'],
 ["These settings are not available.","Ces paramètres sont indisponibles.","Estos ajustes no están disponibles.","Diese Einstellungen sind nicht verfügbar.","Estas configurações estão indisponíveis."],
 ["Use GET or PATCH for these settings.","Utilisez GET ou PATCH pour ces paramètres.","Usa GET o PATCH para estos ajustes.","Verwende GET oder PATCH für diese Einstellungen.","Use GET ou PATCH para estas configurações."],
 ["Invalid configuration.","Configuration non valide.","Configuración no válida.","Ungültige Konfiguration.","Configuração inválida."],

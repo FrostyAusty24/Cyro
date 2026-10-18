@@ -96,3 +96,11 @@ Confirmed removed-server records are eligible for cleanup after 30 days while Cy
 - Check provider credentials, quotas, supported metrics and TikTok app approval. No self-hosted credentials are supplied by this repository.
 
 The offline demo and automated tests are useful checks, but do not replace these live tests. [Headache Development support](https://discord.gg/dAZheerkkD) can help with setup questions. Keep secrets and private logs out of public discussions.
+
+## Optional access during a tunnel outage
+
+Cyro can run a second dashboard listener with its own HTTPS certificate. It is disabled by default and requires an allocated inbound port, browser-trusted TLS and a second registered Discord OAuth redirect. This listener ignores proxy forwarding headers and keeps login sessions separate from the primary dashboard. TikTok account linking stays on the primary origin.
+
+The Prism launcher starts the bot independently of the Cloudflare connector and retries the connector after it exits, with capped exponential backoff. A connector failure therefore does not intentionally stop the bot. This does not restore an offline container, suspended provider service or failed host network.
+
+The feature is prepared in code; it is not proof of an active direct Prism endpoint. No certificate, extra allocation or backup host is provisioned automatically. Follow [FALLBACK_HOSTING.md](FALLBACK_HOSTING.md) to configure and verify the fallback without exposing the primary HTTP backend or private credentials.

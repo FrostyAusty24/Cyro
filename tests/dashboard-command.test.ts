@@ -3,15 +3,16 @@ import { ButtonStyle, Events, MessageFlags, PermissionFlagsBits, type Client } f
 import { expect, it, vi } from 'vitest';
 import { CommandHandler } from '../src/commands/handler.js';
 import { createRegistrationPlan } from '../src/commands/register.js';
+import { setBotLocaleResolver } from '../src/i18n/index.js';
 
-function setup(dashboard = { dashboardEnabled: true, dashboardUrl: 'https://cyro.example' }) {
+function setup(dashboard: { dashboardEnabled: boolean; dashboardUrl: string; getFallbackUrl?: () => string | undefined } = { dashboardEnabled: true, dashboardUrl: 'https://cyro.example' }) {
   const client = new EventEmitter();
   const handler = new CommandHandler(client as Client, {} as never, {} as never, {} as never, {} as never,
     { error: vi.fn() } as never, undefined, dashboard);
   handler.attach();
-  const invoke = async (guildId: string, canManage = true, inGuild = true) => {
+  const invoke = async (guildId: string, canManage = true, inGuild = true, commandName = 'dashboard', locale = 'en-US') => {
     const interaction = {
-      commandName: 'dashboard', guildId,
+      commandName, guildId, locale,
       isAutocomplete: () => false, isChatInputCommand: () => true, inCachedGuild: () => inGuild,
       memberPermissions: { has: (permission: bigint) => canManage && permission === PermissionFlagsBits.ManageGuild },
       isRepliable: () => true, replied: false, deferred: false,
@@ -33,6 +34,7 @@ it('privately opens the invoking server settings without sharing links between g
       expect(interaction.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
       const response = interaction.editReply.mock.calls[0]?.[0];
       expect(response).toBeDefined();
+      expect(response.components[0].toJSON().components).toHaveLength(1);
       const button = response.components[0].toJSON().components[0];
       expect(button.style).toBe(ButtonStyle.Link);
       expect(new URL(button.url).origin).toBe('https://cyro.example');
@@ -44,6 +46,27 @@ it('privately opens the invoking server settings without sharing links between g
     expect(command?.contexts).toEqual([0]);
     expect(command?.integration_types).toEqual([0]);
   } finally { handler.stop(); }
+});
+
+it('offers an active backup with the same server and destination, and hides it when unavailable', async () => {
+  setBotLocaleResolver(() => 'auto');
+  let backup: string | undefined = 'https://backup.cyro.example:1029';
+  const { handler, invoke } = setup({ dashboardEnabled: true, dashboardUrl: 'https://cyro.example', getFallbackUrl: () => backup });
+  try {
+    for (const [command, hash] of [['dashboard', ''], ['poll', '#polls'], ['embed', '#messages']]) {
+      const interaction = await invoke('100000000000000001', true, true, command, 'fr');
+      const buttons = interaction.editReply.mock.calls[0]?.[0].components[0].toJSON().components;
+      expect(buttons).toHaveLength(2);
+      const link = new URL(buttons[1].url);
+      expect(link.origin).toBe(backup);
+      expect(link.searchParams.get('guild')).toBe('100000000000000001');
+      expect(link.hash).toBe(hash);
+      expect(buttons[1].label).toBe('Tableau de bord de secours');
+    }
+    backup = undefined;
+    const interaction = await invoke('200000000000000001');
+    expect(interaction.editReply.mock.calls[0]?.[0].components[0].toJSON().components).toHaveLength(1);
+  } finally { handler.stop(); setBotLocaleResolver(() => 'en'); }
 });
 
 it('denies non-managers and direct messages, and gives a useful error when the dashboard is disabled', async () => {

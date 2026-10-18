@@ -37,6 +37,7 @@ import { checkVoiceRuntime } from './voice/check.js';
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = new Logger(config.logLevel);
+  if (config.dashboardFallbackWarning) logger.warn(config.dashboardFallbackWarning);
   if (config.dashboardEnabled && !config.discordClientSecret) throw new Error('DASHBOARD_ENABLED requires DISCORD_CLIENT_SECRET for Discord sign-in.');
   // Check before acquiring storage ownership. Missing privileged permission must not stop the existing bot.
   const appRest = new REST({version:'10', timeout:8_000, retries:0}).setToken(config.discordToken);
@@ -87,7 +88,7 @@ async function main(): Promise<void> {
   setProtectedRoleResolver((guildId, roleId) => access.protectedRole(guildId, roleId));
   const publishing = new PublishingService(client, control, access);
   const commands = new CommandHandler(client, store, providers, alerts, monitor, logger, creatorStats,
-    { dashboardEnabled: config.dashboardEnabled, dashboardUrl: config.dashboardUrl }, access);
+    { dashboardEnabled: config.dashboardEnabled, dashboardUrl: config.dashboardUrl, getFallbackUrl: () => dashboard?.fallbackUrl }, access);
   const community = new CommunityService(client, config.dataDir, logger, access);
   const moderation = new ModerationService(client, config.dataDir, logger, access);
   const suggestions = new SuggestionsService(client, config.dataDir, logger, access);
@@ -185,6 +186,15 @@ async function main(): Promise<void> {
       async () => { const capabilities = await checkVoiceRuntime(); voice.setRuntimeStatus(capabilities); logger.info('Voice runtime check.', capabilities); },
       async () => { if (config.autoDeployCommands) await registerCommands(config, logger); },
       async () => { if (dashboard) { await dashboard.start(); logger.info('Dashboard listening; readiness waits for Discord and recovery.', { url: config.dashboardUrl }); } },
+      async () => {
+        if (!dashboard || !config.dashboardFallback) return;
+        try {
+          await dashboard.startFallback();
+          logger.info('Backup HTTPS dashboard listening; readiness waits for Discord and recovery.', { url: dashboard.fallbackUrl });
+        } catch {
+          logger.warn('Backup HTTPS dashboard could not start. Check its bind address, port and TLS files; the primary dashboard and bot will continue.');
+        }
+      },
     ], () => shuttingDown);
     await startupTask;
     if (!shuttingDown) await client.login(config.discordToken);

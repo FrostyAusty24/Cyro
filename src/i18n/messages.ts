@@ -185,6 +185,7 @@ export const MESSAGE_ROWS: ReadonlyArray<readonly [string, string, string]> = [
 ];
 
 const rows = [
+  ['Backup dashboard', 'Tableau de bord de secours', 'Panel de respaldo', 'Ersatz-Dashboard', 'Painel de reserva'] as const,
   ...MESSAGE_ROWS.map(([en,fr,es]) => [en,fr,es,ADDITIONAL_TRANSLATIONS[en]!.de,ADDITIONAL_TRANSLATIONS[en]!.pt] as const),
   ...CORE_MESSAGE_ROWS, ...COMMUNITY_MESSAGE_ROWS, ...TOOLS_MESSAGE_ROWS, ...MODERATION_MESSAGE_ROWS, ...VOICE_ERROR_ROWS, ...TIME_CLOCK_MESSAGE_ROWS,
 ];
