@@ -1,0 +1,10 @@
+{
+  "hostname": "backup.cyrobot.ca",
+  "zoneId": "REPLACE_WITH_CYROBOT_CA_ZONE_ID",
+  "cloudflareApiToken": "REPLACE_WITH_ZONE_DNS_EDIT_TOKEN",
+  "stateDir": "./state",
+  "certFile": "./fullchain.pem",
+  "keyFile": "./privkey.pem",
+  "approvedTermsUrl": "https://letsencrypt.org/documents/LE-SA-v1.8-July-06-2026.pdf",
+  "termsAgreed": false
+}

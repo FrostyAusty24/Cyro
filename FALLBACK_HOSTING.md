@@ -66,7 +66,17 @@ Record the verified fallback address privately and bookmark it. During a tunnel 
 
 ## Renewal, rollback and full outages
 
-Arrange certificate renewal before expiry, preserve private-key permissions, and restart Cyro after replacing certificate files so it loads the new certificate. Review startup output and repeat an external HTTPS check after every rotation. Do not assume a certificate accepted by the runtime is publicly trusted: browser verification is a separate deployment check.
+Arrange certificate renewal before expiry and preserve private-key permissions. The fallback checks its certificate files every 60 seconds. A valid replacement is loaded without restarting Discord or clearing dashboard sessions; an invalid replacement leaves the previous certificate in use and produces a rate-limited warning. Review renewal status and repeat an external HTTPS check after every rotation. Do not assume a certificate accepted by the runtime is publicly trusted: browser verification is a separate deployment check.
+
+### Optional automated DNS validation
+
+The isolated `certificate-tools` utility supports Let's Encrypt DNS-01 issuance and renewal with a Cloudflare token. Install its locked dependencies separately with `npm ci --ignore-scripts --prefix certificate-tools`. Do not put credentials in the utility's source folder. Store its private configuration in `private/fallback/renewal.json`, readable only by the service account, and follow `certificate-tools/README.md` for the configuration and initial issuance command.
+
+Obtain explicit operator approval for the current certificate authority agreement, the token's permissions and storage location, and direct public HTTPS exposure. Scope the token to DNS editing for the one domain and, where the hosting egress IP is stable, restrict it to that IP. A domain-scoped DNS token can still modify every DNS record in that domain. Never use a global Cloudflare API key.
+
+Complete initial issuance before enabling the listener. Then set `CYRO_CERTIFICATE_RENEWAL_ENABLED=true` in the private environment used by the Prism launcher. The worker checks immediately and every 12 hours, renews according to the certificate's actual lifetime, and retries failures independently of the bot. An unavailable or crashed worker does not stop Discord or the tunnel. Its sanitized status file records renewal failures and certificate expiry; monitor it and check the public certificate after deployment. Future agreement changes require renewed operator approval. Changing the provider's outbound IP also requires updating the token's IP restriction.
+
+The certificate key and ACME account key are generated and retained privately on the host. Renewal preserves the certificate key and replaces only the complete, validated certificate chain atomically, allowing the HTTPS listener to reload it safely. No certificate authority or Cloudflare credential belongs in a public release or Git repository.
 
 To disable the feature, set `DASHBOARD_FALLBACK_ENABLED=false` and restart. Leave the primary loopback port and tunnel target aligned. If reverting to the old port layout, update the launcher and tunnel route together and ensure no public HTTP backend becomes exposed. Never overwrite `.env` or live data with an example file.
 

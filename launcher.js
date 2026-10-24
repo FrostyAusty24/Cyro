@@ -4,6 +4,7 @@ import { access, readFile, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { parse } from 'dotenv';
+import { superviseCertificateRenewal } from './scripts/certificate-supervisor.mjs';
 
 export async function createLaunchPlan({ root = path.dirname(fileURLToPath(import.meta.url)), env = process.env } = {}) {
   root = path.resolve(root);
@@ -30,10 +31,27 @@ export async function createLaunchPlan({ root = path.dirname(fileURLToPath(impor
   }
   const binary = path.join(root, 'bin', 'cloudflared');
   const tokenFile = path.join(root, '.secrets/cloudflared-token');
+  const certificateEntry = path.join(root, 'certificate-tools', 'cli.mjs');
+  const certificateConfig = path.join(root, 'private/fallback/renewal.json');
+  const certificateRenewal = mergedEnv.CYRO_CERTIFICATE_RENEWAL_ENABLED?.trim().toLowerCase() === 'true' ? {
+    command: process.execPath, args: [certificateEntry, '--config', certificateConfig, '--watch'],
+    cwd: root, env: { ...tunnelEnv },
+    prepare: async () => {
+      try {
+        for (const file of [certificateEntry, certificateConfig]) {
+          const info = await stat(file);
+          if (!info.isFile() || info.size === 0) return false;
+          await access(file, constants.R_OK);
+        }
+        return true;
+      } catch { return false; }
+    },
+  } : undefined;
   return {
     bot: { command: process.execPath, args: [botEntry], cwd: root, env: botEnv, stdio: ['ignore', 'inherit', 'inherit'] },
     // Never relay raw tunnel output or pass its credential as an argument value.
     tunnel: { command: binary, args: ['tunnel', '--no-autoupdate', 'run', '--token-file', tokenFile], cwd: root, env: tunnelEnv, stdio: ['ignore', 'ignore', 'ignore'] },
+    certificateRenewal,
     // Repairing the token or binary recovers on a retry without restarting Discord.
     prepareTunnel: async () => {
       try {
@@ -52,6 +70,7 @@ export function supervise(plan, {
   spawnProcess = spawn, signals = process, log = console.log,
   graceMs = 65_000, forceMs = 5_000,
   retryInitialMs = 1_000, retryMaxMs = 60_000, stableMs = 120_000,
+  certificateRetryMs = 60_000, certificateGraceMs = 30_000, certificateForceMs = 5_000,
   now = Date.now,
 } = {}) {
   if (![graceMs, forceMs, retryInitialMs, retryMaxMs, stableMs].every(value => Number.isFinite(value) && value > 0) || retryMaxMs < retryInitialMs) {
@@ -69,6 +88,7 @@ export function supervise(plan, {
   let retryTimer;
   let nextDelay = retryInitialMs;
   let resolveDone;
+  let renewal;
   const done = new Promise(resolve => { resolveDone = resolve; });
   const handlers = {};
   const sendSignal = (record, signal) => {
@@ -89,6 +109,7 @@ export function supervise(plan, {
     stopping = true;
     clearTimeout(retryTimer);
     retryTimer = undefined;
+    renewal?.stop(signal);
     log('Cyro launcher: stopping bot and tunnel.');
     graceTimer = setTimeout(() => {
       result = 1;
@@ -167,9 +188,24 @@ export function supervise(plan, {
   }
   launch('bot');
   if (!stopping) void startTunnel();
+  if (!stopping && plan.certificateRenewal) {
+    try {
+      renewal = superviseCertificateRenewal(plan.certificateRenewal, {
+        spawnProcess, signals, log, retryMs: certificateRetryMs,
+        graceMs: certificateGraceMs, forceMs: certificateForceMs,
+      });
+    } catch {
+      log('Cyro launcher: optional certificate worker could not start. The bot remains running.');
+    }
+  }
   starting = false;
   finish();
-  return { done, stop };
+  const allDone = renewal ? done.then(async code => {
+    renewal.stop();
+    const renewalCode = await renewal.done;
+    return code || renewalCode;
+  }) : done;
+  return { done: allDone, stop };
 }
 
 export async function runLauncher({ root, env, platform = process.platform, arch = process.arch, supervisorOptions = {} } = {}) {

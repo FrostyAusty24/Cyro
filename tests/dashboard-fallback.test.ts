@@ -174,6 +174,7 @@ it('joins a certificate read during shutdown and never starts a listener afterwa
 
 it('closes a fallback that is binding when shutdown starts',async()=>{
   const s=await setup();const listen=HttpsServer.prototype.listen;
+  const watcher=vi.spyOn(fallbackHelpers,'watchFallbackTls');
   let started!:()=>void;const began=new Promise<void>(resolve=>{started=resolve;});
   let allowCallback!:()=>void;let actualPort=0;
   vi.spyOn(HttpsServer.prototype,'listen').mockImplementation(function(this:HttpsServer,...args:any[]){
@@ -186,5 +187,16 @@ it('closes a fallback that is binding when shutdown starts',async()=>{
   const startup=s.server.startFallback();await began;
   const shutdown=s.server.stop();expect(s.server.fallbackUrl).toBeUndefined();
   allowCallback();await startup;await shutdown;
+  expect(watcher).not.toHaveBeenCalled();
   await expect(direct(actualPort,'/healthz')).rejects.toThrow();
+});
+
+it('stops and joins the certificate watcher during dashboard shutdown',async()=>{
+  let release!:()=>void;
+  const stop=vi.fn(()=>new Promise<void>(resolve=>{release=resolve;}));
+  const watcher=vi.spyOn(fallbackHelpers,'watchFallbackTls').mockReturnValue({refresh:async()=>{},stop});
+  const s=await setup();await s.server.startFallback();expect(watcher).toHaveBeenCalledOnce();
+  let finished=false;const shutdown=s.server.stop().then(()=>{finished=true;});
+  expect(stop).toHaveBeenCalledOnce();await Promise.resolve();expect(finished).toBe(false);
+  release();await shutdown;expect(finished).toBe(true);
 });

@@ -1,0 +1,6 @@
+node_modules/
+.bootstrap/
+.test-temp/
+*.pem
+renewal.json
+state/

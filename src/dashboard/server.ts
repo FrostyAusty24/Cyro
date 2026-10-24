@@ -18,7 +18,7 @@ import type { Logger } from '../logger.js';
 import { SessionStore, canManageGuild, safeEqual } from './auth.js';
 import { createOAuthApi, inviteUrl, type OAuthApi } from './discord-api.js';
 import { DashboardTikTok, TikTokDashboardError, TikTokCancellation } from './tiktok.js';
-import { fallbackTlsOptions } from './fallback.js';
+import { fallbackTlsOptions, watchFallbackTls, type FallbackTlsReloader } from './fallback.js';
 
 interface Module {
   getConfig(guildId:string):Promise<unknown>;
@@ -83,6 +83,7 @@ export class DashboardServer {
   private server?:Server;
   private fallbackServer?:HttpsServer;
   private fallbackStarting?:Promise<number|undefined>;
+  private fallbackReload?:FallbackTlsReloader;
   private primary:DashboardTransport;
   private requestContext = new AsyncLocalStorage<DashboardTransport>();
   private rates = new Map<string,{count:number;reset:number}>();
@@ -133,7 +134,11 @@ export class DashboardServer {
       const transport:DashboardTransport={origin:config.url,sessions:new SessionStore(),oauth:this.options.fallbackOAuth??createOAuthApi(this.options.config.discordClientId,this.options.config.discordClientSecret??'',`${config.url}/auth/callback`),direct:true};
       const server=createHttpsServer(tls,(req,res)=>this.dispatch(req,res,transport));
       this.fallbackServer=server;
-      try{return await this.listen(server,config.port,config.host);}catch(error){this.fallbackServer=undefined;throw error;}
+      try {
+        const port=await this.listen(server,config.port,config.host);
+        if(!this.stopping)this.fallbackReload=watchFallbackTls(config,tls,options=>server.setSecureContext(options),this.options.logger);
+        return port;
+      } catch(error){this.fallbackServer=undefined;throw error;}
     })();
     this.fallbackStarting=operation;
     void operation.finally(()=>{if(this.fallbackStarting===operation)this.fallbackStarting=undefined;}).catch(()=>undefined);
@@ -167,6 +172,7 @@ export class DashboardServer {
     if(this.stopPromise)return this.stopPromise;
     if(!this.server&&!this.fallbackServer&&!this.fallbackStarting)return Promise.resolve();
     this.stopping=true;
+    const reloading=this.fallbackReload?.stop();this.fallbackReload=undefined;
     const starting=this.fallbackStarting;
     const servers:(Server|HttpsServer)[]=this.server?[this.server]:[];
     this.server=undefined;
@@ -177,6 +183,7 @@ export class DashboardServer {
       // not emitted listening yet. Join startup before collecting/closing sockets.
       if(starting)await starting.catch(()=>undefined);
       if(this.fallbackServer){servers.push(this.fallbackServer);closed.push(close(this.fallbackServer));this.fallbackServer=undefined;}
+      await reloading;
       while(this.pending.size)await Promise.allSettled([...this.pending]);
       await Promise.all(closed);
     };
