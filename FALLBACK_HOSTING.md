@@ -62,7 +62,7 @@ Verify from an external network:
 4. Verify the primary dashboard and creator portal still work. TikTok account linking is intentionally unavailable through fallback; use the primary creator portal for those connections.
 5. In a controlled maintenance test, interrupt only the Cloudflare connector and confirm the bot and direct HTTPS listener remain available. The launcher retries the connector with capped exponential backoff. Restore the connector and verify the primary URL recovers. Do not stop the whole host to simulate only a tunnel failure.
 
-Record the verified fallback address privately and bookmark it. During a tunnel outage, the primary website cannot reliably redirect visitors because it is unreachable; users need the alternate URL. Discord's dashboard command can offer the fallback only after the listener has successfully started.
+The optional [Cloudflare route Worker](deploy/cloudflare-failover/README.md) can automatically redirect new dashboard navigations from cyrobot.ca to the verified HTTPS backup when the tunnel fails. It runs at Cloudflare, separately from the unreachable origin, and checks backup readiness before redirecting. Install and validate the Worker route explicitly; the bot does not deploy it automatically. Existing open tabs need a refresh, and the backup uses its own Discord login. Keep the manual backup bookmark for Cloudflare-wide failures. Discord's dashboard command offers the fallback only after the listener has successfully started.
 
 ## Renewal, rollback and full outages
 
