@@ -59,7 +59,7 @@ The main visual surfaces are owned by `public/styles.css`; `public/home.css` add
 - Primary buttons and counting progress use exact brand blue `#0771e3`, with white button text.
 - Links, small feature labels and icon strokes use the lighter companion `#82bcff` so they stay readable against near-black panels. Keyboard focus uses `#9bcaff`.
 - Main and supporting text remain neutral white, grey and blue-grey. Blue does not replace all text.
-- Mint, amber and rose remain semantic success, warning and error colours. Decorative feature tiles use blue consistently.
+- Mint, amber and rose remain semantic success, warning and error colours. The overview's Server modules keep their original icon palette: green moderation, purple welcome/status roles and music, gold invites, and slate confessions/tickets/time clock/applications. Their headings stay neutral white. Other decorative feature tiles use blue.
 - Form controls have a stronger boundary than decorative cards. Native and searchable dropdown menus stay opaque and dark.
 - User-configured Discord embed colours and welcome-card previews are content, not theme tokens; the dashboard theme must not overwrite them.
 
