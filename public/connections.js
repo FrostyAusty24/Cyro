@@ -91,8 +91,8 @@
     const result = node('p', { className: 'connection-result', role: 'status' });
     const videos = node('div');
     const controls = node('div', { className: 'connection-actions' });
-    const article = node('article', { className: `connection-record${selected ? ' selected' : ''}` },
-      node('div', { className: 'connection-record-head' }, node('div', {}, node('h2', {}, record.creatorName || record.username || ui('Creator profile')), node('p', {}, ui('{server} · @{creator}', { server: record.guildName || ui('Discord server'), creator: record.username || ui('TikTok creator') }))), node('span', { className: `tag connection-status ${connected && !reconnect ? 'green' : 'muted'}` }, statusText)),
+    const article = node('article', { className: `connection-record${selected ? ' selected' : ''}`, 'data-platform': 'tiktok' },
+      node('div', { className: 'connection-record-head' }, node('div', {}, node('span', { className: 'platform-badge', 'data-platform': 'tiktok' }, 'TikTok'), node('h2', {}, record.creatorName || record.username || ui('Creator profile')), node('p', {}, ui('{server} · @{creator}', { server: record.guildName || ui('Discord server'), creator: record.username || ui('TikTok creator') }))), node('span', { className: `tag connection-status ${connected && !reconnect ? 'green' : 'muted'}` }, statusText)),
       connected && node('p', { className: 'connection-identity' }, ui('Connected TikTok account: '), node('strong', {}, record.displayName || ui('Authorized account'))),
       node('p', {}, record.reason ? uiError({ message: record.reason, i18n: record.reasonI18n }) : (connected && !reconnect ? ui('Only this server’s configured public-video alerts use this connection.') : ui('Connect the TikTok account that belongs to this creator profile. You will review the permissions on TikTok.'))),
       controls, result, videos);
@@ -114,6 +114,7 @@
         if (url.protocol !== 'https:' || url.hostname !== 'www.tiktok.com' || !url.pathname.startsWith('/v2/auth/authorize') || url.username || url.password) throw new Error('TikTok returned an unexpected sign-in address. Contact Cyro support.');
         location.assign(url.href);
       }), '');
+      connect.classList.add('platform-action'); connect.dataset.platform = 'tiktok';
       connect.disabled = !configured; controls.append(connect);
     }
     if (connected) {

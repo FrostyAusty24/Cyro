@@ -985,3 +985,25 @@ dialog::backdrop{background:#03070ec9;backdrop-filter:blur(5px)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 @media(forced-colors:active){body,.shell,.sidebar,.topbar,.panel,.metric,.context-card,.creator-card,.save-bar,.module-list .module-row,.stream-list .module-row,.search-select-popup{background:Canvas;color:CanvasText;box-shadow:none;backdrop-filter:none}.button,.button.secondary,.button.danger,.module-icon,.metric>.icon,.nav a[aria-current=page],.search-select-trigger,.search-select-option{border-color:ButtonText;box-shadow:none}.nav a[aria-current=page],.search-select-option[aria-selected=true]{background:Highlight;color:HighlightText}.button{background:ButtonFace;color:ButtonText}.module-list .module-name,.context-card h3{color:CanvasText}a{color:LinkText}}
 @media(forced-colors:active){.module-list .module-icon{--module-ink:CanvasText;--module-fill:Canvas;--module-edge:ButtonText;--module-glow:transparent;background:Canvas;color:CanvasText;border-color:ButtonText;box-shadow:none}}
+
+/* Platform identity is independent of Cyro's blue controls and live-status colours. */
+[data-platform]{--platform-accent:#718096;--platform-ink:#d2dbe7;--platform-surface:#17202c;--platform-edge:#53617a}
+[data-platform="twitch"]{--platform-accent:#9146ff;--platform-ink:#cfb5ff;--platform-surface:#261639;--platform-edge:#7951ac}
+[data-platform="kick"]{--platform-accent:#53fc18;--platform-ink:#83f65b;--platform-surface:#132b16;--platform-edge:#417c31}
+[data-platform="youtube"]{--platform-accent:#ff0033;--platform-ink:#ffacb6;--platform-surface:#35151e;--platform-edge:#a04455}
+[data-platform="tiktok"]{--platform-accent:#050505;--platform-ink:#f5f5f5;--platform-surface:#070707;--platform-edge:#626873}
+.platform-badge{display:inline-flex;align-items:center;justify-content:center;gap:6px;max-width:100%;padding:4px 8px;border:1px solid var(--platform-edge);border-radius:7px;background:var(--platform-surface);color:var(--platform-ink);font-size:12px;font-weight:550;line-height:1.4;white-space:nowrap;vertical-align:middle;flex-shrink:0}
+.platform-badge>.icon{width:14px;height:14px;flex-shrink:0;stroke-width:1.8}
+.platform-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;min-width:0}
+.account-identity>.platform-badge{min-width:90px}
+.stream-list .module-copy{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin-top:6px}
+.stream-avatar[data-platform]{background:var(--platform-surface);color:var(--platform-ink);border:1px solid var(--platform-edge)}
+.stream-list .module-row[data-platform],.creator-account[data-platform]{box-shadow:inset 3px 0 0 var(--platform-accent)}
+.stream-list .module-row[data-platform="tiktok"],.creator-account[data-platform="tiktok"]{box-shadow:inset 3px 0 0 var(--platform-edge)}
+.stream-stats-table .platform-badge{font-size:11px;padding:3px 6px}
+.platform-selection{display:flex;align-items:center;gap:10px;margin-top:10px}
+.connection-record .platform-badge{margin-bottom:10px}
+.button.platform-action[data-platform="tiktok"]{background:var(--platform-surface);color:var(--platform-ink);border-color:var(--platform-edge);box-shadow:inset 0 1px 0 #ffffff0a}
+.button.platform-action[data-platform="tiktok"]:hover{background:#1b1b1d;border-color:#a3a7ae}
+@media(max-width:720px){.account-identity>.platform-badge{min-width:0}.platform-badges{gap:5px}.stream-list .module-copy{gap:5px 7px}}
+@media(forced-colors:active){[data-platform]{--platform-accent:CanvasText;--platform-ink:CanvasText;--platform-surface:Canvas;--platform-edge:CanvasText}.platform-badge,.stream-avatar[data-platform],.button.platform-action[data-platform="tiktok"],.button.platform-action[data-platform="tiktok"]:hover{background:Canvas;color:CanvasText;border-color:CanvasText;box-shadow:none}.stream-list .module-row[data-platform],.creator-account[data-platform]{box-shadow:none}}

@@ -1,6 +1,6 @@
 {
   "name": "cyro",
-  "version": "2.30.1",
+  "version": "2.30.2",
   "private": true,
   "description": "Self-hosted multi-server Discord community bot with a dashboard, stream alerts, moderation, tickets and games.",
   "type": "module",
