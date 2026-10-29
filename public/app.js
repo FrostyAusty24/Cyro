@@ -50,7 +50,7 @@ function toast(message, isError = false) { clearTimeout(toastTimer); const box =
 async function api(path, method = 'GET', body) {
   const response = await fetch(path, { method, credentials: 'same-origin', signal: AbortSignal.timeout(25000), headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(method === 'GET' ? {} : { 'X-CSRF-Token': state.me?.csrfToken || '' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   let data; try { data = await response.json(); } catch { data = {}; }
-  if (!response.ok) { const error = new Error(typeof data.error === 'string' ? data.error : data.error?.message || data.message || `Request failed (${response.status}). Please try again.`); error.status = response.status; error.i18n = data.i18n; throw error; }
+  if (!response.ok) { const error = new Error(typeof data.error === 'string' ? data.error : data.error?.message || data.message || `Request failed (${response.status}). Please try again.`); error.status = response.status; error.i18n = data.i18n; if (data.publishOutcome === 'not_sent' || data.publishOutcome === 'unknown') error.publishOutcome = data.publishOutcome; throw error; }
   return data;
 }
 function brand() { return el('a', { className: 'brand', href: '#overview', 'aria-label': ui('Cyro overview') }, el('span', { className: 'brand-mark' }, el('img', { src: '/cyro-logo.png', alt: '', width: 48, height: 48 })), el('span', { className: 'brand-name' }, ui('Cyro'), el('small', {}, ui('by Headache Development')))); }

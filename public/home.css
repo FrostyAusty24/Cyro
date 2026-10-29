@@ -151,3 +151,41 @@
 @media(prefers-reduced-motion:reduce){
   .home-page *, .home-page *::before, .home-page *::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
 }
+
+/* Shared midnight-blue identity, with the reference's outlined feature tiles. */
+.home-page{background:radial-gradient(ellipse 680px 500px at 82% 6%,#0771e310,transparent 74%),var(--bg)}
+.home-eyebrow{color:var(--accent-text);font-weight:500;letter-spacing:.15em}
+.home-hero h1 span{color:#8fc3ff}
+.home-logo{box-shadow:0 0 75px #0771e31a}
+.home-server-count{border:1px solid var(--border);border-radius:16px;background:linear-gradient(120deg,#101923d9,#0a1119eb);box-shadow:var(--card-edge),var(--card-shadow)}
+.home-server-count>.icon{color:var(--accent-text)}
+.home-principles{border-color:var(--border)}
+.home-principles .icon{color:var(--accent-text)}
+.home-feature-grid{position:relative;isolation:isolate;gap:18px}
+.home-feature-grid::before{content:'';position:absolute;z-index:-1;pointer-events:none;inset:auto 0 -28px;height:280px;background-image:linear-gradient(#0771e326 1px,transparent 1px),linear-gradient(90deg,#0771e326 1px,transparent 1px);background-size:44px 44px;transform:perspective(560px) rotateX(42deg);transform-origin:bottom;mask-image:linear-gradient(transparent,#000 80%,transparent)}
+.home-feature{padding:26px;background:linear-gradient(120deg,#0d161fe8,#090f17f5);border-color:#293543;border-radius:17px;box-shadow:inset 0 1px 0 #ffffff05,0 6px 26px #02070f33;transition:border-color 180ms,box-shadow 180ms}
+.home-feature-highlight{border-color:#304a67}
+.home-feature-heading{gap:16px;margin-bottom:18px}
+.home-feature .module-icon,.home-feature .module-icon.ice{width:44px;height:44px;border-radius:12px;color:var(--accent-text);background:#0771e30d;border:1px solid #0771e36b;box-shadow:inset 0 1px 0 #ffffff05,0 0 22px #0771e31c}
+.home-feature .module-icon .icon{width:22px;height:22px;stroke-width:1.75}
+.home-feature h3{color:var(--accent-text);font-size:14px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;line-height:1.55}
+.home-feature-heading p{color:var(--muted);font-size:14px;line-height:1.6;margin-top:5px}
+.home-feature-badge{background:#10243b;border-color:#3b587b;color:#b9d9ff;font-size:11px;font-weight:500;border-radius:6px}
+.home-feature li{font-size:14px;color:var(--muted);line-height:1.75}
+.home-feature li::before{background:#6b94c0}
+.home-provider-note{color:var(--subtle)}
+.home-free{background:radial-gradient(ellipse at 0 0,#0771e315,transparent 70%),#0c131d;border-color:#30455f;border-radius:17px;box-shadow:var(--card-edge),var(--card-shadow)}
+.home-step-number{color:var(--accent-text);background:#0771e30d;border-color:#35608d;box-shadow:0 0 16px #0771e314;border-radius:9px}
+.home-faq,.home-faq:first-child{padding:0 20px;margin-bottom:10px;background:#0b131ee6;border:1px solid var(--border);border-radius:13px;box-shadow:var(--card-edge)}
+.home-faq[open]{border-color:#3b5a7e}
+.home-faq summary{font-size:15px;font-weight:500}
+.home-faq summary:hover{color:var(--accent-text)}
+.home-faq summary:focus-visible{outline-color:var(--focus)}
+.home-faq>div{padding-right:0}
+.home-faq p{font-size:14px}
+.home-help{padding:26px 28px 28px;margin-bottom:28px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(120deg,#0f1a27,#0a111a);box-shadow:var(--card-edge)}
+.home-footer{color:var(--subtle)}
+@media(hover:hover){.home-feature:hover{border-color:#3c5e84;box-shadow:inset 0 1px 0 #ffffff07,0 8px 26px #0771e310}}
+@media(max-width:720px){.home-feature{padding:22px 19px}.home-feature h3{font-size:13px;letter-spacing:.09em}.home-feature-heading{gap:13px}.home-feature .module-icon,.home-feature .module-icon.ice{width:40px;height:40px;border-radius:11px}.home-server-count{padding:15px;gap:10px}.home-server-number{font-size:28px}.home-community{gap:14px}.home-logo{width:76px;height:76px}.home-feature-grid::before{display:none}.home-faq,.home-faq:first-child{padding-inline:16px}.home-help{padding:22px 20px}.home-page .button{white-space:normal;text-align:center}}
+@media(max-width:380px){.home-server-count{padding:12px}.home-logo{width:62px;height:62px}.home-server-total{gap:7px}.home-server-label{font-size:11px}.home-server-number{font-size:26px}}
+@media(forced-colors:active){.home-page,.home-feature,.home-free,.home-server-count,.home-faq,.home-help{background:Canvas;color:CanvasText;box-shadow:none}.home-feature-grid::before{display:none}.home-logo,.home-feature .module-icon,.home-step-number{box-shadow:none}.home-feature h3,.home-eyebrow,.home-hero h1 span{color:CanvasText}}

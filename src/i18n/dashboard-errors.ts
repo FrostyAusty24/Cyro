@@ -1919,9 +1919,32 @@ function validationRows(): Row[] {
   return rows;
 }
 
+/** Publish checks report only the missing entries from this fixed permission set. */
+function publishingPermissionRows(): Row[] {
+  const names: Row[] = [
+    ['View Channel', 'Voir le salon', 'Ver canal', 'Kanal ansehen', 'Ver canal'],
+    ['Send Messages', 'Envoyer des messages', 'Enviar mensajes', 'Nachrichten senden', 'Enviar mensagens'],
+    ['Send Polls', 'Envoyer des sondages', 'Enviar encuestas', 'Umfragen senden', 'Enviar enquetes'],
+    ['Embed Links', 'Intégrer des liens', 'Insertar enlaces', 'Links einbetten', 'Inserir links'],
+  ];
+  const rows: Row[] = [];
+  for (let mask = 1; mask < (1 << names.length); mask++) {
+    const selected = names.filter((_, index) => mask & (1 << index));
+    const list = (locale: number) => selected.map(row => row[locale]).join(', ');
+    rows.push([
+      `Cyro is missing these permissions in this channel: ${list(0)}. Ask a server admin to check Cyro’s role and this channel’s permissions.`,
+      `Il manque ces permissions à Cyro dans ce salon : ${list(1)}. Demandez à un administrateur de vérifier le rôle de Cyro et les permissions de ce salon.`,
+      `A Cyro le faltan estos permisos en este canal: ${list(2)}. Pide a un administrador que revise el rol de Cyro y los permisos de este canal.`,
+      `Cyro fehlen in diesem Kanal diese Berechtigungen: ${list(3)}. Bitte einen Serveradministrator, Cyros Rolle und die Kanalberechtigungen zu prüfen.`,
+      `Faltam estas permissões ao Cyro neste canal: ${list(4)}. Peça a um administrador para verificar o cargo do Cyro e as permissões deste canal.`,
+    ]);
+  }
+  return rows;
+}
+
 export const ALL_DASHBOARD_ERROR_ROWS: readonly Row[]=[
   ...Object.entries(BOT_TRANSLATIONS).map(([en,value])=>[en,value.fr,value.es,value.de,value.pt] as Row),
-  ...DASHBOARD_ERROR_ROWS,...STREAM_ERROR_ROWS,...COMMUNITY_ERROR_ROWS,...CONTROL_ERROR_ROWS,...CONNECTION_ERROR_ROWS,...validationRows(),
+  ...DASHBOARD_ERROR_ROWS,...STREAM_ERROR_ROWS,...COMMUNITY_ERROR_ROWS,...CONTROL_ERROR_ROWS,...CONNECTION_ERROR_ROWS,...validationRows(),...publishingPermissionRows(),
 ];
 export const DASHBOARD_TRANSLATIONS: Readonly<Record<string,{fr:string;es:string;de:string;pt:string}>>=Object.fromEntries(
   ALL_DASHBOARD_ERROR_ROWS.map(([en,fr,es,de,pt])=>[en,{fr,es,de,pt}])

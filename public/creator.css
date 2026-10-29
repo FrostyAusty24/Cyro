@@ -85,3 +85,23 @@
 .connection-language { display:flex; align-items:center; gap:.5rem; color:var(--muted); font-size:.8rem; }
 .connection-language select { max-width:12rem; width:auto; padding:.45rem .65rem; }
 @media(max-width:640px){ .public-header nav { flex-wrap:wrap; } .connection-language { width:100%; } }
+
+/* Creator connections and public documents share Cyro's blue glass surfaces. */
+.public-page{background:radial-gradient(ellipse 620px 380px at 90% 0,#0771e30d,transparent 75%),var(--bg)}
+.public-header{border-bottom-color:var(--border)}
+.connection-explainer{padding:24px;background:linear-gradient(125deg,#101a28,#0a111a);border:1px solid var(--border);border-radius:16px;box-shadow:var(--card-edge),var(--card-shadow)}
+.connection-explainer h2{color:var(--accent-text);font-size:14px;font-weight:500;letter-spacing:.08em}
+.connection-notice{background:#0d1928;border-color:#344b67;border-radius:12px}
+.connection-record{background:linear-gradient(120deg,#101923dd,#0a1119f2);border-color:var(--border);box-shadow:var(--card-edge),var(--card-shadow);border-radius:16px}
+.connection-record.selected{border-color:#4a82bd;box-shadow:var(--card-edge),0 0 24px #0771e314}
+.connection-record h2{font-weight:550}
+.connection-dialog{background:#0e1723;border-color:#3c526e;border-radius:16px;box-shadow:0 24px 100px #000b,inset 0 1px 0 #ffffff0a}
+.connection-dialog::backdrop{background:#03070ec9;backdrop-filter:blur(5px)}
+.legal-nav{padding:14px;background:#0d151fe8;border:1px solid var(--border);border-radius:13px;box-shadow:var(--card-edge)}
+.legal-nav a{padding:8px;font-size:13px;border-radius:6px}
+.legal-nav a:hover{color:var(--accent-text);background:#10243b;text-decoration:none}
+.legal-copy h2{color:#d2e6ff;font-weight:550}
+.connection-language select{background:var(--input);border-color:var(--control-border);border-radius:9px}
+@media(max-width:950px){.connection-explainer{padding:20px}}
+@media(max-width:720px){.connection-explainer{padding:22px 20px}.legal-nav{padding:10px 12px;gap:0 8px}.legal-nav a{min-height:40px;display:inline-flex;align-items:center}.connection-record{padding:22px 20px}}
+@media(forced-colors:active){.public-page,.connection-explainer,.connection-record,.connection-notice,.connection-dialog,.legal-nav{background:Canvas;color:CanvasText;box-shadow:none}.connection-explainer h2,.legal-copy h2{color:CanvasText}}

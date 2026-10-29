@@ -2,6 +2,15 @@ import { createHash } from 'node:crypto';
 import { ChannelType, PermissionFlagsBits, type Client, type Guild, type MessageCreateOptions, type TextChannel, type NewsChannel, type APIEmbed } from 'discord.js';
 import { ControlStore } from './store.js';
 import { AccessService } from './access.js';
+import { BotMessageError } from '../i18n/index.js';
+
+/** Only this service can confirm that a failed publish never reached the send step. */
+export class PublishingError extends BotMessageError {
+  constructor(readonly publishOutcome: 'not_sent' | 'unknown', error: unknown) {
+    super(error instanceof BotMessageError ? error.sourceEnglish : error instanceof Error ? error.message : 'Publishing failed.', error instanceof BotMessageError ? error.params : {});
+    this.cause = error;
+  }
+}
 
 const object = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('Send a message or poll object.'); return v as Record<string, unknown>; };
 function text(v: unknown, max: number, label: string, required = false): string {
@@ -54,26 +63,33 @@ export class PublishingService {
   private queues = new Map<string, Promise<unknown>>();
   constructor(private client: Client, private store: ControlStore, private access: AccessService) {}
   list(guildId: string) { return this.store.get(guildId).posts; }
-  private async channel(guild: Guild, id: string, actorId: string, poll: boolean): Promise<TextChannel | NewsChannel> {
+  private async channel(guild: Guild, id: string, actorId: string, poll: boolean, embed = false): Promise<TextChannel | NewsChannel> {
     const actor = await this.access.dashboard(guild, actorId);
-    const channel = await guild.channels.fetch(id);
+    const channel = await guild.channels.fetch(id, { force: true });
     if (!channel || channel.guild.id !== guild.id || ![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) throw new Error('Choose a text or announcement channel in this server.');
     if (poll && channel.type !== ChannelType.GuildText) throw new Error('Polls need a regular text channel.');
-    const bot = await guild.members.fetchMe();
-    const required = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, ...(poll ? [PermissionFlagsBits.SendPolls] : [PermissionFlagsBits.EmbedLinks])];
+    const bot = await guild.members.fetchMe({ force: true });
+    const required: [bigint, string][] = [[PermissionFlagsBits.ViewChannel, 'View Channel'], [PermissionFlagsBits.SendMessages, 'Send Messages']];
+    if (poll) required.push([PermissionFlagsBits.SendPolls, 'Send Polls']);
+    if (embed) required.push([PermissionFlagsBits.EmbedLinks, 'Embed Links']);
     if (!channel.permissionsFor(actor)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) throw new Error('You need View Channel and Send Messages in the selected channel.');
-    if (!channel.permissionsFor(bot)?.has(required)) throw new Error(`Cyro needs View Channel, Send Messages, and ${poll ? 'Send Polls' : 'Embed Links'} in this channel.`);
+    const permissions = channel.permissionsFor(bot);
+    const missing = required.filter(([permission]) => !permissions?.has(permission)).map(([, name]) => name);
+    if (missing.length) throw new Error(`Cyro is missing these permissions in this channel: ${missing.join(', ')}. Ask a server admin to check Cyro’s role and this channel’s permissions.`);
     return channel as TextChannel | NewsChannel;
   }
   async publish(guild: Guild, actorId: string, input: unknown, kind: 'message' | 'poll') {
+    let operationId: string | undefined;
+    try {
     const v = object(input);
+    operationId = typeof v.operationId === 'string' ? v.operationId : undefined;
     if (typeof v.operationId !== 'string' || !/^[a-zA-Z0-9-]{16,64}$/.test(v.operationId) || typeof v.channelId !== 'string' || !/^\d{17,20}$/.test(v.channelId)) throw new Error('Choose a channel and use a valid publish request.');
     const id = v.operationId, channelId = v.channelId;
     const payload = kind === 'poll' ? pollPayload(v) : messagePayload(v);
     const hash = createHash('sha256').update(JSON.stringify({ kind, channelId, payload })).digest('hex');
     const previous = this.queues.get(guild.id) ?? Promise.resolve();
     const task = previous.catch(() => undefined).then(async () => {
-      const channel = await this.channel(guild, channelId, actorId, kind === 'poll');
+      const channel = await this.channel(guild, channelId, actorId, kind === 'poll', Boolean(payload.embeds?.length));
       const posts = this.store.get(guild.id).posts;
       const existing = posts.find(p => p.id === id);
       if (existing) {
@@ -90,7 +106,13 @@ export class PublishingService {
       return this.store.mutate(guild.id, g => { const saved = g.posts.find(p => p.id === id)!; saved.status = 'sent'; saved.messageId = message.id; return saved; });
     });
     this.queues.set(guild.id, task); void task.finally(() => { if (this.queues.get(guild.id) === task) this.queues.delete(guild.id); }).catch(() => undefined);
-    return task;
+    return await task;
+    } catch (error) {
+      // A receipt from any attempt with this ID means delivery cannot be ruled out,
+      // even if this retry fails its permission or content checks before sending.
+      const recorded = operationId !== undefined && this.store.get(guild.id).posts.some(post => post.id === operationId);
+      throw new PublishingError(recorded ? 'unknown' : 'not_sent', error);
+    }
   }
   async endPoll(guild: Guild, actorId: string, id: string) {
     const post = this.store.get(guild.id).posts.find(p => p.id === id && p.kind === 'poll' && p.status === 'sent');

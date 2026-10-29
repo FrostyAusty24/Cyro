@@ -5,7 +5,7 @@ import { Collection, PermissionFlagsBits, PermissionsBitField, type Guild, type 
 import { afterEach, expect, it, vi } from 'vitest';
 import { AccessService, assertNotAccessRole, setProtectedRoleResolver } from '../src/control/access.js';
 import { ControlStore, defaultAccess, parseAccess } from '../src/control/store.js';
-import { messagePayload, pollPayload, PublishingService } from '../src/control/publishing.js';
+import { messagePayload, pollPayload, PublishingService, PublishingError } from '../src/control/publishing.js';
 import { mergeConfig } from '../src/community/config.js';
 import { defaultGuild } from '../src/community/types.js';
 import { renderMemberCard } from '../src/community/member-card.js';
@@ -100,4 +100,56 @@ it('renders custom backgrounds and optional bars while migrating old card settin
   config.welcome.card.bar='left';config.welcome.card.barColor='#FF0000';ctx.drawImage(await loadImage(await renderMemberCard({kind:'join',displayName:'Test',serverName:'Server',memberCount:4,settings:config.welcome.card})),0,0);
   expect([...ctx.getImageData(1,160,1,1).data]).toEqual([255,0,0,255]);
   expect(mergeConfig(defaultGuild().config,{welcome:{card:{accentColor:'#ffffff'}}}).welcome.card.nameText).toBe('{user}');
+});
+
+it('publishes plain text without Embed Links and refreshes current channel and bot membership', async()=>{
+  const f=await fixture();f.member.permissions=new PermissionsBitField(PermissionFlagsBits.ManageGuild);
+  f.channel.permissionsFor.mockReturnValue(new PermissionsBitField([PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages]));
+  await expect(f.publisher.publish(f.guild,U,{channelId:C,operationId:'plain-text-publish-1234',content:'A plain message'},'message')).resolves.toMatchObject({status:'sent'});
+  expect(f.guild.channels.fetch).toHaveBeenCalledWith(C,{force:true});
+  expect(f.guild.members.fetchMe).toHaveBeenCalledWith({force:true});
+  expect(f.channel.send.mock.calls[0][0]).not.toHaveProperty('embeds');
+});
+
+it('names only missing bot permissions and confirms a preflight refusal sent nothing', async()=>{
+  const f=await fixture();f.member.permissions=new PermissionsBitField(PermissionFlagsBits.ManageGuild);
+  f.channel.permissionsFor.mockImplementation((member:any)=>new PermissionsBitField(member.id==='bot'?[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages]:PermissionFlagsBits.Administrator));
+  const failure=await f.publisher.publish(f.guild,U,{channelId:C,operationId:'missing-embed-links-1234',embed:{title:'News'}},'message').catch(error=>error);
+  expect(failure).toBeInstanceOf(PublishingError);
+  expect(failure.publishOutcome).toBe('not_sent');
+  expect(failure.message).toContain('permissions in this channel: Embed Links.');
+  expect(failure.message).not.toContain('View Channel');
+  expect(failure.message).not.toContain('Send Messages');
+  expect(f.channel.send).not.toHaveBeenCalled();expect(f.store.get(A).posts).toHaveLength(0);
+});
+
+it('checks Send Polls separately without requiring Embed Links', async()=>{
+  const f=await fixture();f.member.permissions=new PermissionsBitField(PermissionFlagsBits.ManageGuild);
+  const basic=[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages];
+  f.channel.permissionsFor.mockReturnValue(new PermissionsBitField(basic));
+  const input={channelId:C,operationId:'missing-send-polls-1234',question:'Q',answers:['A','B'],duration:24,multiple:false};
+  await expect(f.publisher.publish(f.guild,U,input,'poll')).rejects.toMatchObject({publishOutcome:'not_sent',message:expect.stringContaining('permissions in this channel: Send Polls.')});
+  f.channel.permissionsFor.mockReturnValue(new PermissionsBitField([...basic,PermissionFlagsBits.SendPolls]));
+  await expect(f.publisher.publish(f.guild,U,input,'poll')).resolves.toMatchObject({status:'sent'});
+});
+
+it('never labels a previous uncertain operation as not sent after permissions or content change', async()=>{
+  const f=await fixture();f.member.permissions=new PermissionsBitField(PermissionFlagsBits.ManageGuild);
+  f.channel.send.mockRejectedValue(new Error('Connection lost'));
+  const input={channelId:C,operationId:'unknown-outcome-publish-1234',content:'Test'};
+  await expect(f.publisher.publish(f.guild,U,input,'message')).rejects.toMatchObject({publishOutcome:'unknown'});
+  f.channel.permissionsFor.mockImplementation((member:any)=>new PermissionsBitField(member.id==='bot'?[]:PermissionFlagsBits.Administrator));
+  await expect(f.publisher.publish(f.guild,U,input,'message')).rejects.toMatchObject({publishOutcome:'unknown',message:expect.stringContaining('View Channel, Send Messages')});
+  await expect(f.publisher.publish(f.guild,U,{...input,content:''},'message')).rejects.toMatchObject({publishOutcome:'unknown'});
+  expect(f.channel.send).toHaveBeenCalledOnce();
+});
+
+it('preserves sent receipts on changed replay and does not disclose another actor’s post', async()=>{
+  const f=await fixture();f.member.permissions=new PermissionsBitField(PermissionFlagsBits.ManageGuild);
+  const input={channelId:C,operationId:'completed-publish-1234',content:'Private original content'};
+  await f.publisher.publish(f.guild,U,input,'message');
+  const other=await f.publisher.publish(f.guild,'another-actor',{...input,content:'Another message'},'message').catch(error=>error);
+  expect(other).toMatchObject({publishOutcome:'unknown',message:'This publish request was already used for different content.'});
+  expect(other.message).not.toContain('Private original');expect(other).not.toHaveProperty('post');
+  expect(f.channel.send).toHaveBeenCalledOnce();
 });

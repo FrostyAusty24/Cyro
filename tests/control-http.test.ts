@@ -8,6 +8,7 @@ import { SessionStore } from '../src/dashboard/auth.js';
 import { ControlStore, defaultAccess } from '../src/control/store.js';
 import { AccessService } from '../src/control/access.js';
 import { Logger } from '../src/logger.js';
+import { PublishingError } from '../src/control/publishing.js';
 const servers:DashboardServer[]=[],dirs:string[]=[];
 afterEach(async()=>{await Promise.all(servers.splice(0).map(s=>s.stop()));await Promise.all(dirs.splice(0).map(d=>rm(d,{recursive:true,force:true})));});
 const guildId='123456789012345678',roleId='223456789012345678';
@@ -42,4 +43,18 @@ it('lets the owner disable manager access without locking the owner out',async()
   expect((await fetch(`${f.base}/api/guilds/${guildId}/access`,{method:'PATCH',headers:f.headers,body:JSON.stringify(config)})).status).toBe(200);
   f.member.roles.cache.clear();expect((await (await fetch(f.base+'/api/guilds',{headers:f.headers})).json()).guilds).toHaveLength(1);
   expect(f.store.get(guildId).access.managerAccess).toBe(false);
+});
+
+it('preserves definite and unknown publishing outcomes without returning internal errors',async()=>{
+  const f=await setup();const url=`${f.base}/api/guilds/${guildId}/messages`;
+  f.publishing.publish.mockRejectedValueOnce(new PublishingError('not_sent',new Error('Add a message or embed before publishing.')));
+  let response=await fetch(url,{method:'POST',headers:f.headers,body:'{}'});
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({publishOutcome:'not_sent',i18n:{key:'Add a message or embed before publishing.'}});
+  f.publishing.publish.mockRejectedValueOnce(new PublishingError('unknown',new Error('Private provider diagnostic')));
+  response=await fetch(url,{method:'POST',headers:f.headers,body:'{}'});
+  expect(response.status).toBe(409);
+  const body=await response.json();expect(body.publishOutcome).toBe('unknown');
+  expect(JSON.stringify(body)).not.toContain('Private provider diagnostic');
+  expect(Object.keys(body).sort()).toEqual(['error','i18n','publishOutcome']);
 });

@@ -2,6 +2,12 @@
 
 function studioReplace(node, ...children) { node.replaceChildren(...children.filter(value => value !== false && value != null)); }
 
+function studioPublishFailure(error, wasUncertain) {
+  // A later preflight refusal cannot resolve an earlier lost response for this draft.
+  const uncertain = wasUncertain || error?.publishOutcome !== 'not_sent';
+  return { uncertain, message: ui(uncertain ? '{error} Check the channel before starting another post.' : '{error} Nothing was posted. Fix the issue, then try again.', { error: uiError(error) }) };
+}
+
 const memberCardDefaults = { joinHeading: 'Welcome aboard', leaveHeading: 'Until next time', background: 'midnight', accentColor: '#63D7FF', bar: 'left', barColor: '#63D7FF', backgroundColor: '#111B31', textColor: '#F2F8FF', secondaryColor: '#A7BACD', showAvatar: true, showDivider: true, decoration: true, nameText: '{user}', subtitle: '{server}', joinFooter: '{count} members and counting', leaveFooter: '{count} members in the community', brandText: 'CYRO' };
 function renderCardPreview(node, c, joining, replace) {
   node.dataset.bar = c.bar; node.dataset.divider = String(c.showDivider); node.dataset.decoration = String(c.decoration);
@@ -57,7 +63,7 @@ function renderPublishing(main, kind) {
     studioReplace(preview, el('span', { className: 'preview-author' }, 'Cyro'), draft.content && el('p', { className: 'preserve-lines' }, draft.content), draft.useEmbed && embed);
   }
   const form = el('form', { className: 'settings-form' });
-  const fields = el('div', { className: 'form-section' }, channelField(session, ui('Post in channel'), 'channelId', poll ? ui('Cyro needs Send Polls here. Polls use regular text channels.') : ui('You need View Channel and Send Messages here; Cyro also needs Embed Links.')));
+  const fields = el('div', { className: 'form-section' }, channelField(session, ui('Post in channel'), 'channelId', poll ? ui('Cyro needs Send Polls here. Polls use regular text channels.') : ui('You and Cyro need View Channel and Send Messages here. Cyro needs Embed Links only when you include an embed.')));
   if (poll) fields.append(textField(session, ui('Question'), 'question', ui('Up to 300 characters.'), { required: true, maxlength: 300 }), linesField(session, ui('Answers'), 'answers', ui('One answer per line. Between 2 and 10 different answers, up to 55 characters each.'), 10, 55), textField(session, ui('Duration in hours'), 'duration', ui('From 1 hour to 32 days. You can end a poll early.'), { type: 'number', min: 1, max: 768, required: true }), el('div', { className: 'toggle-row' }, el('span', {}, ui('Allow multiple answers')), toggleControl(ui('Allow multiple answers'), false, v => session.change('multiple', v))));
   else {
     fields.append(textField(session, ui('Message text'), 'content', ui('Optional text above the embed. Mentions never notify anyone.'), { multiline: true, maxlength: 2000 }), el('div', { className: 'toggle-row' }, el('span', {}, ui('Include an embed')), toggleControl(ui('Include an embed'), true, v => { session.change('useEmbed', v); fields.querySelector('fieldset').disabled = !v; })));
@@ -86,7 +92,7 @@ function renderPublishing(main, kind) {
       state.detail.posts ||= []; if (!state.detail.posts.some(p => p.id === result.post.id)) state.detail.posts.push(result.post);
       uncertain = false; operationId = crypto.randomUUID(); state.dirty = false;
       status.replaceChildren(window.CyroI18n.node(ui('Published. ')), postLink(result.post)); toast(poll ? ui('Poll published.') : ui('Message published.')); drawHistory();
-    } catch (error) { uncertain = true; window.CyroI18n.setContent(status, ui('{error} Check the channel before starting another post.', { error: uiError(error) })); status.className = 'save-status error'; }
+    } catch (error) { const failure = studioPublishFailure(error, uncertain); uncertain = failure.uncertain; window.CyroI18n.setContent(status, failure.message); status.className = 'save-status error'; }
     finally { busy = false; state.saving = false; controls.forEach(([c, disabled]) => c.disabled = disabled); publish.disabled = false; }
   });
   const history = el('div', {});

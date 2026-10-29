@@ -3,6 +3,7 @@
 // Developer-owned module copy only. Editable server content is never translated.
 (() => {
   const rows = [
+  ['{error} Nothing was posted. Fix the issue, then try again.', '{error} Rien n’a été publié. Corrigez le problème, puis réessayez.', '{error} No se publicó nada. Corrige el problema y vuelve a intentarlo.', '{error} Es wurde nichts veröffentlicht. Behebe das Problem und versuche es erneut.', '{error} Nada foi publicado. Corrija o problema e tente novamente.'],
   [
     "category",
     "catégorie",
@@ -662,11 +663,11 @@
     "O Cyro precisa de Enviar enquetes aqui. Enquetes usam canais de texto comuns."
   ],
   [
-    "You need View Channel and Send Messages here; Cyro also needs Embed Links.",
-    "Vous avez besoin de Voir le salon et Envoyer des messages ; Cyro a aussi besoin d’Intégrer des liens.",
-    "Necesitas Ver canal y Enviar mensajes; Cyro también necesita Insertar enlaces.",
-    "Du benötigst Kanal ansehen und Nachrichten senden; Cyro außerdem Links einbetten.",
-    "Você precisa de Ver canal e Enviar mensagens; o Cyro também precisa de Inserir links."
+    "You and Cyro need View Channel and Send Messages here. Cyro needs Embed Links only when you include an embed.",
+    "Vous et Cyro devez pouvoir Voir le salon et Envoyer des messages ici. Cyro a besoin d’Intégrer des liens uniquement si vous ajoutez un encart.",
+    "Tú y Cyro necesitan Ver canal y Enviar mensajes aquí. Cyro solo necesita Insertar enlaces cuando incluyes un mensaje insertado.",
+    "Du und Cyro benötigen hier Kanal ansehen und Nachrichten senden. Cyro benötigt Links einbetten nur, wenn du eine Einbettung hinzufügst.",
+    "Você e o Cyro precisam de Ver canal e Enviar mensagens aqui. O Cyro só precisa de Inserir links quando você inclui uma mensagem incorporada."
   ],
   [
     "Optional text above the embed. Mentions never notify anyone.",

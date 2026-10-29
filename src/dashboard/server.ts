@@ -2,7 +2,7 @@ import { dashboardError, dashboardErrorScript, dashboardErrorPage, GENERIC_DASHB
 import { BotMessageError } from '../i18n/index.js';
 import { dashboardCommunitySnapshot, dashboardModerationSnapshot } from './diagnostics.js';
 import type { AccessService } from '../control/access.js';
-import type { PublishingService } from '../control/publishing.js';
+import { PublishingError, type PublishingService } from '../control/publishing.js';
 import { GuildIdentityService, IdentityError } from '../control/identity.js';
 import { COMMAND_KEYS, parseAccess } from '../control/store.js';
 import { languageSnapshot } from '../control/language.js';
@@ -528,7 +528,10 @@ export class DashboardServer {
             if(method==='GET'&&!id){this.json(res,200,{posts:o.publishing.list(guild.id).filter(p=>p.kind===(section==='polls'?'poll':'message'))});return;}
             if(method==='POST'&&!id){this.json(res,201,{post:await o.publishing.publish(guild,session.user.id,input,section==='polls'?'poll':'message')});return;}
             if(method==='POST'&&id&&section==='polls'){this.json(res,200,await o.publishing.endPoll(guild,session.user.id,id));return;}
-          }catch(error){throw new HttpError(400,error instanceof Error?error:'Publishing failed.');}
+          }catch(error){
+            if(error instanceof PublishingError){this.json(res,error.publishOutcome==='not_sent'?400:409,{...dashboardError(error),publishOutcome:error.publishOutcome});return;}
+            throw new HttpError(400,error instanceof Error?error:'Publishing failed.');
+          }
         }
 
         if(method==='POST' && ((section==='moderation'&&id==='panel')||(section==='community'&&id==='verification-panel'))) {
