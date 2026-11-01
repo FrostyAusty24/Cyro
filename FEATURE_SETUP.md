@@ -1,4 +1,4 @@
-# Cyro feature setup (2.33.0)
+# Cyro feature setup (2.33.1)
 
 Sign in to the dashboard with **Manage Server** permission and select the correct Discord server. Settings belong to that server. This guide describes setup; it does not confirm deployment or a live Discord test.
 

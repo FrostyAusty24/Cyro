@@ -71,6 +71,11 @@ it.each(['inherit', 'private'] as const)('creates %s tickets using their saved v
   const before = [...f.category.permissionOverwrites.cache.values()].map((row: any) => ({ id: row.id, allow: row.allow.bitfield, deny: row.deny.bitfield }));
   await (f.service as any).ticket({ guildId, guild: f.guild, user: { id: ownerId }, editReply: vi.fn() }, 'open');
   const payload: any = f.create.mock.calls[0]![0];
+  // The real Create Guild Channel endpoint rejects MANAGE_ROLES overrides
+  // unless the bot is an administrator, even when its role has Manage Roles.
+  const botOverwrite = payload.permissionOverwrites.find((row: any) => row.id === botId);
+  expect(botOverwrite.allow & P.ManageRoles).toBe(0n);
+  expect(botOverwrite.allow & P.ManageChannels).toBe(P.ManageChannels);
   const everyone = payload.permissionOverwrites.find((row: any) => row.id === guildId);
   if (visibility === 'inherit') {
     expect(everyone.allow & P.ViewChannel).toBe(P.ViewChannel);

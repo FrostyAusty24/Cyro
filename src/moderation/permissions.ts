@@ -19,7 +19,10 @@ export function assertSafeRole(role: Role, bot: GuildMember): void {
 
 export function ticketPermissionOverwrites(category: CategoryChannel, botId: string, ownerId: string, staffRoles: string[], visibility: TicketVisibility = 'private'): OverwriteData[] {
   const memberAccess = PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages | PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.AttachFiles;
-  const botAccess = memberAccess | PermissionFlagsBits.ManageChannels | PermissionFlagsBits.ManageRoles | PermissionFlagsBits.ManageMessages;
+  // Discord restricts MANAGE_ROLES overwrites on channel creation to guild
+  // administrators. Use the bot's existing role permission instead of adding
+  // a redundant override that makes ordinary bot installations fail with 50013.
+  const botAccess = memberAccess | PermissionFlagsBits.ManageChannels | PermissionFlagsBits.ManageMessages;
   if (visibility === 'private') return [
     { id: category.guild.id, type: 0, deny: PermissionFlagsBits.ViewChannel },
     { id: botId, type: 1, allow: botAccess },
