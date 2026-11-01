@@ -245,3 +245,8 @@ Members press **Clock in** to start recording and **Clock out** to finish. Clock
 An active session records elapsed wall-clock time until the member clocks out, including time offline or while the bot restarts. It does not monitor presence, messages, voice activity or work performed. Totals include the running session; completed time is saved separately. Disabling new clock-ins or losing an eligible role does not prevent a member from ending an already active session.
 
 Settings, member totals, active-session start times and limited operation/panel receipts are stored per server in `DATA_DIR/time-clock.json`. Include that file in private backups. Server-removal retention applies. The feature starts disabled and has no automatic reset or payroll integration.
+
+
+## Custom commands
+
+Dashboard → Messages → Custom commands → New command. Enter a name without `/`, a menu description and a text or embed reply. Select channels if desired, choose whether the reply is private, then Save command. A green Ready in Discord badge means Discord accepted it. Type `/` in that server to use it. Edit changes its reply or name; Delete removes it from Discord. Templates support `{mention}`, `{user}`, `{server}` and `{channel}`.

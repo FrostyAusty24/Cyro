@@ -54,7 +54,7 @@ window.CyroSearchSelect = (() => {
     function sync() {
       const selected = options().filter(option => option.selected);
       const names = selected.map(option => option.label);
-      value.textContent = names.length ? names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : translate(select.multiple ? 'Select roles' : `Select ${kind}`);
+      value.textContent = names.length ? names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : translate(`Select ${kind}`);
       trigger.title = names.join(', ');
       trigger.disabled = disabled();
       trigger.setAttribute('aria-label', `${labelText()}: ${names.length ? names.join(', ') : translate('None selected')}`);

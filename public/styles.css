@@ -1007,3 +1007,22 @@ dialog::backdrop{background:#03070ec9;backdrop-filter:blur(5px)}
 .button.platform-action[data-platform="tiktok"]:hover{background:#1b1b1d;border-color:#a3a7ae}
 @media(max-width:720px){.account-identity>.platform-badge{min-width:0}.platform-badges{gap:5px}.stream-list .module-copy{gap:5px 7px}}
 @media(forced-colors:active){[data-platform]{--platform-accent:CanvasText;--platform-ink:CanvasText;--platform-surface:Canvas;--platform-edge:CanvasText}.platform-badge,.stream-avatar[data-platform],.button.platform-action[data-platform="tiktok"],.button.platform-action[data-platform="tiktok"]:hover{background:Canvas;color:CanvasText;border-color:CanvasText;box-shadow:none}.stream-list .module-row[data-platform],.creator-account[data-platform]{box-shadow:none}}
+
+/* Server-owned slash command editor uses the dashboard's existing card and form system. */
+.custom-command-tabs,.custom-command-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.custom-command-toolbar{justify-content:space-between}
+.custom-command-list{padding:0 22px}
+.custom-command-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 0}
+.custom-command-row+.custom-command-row{border-top:1px solid var(--border)}
+.custom-command-row>div:first-child{min-width:0;overflow-wrap:anywhere}
+.custom-command-row .row-actions{flex-wrap:wrap;gap:8px}
+.custom-command-name{font-size:17px;color:#a7d3ff}
+.custom-command-preview{padding:22px;overflow-wrap:anywhere}
+.custom-command-preview-user{display:flex;align-items:center;gap:9px;margin-bottom:16px}
+.custom-command-preview-user img{border-radius:50%}
+.custom-command-text,.custom-command-embed{white-space:pre-wrap;line-height:1.65;margin-bottom:14px}
+.custom-command-text p,.custom-command-embed p{margin:0}
+.custom-command-embed{border-left:4px solid #0771e3;border-radius:4px;padding:15px;background:#101923}
+.custom-command-embed strong{display:block;font-size:16px;margin-bottom:8px}
+.custom-command-embed-fields[hidden]{display:none}
+@media(max-width:640px){.custom-command-row{align-items:flex-start;flex-direction:column}.custom-command-list,.custom-command-preview{padding-left:16px;padding-right:16px}}

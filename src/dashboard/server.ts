@@ -1,4 +1,5 @@
 import { dashboardError, dashboardErrorScript, dashboardErrorPage, GENERIC_DASHBOARD_ERROR } from '../i18n/dashboard-errors.js';
+import type { CustomCommandsService } from '../custom-commands/service.js';
 import { BotMessageError } from '../i18n/index.js';
 import { dashboardCommunitySnapshot, dashboardModerationSnapshot } from './diagnostics.js';
 import type { AccessService } from '../control/access.js';
@@ -59,7 +60,7 @@ interface CommunityTools extends ManagedCommunityFeature {
 interface TimeClock extends CommunityFeature {
   publishPanel(guild:Guild,actorId:string,operationId?:string,authorize?:()=>Promise<void>):Promise<unknown>;
 }
-interface Options {timeClock?:TimeClock;tempVoice?:ManagedCommunityFeature;communityTools?:CommunityTools;access?:AccessService;publishing?:PublishingService;suggestions?:Suggestions;statusRoles?:StatusRoles;voice?:CommunityFeature;confessions?:CommunityFeature;client:Client;config:AppConfig;logger:Logger;community:Module;moderation:Module;streams:Streams;creators?:Streams;tiktok?:DashboardTikTok;streamStats?:{snapshot(guildId:string):Promise<unknown>};publicDir:string;sessions?:SessionStore;oauth?:OAuthApi;fallbackOAuth?:OAuthApi;isOperational?:()=>boolean;drainTimeoutMs?:number;requestTimeoutMs?:number}
+interface Options {customCommands?:Pick<CustomCommandsService,'snapshot'|'change'>;timeClock?:TimeClock;tempVoice?:ManagedCommunityFeature;communityTools?:CommunityTools;access?:AccessService;publishing?:PublishingService;suggestions?:Suggestions;statusRoles?:StatusRoles;voice?:CommunityFeature;confessions?:CommunityFeature;client:Client;config:AppConfig;logger:Logger;community:Module;moderation:Module;streams:Streams;creators?:Streams;tiktok?:DashboardTikTok;streamStats?:{snapshot(guildId:string):Promise<unknown>};publicDir:string;sessions?:SessionStore;oauth?:OAuthApi;fallbackOAuth?:OAuthApi;isOperational?:()=>boolean;drainTimeoutMs?:number;requestTimeoutMs?:number}
 interface DashboardTransport { origin:string; sessions:SessionStore; oauth:OAuthApi; direct:boolean }
 export class HttpError extends BotMessageError {
   constructor(public status:number,message:string|Error) {const value=dashboardError(message);super(value.i18n.key,value.i18n.params);}
@@ -319,7 +320,7 @@ export class DashboardServer {
         }
         this.json(res,200,{guilds:visible});return;
       }
-      const match=route.match(/^\/api\/guilds\/(\d{17,20})(?:\/(community|moderation|streams|creators|stream-stats|access|language|messages|polls|identity|suggestions|status-roles|voice|confessions|temp-voice|community-tools|bug-reports|time-clock)(?:\/([a-zA-Z0-9-]{1,64})(?:\/(status))?)?)?$/);
+      const match=route.match(/^\/api\/guilds\/(\d{17,20})(?:\/(community|moderation|streams|creators|stream-stats|access|language|messages|polls|identity|suggestions|status-roles|voice|confessions|temp-voice|community-tools|bug-reports|time-clock|custom-commands)(?:\/([a-zA-Z0-9-]{1,64})(?:\/(status))?)?)?$/);
       if(match) {
         // Consume bounded request data before checking authority; an upload can outlast a role revocation.
         const input=['PATCH','POST'].includes(method)?await this.body(req,match[2]==='identity'&&!match[3]&&method==='PATCH'?3*1024*1024:131_072):undefined;
@@ -350,6 +351,26 @@ export class DashboardServer {
             return;
           }
           throw new HttpError(405,'Use GET or PATCH for language settings.');
+        }
+        if(section==='custom-commands') {
+          const feature=o.customCommands;
+          if(!feature)throw new HttpError(503,'Custom commands are unavailable.');
+          const authorize=async()=>{
+            this.assertActive(res);
+            if(this.sessions.peek(cookies.dashboard_session??'')!==session)throw new HttpError(401,'Your session expired. Sign in again.');
+            if(!this.operational)throw new HttpError(503,'Cyro is reconnecting. Reload before changing these settings.');
+            if(o.client.guilds.cache.get(guild.id)!==guild)throw new HttpError(404,'The bot is not installed in this server.');
+            if(o.access){try{await o.access.dashboard(guild,session.user.id);}catch{throw new HttpError(403,'The server owner has not granted your roles dashboard access.');}}
+            else await requireGuildManager(o.client,guild.id,session.user.id);
+            this.assertActive(res);
+            if(this.sessions.peek(cookies.dashboard_session??'')!==session)throw new HttpError(401,'Your session expired. Sign in again.');
+            if(!this.operational || o.client.guilds.cache.get(guild.id)!==guild)throw new HttpError(503,'Cyro is reconnecting. Reload before changing these settings.');
+          };
+          try {
+            if(method==='GET'&&!id){this.json(res,200,feature.snapshot(guild.id));return;}
+            if(method==='POST'&&!id){this.json(res,200,await feature.change(guild,input,authorize));return;}
+          }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,error instanceof Error?error:'Invalid custom command request.');}
+          throw new HttpError(405,'Method not allowed.');
         }
         if(section==='time-clock') {
           const feature=o.timeClock;
@@ -586,6 +607,7 @@ export class DashboardServer {
     Object.assign(assets,{'/privacy':['privacy.html','text/html'],'/terms':['terms.html','text/html'],'/connections':['connections.html','text/html'],'/connections.js':['connections.js','text/javascript'],'/creator.css':['creator.css','text/css'],'/identity.js':['identity.js','text/javascript'],'/suggestions.js':['suggestions.js','text/javascript'],'/status-roles.js':['status-roles.js','text/javascript'],'/audio.js':['audio.js','text/javascript'],'/confessions.js':['confessions.js','text/javascript'],'/search-select.js':['search-select.js','text/javascript']});
     Object.assign(assets,{'/home.js':['home.js','text/javascript'],'/home.css':['home.css','text/css'],'/home-icons.svg':['home-icons.svg','image/svg+xml']});
     Object.assign(assets,{'/icons.js':['icons.js','text/javascript'],'/icons.svg':['icons.svg','image/svg+xml'],'/i18n.js':['i18n.js','text/javascript'],'/i18n-catalogs.js':['i18n-catalogs.js','text/javascript'],'/i18n-extra-catalogs.js':['i18n-extra-catalogs.js','text/javascript'],'/i18n-additional-catalogs.js':['i18n-additional-catalogs.js','text/javascript']});
+    Object.assign(assets,{'/custom-commands.js':['custom-commands.js','text/javascript'],'/i18n-custom-commands.js':['i18n-custom-commands.js','text/javascript']});
     Object.assign(assets,{'/time-clock.js':['time-clock.js','text/javascript'],'/i18n-time-clock.js':['i18n-time-clock.js','text/javascript'],'/help.js':['help.js','text/javascript'],'/temp-voice.js':['temp-voice.js','text/javascript'],'/community-tools.js':['community-tools.js','text/javascript']});
     Object.assign(assets,{'/auth-error.js':['auth-error.js','text/javascript'],'/auth-error.css':['auth-error.css','text/css']});
     for(const name of ['core','modules','shell','home'])assets[`/i18n-dashboard-${name}.js`]=[`i18n-dashboard-${name}.js`,'text/javascript'];

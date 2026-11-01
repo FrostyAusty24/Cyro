@@ -131,3 +131,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) for develo
 ### Community setup
 
 Start with `/help` or `/dashboard`. Cyro includes join-to-create temporary voice rooms with a button control panel in each room's chat, categorized `/bugreport` forms and staff triage, sticky embeds, suggestions, native Discord polls and staff activity across tickets, moderation and application reviews. Room owners can lock, unlock, rename, set a member limit, allow someone into a locked room or disconnect a participant using buttons and searchable member pickers; `/room` remains available. Features are configured per server; new modules start disabled. See [FEATURE_SETUP.md](FEATURE_SETUP.md) for permissions and setup.
+
+
+### Custom slash commands (2.31)
+
+Open **Messages → Custom commands** in the dashboard. Create up to 25 server-specific commands such as `/rules`, `/server` or `/links`. Set a short command-menu description, then choose a plain reply or an embed with a title and color. Save registers the command immediately with Discord; **Ready in Discord** confirms registration. If Discord is unavailable, settings remain saved and **Retry sync** reconciles the command. Renames and removal update only that command, preserving Cyro's built-ins.
+
+Available placeholders: `{mention}` (the member using it), `{user}` (their username), `{server}` (this server's name) and `{channel}` (the current channel). Responses allow only the invoking member's mention; role and mass mentions do not notify people. Templates are literal text, not executable code. Expanded text is truncated at Discord's message limits.
+
+Use the searchable **Allowed channels** picker or leave it empty for all channels. Selecting a channel includes its threads. Outside those channels, Cyro sends private directions, showing only channels the member can see. **Only the person who uses it sees the reply** makes the response ephemeral. All eligible members get the same template; this is not a private member-data store.
+
+Custom commands are stored per guild in `data/custom-commands.json`, included in the existing removed-server retention lifecycle. Dashboard access and CSRF protection apply to all management operations. Command names used by built-in Cyro features are reserved. Built-ins stay global; custom commands deliberately use Discord's guild scope. Guild registration is immediate, though a Discord client may need its command menu reopened. Discord also limits daily command creates; a failed sync is shown rather than reported as success.

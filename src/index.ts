@@ -31,6 +31,7 @@ import { VoiceService } from './voice/service.js';
 import { ConfessionsService } from './confessions/service.js';
 import { TempVoiceService } from './temp-voice/service.js';
 import { CommunityToolsService } from './community-tools/service.js';
+import { CustomCommandsService } from './custom-commands/service.js';
 import { TimeClockService } from './time-clock/service.js';
 import { checkVoiceRuntime } from './voice/check.js';
 
@@ -97,8 +98,9 @@ async function main(): Promise<void> {
   const confessions = new ConfessionsService(client, config.dataDir, logger, access);
   const tempVoice = new TempVoiceService(client, config.dataDir, logger, access);
   const communityTools = new CommunityToolsService(client, config.dataDir, logger, access);
+  const customCommands = new CustomCommandsService(client, config.dataDir, logger);
   const timeClock = new TimeClockService(client, config.dataDir, logger, access);
-  const retention = new GuildRetention(client, path.join(config.dataDir, 'removed-guilds.json'), [community, moderation, suggestions, statusRoles, voice, confessions, tempVoice, communityTools, timeClock, control, {
+  const retention = new GuildRetention(client, path.join(config.dataDir, 'removed-guilds.json'), [community, moderation, suggestions, statusRoles, voice, confessions, tempVoice, communityTools, timeClock, customCommands, control, {
     guildIds: () => store.guildIds(),
     purgeGuild: (guildId, shouldPurge) => monitor.withLock(() => store.purgeGuild(guildId, shouldPurge)),
   }, tiktok, {
@@ -110,7 +112,7 @@ async function main(): Promise<void> {
   let readyTask: Promise<void> = Promise.resolve();
   let startupTask: Promise<void> = Promise.resolve();
   const dashboardStreams = new DashboardStreams(store, providers, alerts, monitor);
-  const dashboard = config.dashboardEnabled ? new DashboardServer({client, config, logger, community, moderation, suggestions, statusRoles, voice, confessions, tempVoice, communityTools, timeClock, access, publishing,
+  const dashboard = config.dashboardEnabled ? new DashboardServer({client, config, logger, community, moderation, suggestions, statusRoles, voice, confessions, tempVoice, communityTools, timeClock, customCommands, access, publishing,
     streams: dashboardStreams, creators: new DashboardCreators(store,alerts,monitor,dashboardStreams), publicDir: path.resolve('public'),
     streamStats: creatorStats,
     tiktok: new DashboardTikTok(client, store, monitor, tiktok),
@@ -121,10 +123,10 @@ async function main(): Promise<void> {
     readyTask = (async () => {
       await moderation.reconcile();
       if (shuttingDown) return;
-      await Promise.all([tempVoice.reconcile(), communityTools.reconcile()]);
+      await Promise.all([tempVoice.reconcile(), communityTools.reconcile(), customCommands.reconcile()]);
       if (shuttingDown) return;
       // Suggestion votes and decisions are already durable; attach repairs stale message counts in the background.
-      commands.attach(); community.attach(); moderation.attach(); suggestions.attach(); statusRoles.attach(); voice.attach(); confessions.attach(); tempVoice.attach(); communityTools.attach(); timeClock.attach(); retention.attach();
+      commands.attach(); community.attach(); moderation.attach(); suggestions.attach(); statusRoles.attach(); voice.attach(); confessions.attach(); tempVoice.attach(); communityTools.attach(); timeClock.attach(); customCommands.attach(); retention.attach();
       readyClient.user.setActivity('your community', { type: ActivityType.Watching });
       operational = true;
       monitor.start(); retention.start();
@@ -155,12 +157,12 @@ async function main(): Promise<void> {
     logger.info('Shutting down.', { signal });
     try {
       await drainRuntime({
-        stopIntake: () => { operational = false; commands.stop(); community.stop(); moderation.stop(); suggestions.stop(); statusRoles.stop(); voice.stop(); confessions.stop(); tempVoice.stop(); communityTools.stop(); timeClock.stop(); monitor.stop(); },
+        stopIntake: () => { operational = false; commands.stop(); community.stop(); moderation.stop(); suggestions.stop(); statusRoles.stop(); voice.stop(); confessions.stop(); tempVoice.stop(); communityTools.stop(); timeClock.stop(); customCommands.stop(); monitor.stop(); },
         stopProducers: async () => {
           await startupTask.catch(() => undefined);
           await Promise.all([dashboard?.stop(), retention.stop(), readyTask.catch(() => undefined)]);
         },
-        drainHandlers: async () => { await Promise.all([commands.flush(), community.flush(), moderation.flush(), suggestions.flush(), statusRoles.flush(), voice.flush(), confessions.flush(), tempVoice.flush(), communityTools.flush(), timeClock.flush()]); },
+        drainHandlers: async () => { await Promise.all([commands.flush(), community.flush(), moderation.flush(), suggestions.flush(), statusRoles.flush(), voice.flush(), confessions.flush(), tempVoice.flush(), communityTools.flush(), timeClock.flush(), customCommands.flush()]); },
         flushStorage: () => monitor.withLock(async () => { await store.flush(); await control.flush(); await tiktok.flush(); await analytics.pauseAll(); await analytics.flush(); }),
         destroyClient: () => { client.destroy(); },
         releaseOwnership,
@@ -182,7 +184,7 @@ async function main(): Promise<void> {
       () => store.init(),
       () => control.init(),
       () => tiktok.init(),
-      () => Promise.all([community.init(), moderation.init(), suggestions.init(), statusRoles.init(), voice.init(), confessions.init(), tempVoice.init(), communityTools.init(), timeClock.init(), retention.init(), analytics.init()]),
+      () => Promise.all([community.init(), moderation.init(), suggestions.init(), statusRoles.init(), voice.init(), confessions.init(), tempVoice.init(), communityTools.init(), timeClock.init(), customCommands.init(), retention.init(), analytics.init()]),
       async () => { const capabilities = await checkVoiceRuntime(); voice.setRuntimeStatus(capabilities); logger.info('Voice runtime check.', capabilities); },
       async () => { if (config.autoDeployCommands) await registerCommands(config, logger); },
       async () => { if (dashboard) { await dashboard.start(); logger.info('Dashboard listening; readiness waits for Discord and recovery.', { url: config.dashboardUrl }); } },

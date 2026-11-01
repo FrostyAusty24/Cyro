@@ -1,3 +1,4 @@
+import { CUSTOM_COMMAND_MESSAGE_ROWS } from './custom-commands.js';
 import { BOT_TRANSLATIONS } from './messages.js';
 import { BotMessageError, type TextParams } from './index.js';
 
@@ -1943,6 +1944,7 @@ function publishingPermissionRows(): Row[] {
 }
 
 export const ALL_DASHBOARD_ERROR_ROWS: readonly Row[]=[
+  ...CUSTOM_COMMAND_MESSAGE_ROWS,
   ...Object.entries(BOT_TRANSLATIONS).map(([en,value])=>[en,value.fr,value.es,value.de,value.pt] as Row),
   ...DASHBOARD_ERROR_ROWS,...STREAM_ERROR_ROWS,...COMMUNITY_ERROR_ROWS,...CONTROL_ERROR_ROWS,...CONNECTION_ERROR_ROWS,...validationRows(),...publishingPermissionRows(),
 ];

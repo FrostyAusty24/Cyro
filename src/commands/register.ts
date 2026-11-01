@@ -41,7 +41,11 @@ export function createRegistrationPlan(config: Pick<AppConfig, 'discordClientId'
 export async function registerCommands(config: AppConfig, logger: Logger): Promise<void> {
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
   const { route, scope, body } = createRegistrationPlan(config);
-  await rest.put(route, { body });
+  if (scope === 'development') {
+    // A development guild may also own dashboard-created custom commands.
+    // Upsert built-ins individually so startup never erases that guild's commands.
+    for (const command of body) await rest.post(route, { body: command });
+  } else await rest.put(route, { body });
   logger.info('Registered Discord slash commands.', {
     scope,
     commands: body.map((command) => command.name),
