@@ -79,6 +79,8 @@ async function main(): Promise<void> {
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User],
     rest: { timeout: 15_000, retries: 2 },
   });
+  // Feature services each own one interaction listener; keep warnings enabled with room for these modules.
+  client.setMaxListeners(20);
   const tiktok = new TikTokService(config, logger);
   const providers = createProviders(config, logger, tiktok);
   const alerts = new AlertService(client, store, logger, analytics);
