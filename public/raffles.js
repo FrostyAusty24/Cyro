@@ -24,7 +24,7 @@ async function renderRaffles(main) {
   const endpoint=`/api/guilds/${safeId(guildId)}/raffles`;
   main.replaceChildren(heading(ui('Raffle wheels'),ui('A giveaway everyone can watch in Discord. Add names, set a timer, or spin when you are ready.')));
   const loading=el('p',{role:'status'},ui('Loading raffle wheels…'));main.append(loading);
-  let snapshot,busy=false,draft=null,form=null;
+  let snapshot,busy=false,draft=null,form=null,requestVersion=0;
   try{snapshot=DEMO?(detail.raffles||={items:[],limit:100,activeLimit:5,historyLimit:100}):await api(endpoint);}
   catch(error){if(active())loading.replaceWith(el('div',{className:'alert',role:'alert'},uiError(error),button(ui('Try again'),()=>renderRaffles(main),'secondary')));return;}
   if(!active())return;
@@ -55,9 +55,9 @@ async function renderRaffles(main) {
     })):empty(ui('Your next giveaway starts here'),ui('Add member names to a wheel and publish it to a Discord channel.'),'gift'));
     list.querySelectorAll('button').forEach(control=>{control.disabled=busy;});
   }
-  async function refreshList(){if(busy||!active())return;try{snapshot=DEMO?detail.raffles:await api(endpoint);if(active())drawList();}catch(error){if(active())window.CyroI18n.setContent(status,uiError(error));}}
+  async function refreshList(){if(busy||!active())return;const version=++requestVersion;try{const next=DEMO?detail.raffles:await api(endpoint);if(active()&&version===requestVersion&&!busy){snapshot=next;drawList();}}catch(error){if(active()&&version===requestVersion)window.CyroI18n.setContent(status,uiError(error));}}
   async function act(input){
-    if(busy||!active())return;busy=true;state.saving=true;drawList();
+    if(busy||!active())return;requestVersion++;busy=true;state.saving=true;drawList();
     const controls=[...(form?.elements||[])].map(control=>[control,control.disabled]);controls.forEach(([control])=>{control.disabled=true;});
     window.CyroI18n.setContent(status,ui('Saving the wheel…'));
     try{
@@ -104,4 +104,3 @@ async function renderRaffles(main) {
   drawList();
   async function poll(){if(!active())return;if(!busy&&!state.dirty&&!document.hidden)await refreshList();if(active())setTimeout(poll,4_000);}setTimeout(poll,4_000);
 }
-
