@@ -18,11 +18,13 @@ import { PermissionFlagsBits, type Client, type Guild } from 'discord.js';
 import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import { SessionStore, canManageGuild, safeEqual } from './auth.js';
+import { TRANSCRIPT_ROUTE, TRANSCRIPT_CSP, TranscriptAccessError, transcriptReaderPage, transcriptDownload } from '../moderation/transcript-view.js';
 import { createOAuthApi, inviteUrl, type OAuthApi } from './discord-api.js';
 import { DashboardTikTok, TikTokDashboardError, TikTokCancellation } from './tiktok.js';
 import { fallbackTlsOptions, watchFallbackTls, type FallbackTlsReloader } from './fallback.js';
 
 interface Module {
+  readTranscript?(guild:Guild,ticketId:string,userId:string):Promise<{html:Buffer;filename:string}>;
   getConfig(guildId:string):Promise<unknown>;
   updateConfig(guildId:string,input:unknown):Promise<unknown>;
   snapshot(guildId:string):Promise<unknown>;
@@ -161,10 +163,10 @@ export class DashboardServer {
       void this.track(this.handle(req,res).catch(error => {
       if(res.writableEnded||res.destroyed)return;
       if(res.headersSent) {res.destroy();return;}
-      const status = error instanceof HttpError || error instanceof TikTokDashboardError || error instanceof IdentityError ? error.status : 500;
+      const status = error instanceof HttpError || error instanceof TikTokDashboardError || error instanceof IdentityError || error instanceof TranscriptAccessError ? error.status : 500;
       if(status === 500) this.options.logger.error('Dashboard request failed.', {message:error instanceof Error?error.message:'Unknown error'});
       const displayError=status===500?GENERIC_DASHBOARD_ERROR:error;
-      if(req.method==='GET'&&(req.headers.accept??'').includes('text/html')&&new URL(req.url??'/',this.origin).pathname.startsWith('/auth/')){
+      if(req.method==='GET'&&(req.headers.accept??'').includes('text/html')&&new URL(req.url??'/',this.origin).pathname.match(/^\/(auth|transcripts)\//)){
         res.writeHead(status,{'Content-Type':'text/html; charset=utf-8'});res.end(dashboardErrorPage(displayError));return;
       }
       this.json(res,status,dashboardError(displayError));
@@ -246,14 +248,15 @@ export class DashboardServer {
     const cookies=this.cookies(req);
     if(method==='GET' && route==='/auth/login') {
       if(!o.config.discordClientSecret)throw new HttpError(503,'The bot owner must configure DISCORD_CLIENT_SECRET and DASHBOARD_URL to enable sign-in.');
-      // Only the creator portal is a supported post-login destination; never accept an arbitrary URL.
+      // Allow only local creator and transcript destinations; never redirect to arbitrary URLs.
       let returnTo='/';
       const requested=url.searchParams.get('returnTo');
-      if(requested){const target=new URL(requested,this.origin);if(target.origin===this.origin&&target.pathname==='/connections'){
+      if(requested){let target:URL;try{target=new URL(requested,this.origin);}catch{target=new URL('/',this.origin);}if(target.origin===this.origin&&target.pathname==='/connections'){
         const query=new URLSearchParams();const guild=target.searchParams.get('guild');const record=target.searchParams.get('record');
         if(guild&&/^\d{17,20}$/.test(guild))query.set('guild',guild);if(record&&/^[a-zA-Z0-9-]{1,64}$/.test(record))query.set('record',record);
         returnTo=`/connections${query.size?'?'+query:''}`;
       }}
+      if(requested){try{const target=new URL(requested,this.origin);if(target.origin===this.origin&&TRANSCRIPT_ROUTE.test(target.pathname)) returnTo=target.pathname+(target.searchParams.get('download')==='1'?'?download=1':'');}catch{/* Ignore malformed return destinations. */}}
       const state=this.sessions.beginLogin(Date.now(),returnTo);res.setHeader('Set-Cookie',this.cookie('dashboard_oauth',state,600));
       this.redirect(res,`https://discord.com/oauth2/authorize?${new URLSearchParams({client_id:o.config.discordClientId,response_type:'code',scope:'identify guilds',redirect_uri:`${this.origin}/auth/callback`,state})}`);return;
     }
@@ -269,6 +272,28 @@ export class DashboardServer {
       if(cookies.dashboard_session)this.sessions.delete(cookies.dashboard_session);
       const id=this.sessions.create(user,token.access_token,token.expires_in);
       res.setHeader('Set-Cookie',[this.cookie('dashboard_oauth','',0),this.cookie('dashboard_session',id,Math.min(token.expires_in,28800))]);this.redirect(res,returnTo);return;
+    }
+    const transcriptRoute=route.match(TRANSCRIPT_ROUTE);
+    if(transcriptRoute && (method==='GET'||method==='HEAD')) {
+      const sessionId=cookies.dashboard_session??'',session=this.sessions.peek(sessionId);
+      if(!session){this.redirect(res,`/auth/login?${new URLSearchParams({returnTo:route+(url.searchParams.get('download')==='1'?'?download=1':'')})}`);return;}
+      if(!this.operational)throw new HttpError(503,'The bot is starting up or reconnecting. Please try again shortly.');
+      const guild=o.client.guilds.cache.get(transcriptRoute[1]!);
+      if(!guild||!o.moderation.readTranscript)throw new TranscriptAccessError(404,'This saved transcript is unavailable.');
+      const saved=await o.moderation.readTranscript(guild,transcriptRoute[2]!,session.user.id);
+      this.assertActive(res);
+      if(this.sessions.peek(sessionId)!==session)throw new HttpError(401,'Your session expired. Sign in again.');
+      if(!this.operational||o.client.guilds.cache.get(guild.id)!==guild)throw new HttpError(503,'Cyro is reconnecting.');
+      this.sessions.get(sessionId);
+      res.setHeader('X-Robots-Tag','noindex, nofollow, noarchive');
+      if(url.searchParams.get('download')==='1'){
+        const download=transcriptDownload(saved.html,{filename:saved.filename});
+        res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':`attachment; filename="${download.filename}"`});res.end(method==='HEAD'?undefined:download.data);
+      }else{
+        res.setHeader('Content-Security-Policy',TRANSCRIPT_CSP);
+        res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(method==='HEAD'?undefined:transcriptReaderPage(saved.html,route,guild.id,guild.preferredLocale));
+      }
+      return;
     }
     if(method==='GET'&&route==='/auth/tiktok/callback') {
       if(this.transport.direct){this.json(res,409,{error:'Connect TikTok using the main dashboard address when it is available. Existing connections are still managed here.',fallbackUnavailable:'tiktok-connect'});return;}

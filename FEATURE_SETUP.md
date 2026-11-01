@@ -1,4 +1,4 @@
-# Cyro feature setup (2.32.0)
+# Cyro feature setup (2.33.0)
 
 Sign in to the dashboard with **Manage Server** permission and select the correct Discord server. Settings belong to that server. This guide describes setup; it does not confirm deployment or a live Discord test.
 
@@ -28,7 +28,7 @@ You can configure up to 25 ticket categories, 25 application forms, and 25 saved
 
 Existing requests retain their saved staff access and settings; category/form changes apply to new requests. Changing ticket visibility here does not rewrite existing ticket channels or move existing application submissions. Manage existing channel permissions in Discord. Older requests without saved settings may need to be closed or reviewed before changing their staff roles or review channel. If publishing times out, check Discord before retrying to avoid duplicate messages.
 
-Closing automatically saves an HTML transcript under `DATA_DIR/ticket-transcripts/<guild-id>/` and sends a copy to the configured transcript channel before any channel deletion. Large transcripts may be gzip-compressed. The export follows message history to its end within bounded limits; it never silently deletes a channel after exporting only the last 1,000 messages. Failed or incomplete exports retain the channel for staff review. Separate threads and webhooks prevent automatic deletion. Transcripts preserve available message text, embed text and attachment links, not original attachment files; Discord links can expire, so download important original files before closing. Keep the private host transcript directory in backups. The Recent tickets table links to saved transcript messages when available.
+Closing automatically saves an HTML transcript under `DATA_DIR/ticket-transcripts/<guild-id>/` and sends a copy to the configured transcript channel before any channel deletion. Large transcripts may be gzip-compressed. The export follows message history to its end within bounded limits; it never silently deletes a channel after exporting only the last 1,000 messages. Failed or incomplete exports retain the channel for staff review. Separate threads and webhooks prevent automatic deletion. Transcripts preserve available message text, embed text and attachment links, not original attachment files; Discord links can expire, so download important original files before closing. Keep the private host transcript directory in backups. The Recent tickets table opens the browser reader for locally saved transcripts.
 
 Stickers, polls, forwarded messages and rich component messages also prevent automatic deletion because their full content is not represented in the HTML export. Staff can use `/ticket close keep_channel:true` to save an explicitly marked transcript and keep the original channel as a read-only archive. Avoid editing messages as an administrator while an export is running; Discord does not provide an atomic channel snapshot.
 
@@ -266,3 +266,9 @@ The channel needs **View Channel**, **Send Messages**, **Embed Links**, **Attach
 Limits: **100 entries per wheel**, **five active or unfinished wheels per server**, and a bounded history of up to 105 records including active work. Publishing another wheel trims older completed, synchronized records; it does not delete the Discord messages. Data lives in `DATA_DIR/raffles.json` and follows the existing removed-server retention process. Back it up with the other server data. Drawing records intentionally hide their selected index from dashboard responses until completion.
 
 If a publish has an uncertain outcome, Cyro retains a pending record and checks for the original bot post instead of creating a duplicate. Use **Check post**, or **Link existing post** with the wheel's Discord message link. Only a post authored by Cyro in the correct server/channel with the matching controls can be linked. Message-update failures retain the draw and retry; changing permissions and choosing **Retry update** repairs the same post.
+
+### Readable ticket transcripts (2.33)
+
+New transcript posts use an embed with **Open transcript**, plus a ZIP containing the HTML conversation for offline saving. The reader shows authors, timestamps, message text, embed text and attachment links. It requires Discord sign-in and the member’s current View Channel and Read Message History permissions in the saved transcript channel; dashboard editor access is not required. The login returns to the requested transcript. Download links use the same access checks.
+
+**Support tickets → Recent tickets → Open saved transcript** also opens older locally saved HTML or gzip transcripts. Existing Discord attachment previews are unchanged. Exports still verify the saved file and confirmed Discord copy before any configured ticket deletion. Keep the host transcript directory in backups; original media are linked rather than copied and may expire.

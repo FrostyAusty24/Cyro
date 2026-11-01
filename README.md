@@ -2,7 +2,7 @@
 
 A Discord community bot with a web dashboard, creator alerts, moderation, tickets, applications and community activities. One running application can serve multiple Discord servers; settings, permissions and activity records stay separate for each server.
 
-**Version 2.32.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
+**Version 2.33.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
 
 [Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Headache Development support](https://discord.gg/dAZheerkkD)
 
@@ -143,3 +143,9 @@ Available placeholders: `{mention}` (the member using it), `{user}` (their usern
 Use the searchable **Allowed channels** picker or leave it empty for all channels. Selecting a channel includes its threads. Outside those channels, Cyro sends private directions, showing only channels the member can see. **Only the person who uses it sees the reply** makes the response ephemeral. All eligible members get the same template; this is not a private member-data store.
 
 Custom commands are stored per guild in `data/custom-commands.json`, included in the existing removed-server retention lifecycle. Dashboard access and CSRF protection apply to all management operations. Command names used by built-in Cyro features are reserved. Built-ins stay global; custom commands deliberately use Discord's guild scope. Guild registration is immediate, though a Discord client may need its command menu reopened. Discord also limits daily command creates; a failed sync is shown rather than reported as success.
+
+### Readable ticket transcripts (2.33)
+
+New transcript posts use an embed with **Open transcript**, plus a ZIP containing the HTML conversation for offline saving. The reader shows authors, timestamps, message text, embed text and attachment links. It requires Discord sign-in and the member’s current View Channel and Read Message History permissions in the saved transcript channel; dashboard editor access is not required. The login returns to the requested transcript. Download links use the same access checks.
+
+**Support tickets → Recent tickets → Open saved transcript** also opens older locally saved HTML or gzip transcripts. Existing Discord attachment previews are unchanged. Exports still verify the saved file and confirmed Discord copy before any configured ticket deletion. Keep the host transcript directory in backups; original media are linked rather than copied and may expire.

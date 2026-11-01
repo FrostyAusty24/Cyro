@@ -20,7 +20,7 @@ export interface SupportOperation {
   transcript?: TicketTranscript;
   deleteAttempted?: boolean;
 }
-export interface TicketTranscript { filename: string; sha256: string; sourceSha256: string; messageCount: number; newestMessageId: string | null; savedAt: string; channelId?: string; messageId?: string; unsupportedContent?: string[] }
+export interface TicketTranscript { attachmentFilename?: string; filename: string; sha256: string; sourceSha256: string; messageCount: number; newestMessageId: string | null; savedAt: string; channelId?: string; messageId?: string; unsupportedContent?: string[] }
 export interface ModCase { id: string; action: string; userId: string; actorId: string; reason: string; createdAt: string }
 export interface Ticket { id: string; channelId: string; ownerId: string; status: 'open' | 'closed'; createdAt: string; claimedBy: string | null; claimedAt: string | null; closedBy: string | null; closedAt: string | null; operation?: SupportOperation; ticketType?: TicketType; transcript?: TicketTranscript }
 export interface Application { id: string; userId: string; status: 'pending' | 'accepted' | 'denied'; createdAt: string; reviewedBy: string | null; reviewedAt: string | null; answers: string[]; questions: string[]; messageId: string | null; channelId: string; operation?: SupportOperation; applicationForm?: ApplicationForm }

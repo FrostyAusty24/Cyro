@@ -18,6 +18,7 @@ import { assertCategoryCapacity, archiveTicketChannel, isTicketArchived, freezeT
 import { staffStats } from './stats.js';
 import { ticketChannelName, legacyTicketChannelName } from './ticket-names.js';
 import { collectTicketTranscript, TicketTranscriptArchive } from './transcript.js';
+import { TranscriptAccessError, transcriptDownload, transcriptPost } from './transcript-view.js';
 export { moderationCommands } from './commands.js';
 export type { ModerationConfig } from './core.js';
 
@@ -46,7 +47,7 @@ export class ModerationService {
   private readonly onMessage = (message: Message) => { if (!this.attached) return; this.track(this.automod(message, false).catch(error => this.logger.warn('Automatic moderation failed.', { error: errorText(error), guildId: message.guildId }))); };
   private readonly onEdit = (_before: Message | PartialMessage, after: Message | PartialMessage) => { if (!this.attached) return; this.track(this.automod(after, true).catch(error => this.logger.warn('Edited-message moderation failed.', { error: errorText(error), guildId: after.guildId }))); };
 
-  constructor(private readonly client: Client, dataDir: string, private readonly logger: Logger, private readonly access?: AccessService) { this.store = new ModerationStore(path.join(dataDir, 'moderation.json')); this.transcripts = new TicketTranscriptArchive(path.join(dataDir, 'ticket-transcripts')); }
+  constructor(private readonly client: Client, dataDir: string, private readonly logger: Logger, private readonly access?: AccessService, private readonly dashboardUrl?: string) { this.store = new ModerationStore(path.join(dataDir, 'moderation.json')); this.transcripts = new TicketTranscriptArchive(path.join(dataDir, 'ticket-transcripts')); }
   async init(): Promise<void> { await this.store.init(); }
   attach(): void { if (this.attached) return; this.attached = true; this.client.on(Events.InteractionCreate, this.onInteraction); this.client.on(Events.MessageCreate, this.onMessage); this.client.on(Events.MessageUpdate, this.onEdit); }
   stop(): void { this.client.off(Events.InteractionCreate, this.onInteraction); this.client.off(Events.MessageCreate, this.onMessage); this.client.off(Events.MessageUpdate, this.onEdit); this.attached = false; this.spam.clear(); this.applicationCooldown.clear(); this.automodCooldown.clear(); }
@@ -232,6 +233,33 @@ export class ModerationService {
       const message = await channel.send(panelPayload(config, panel, guild.id, guild.preferredLocale));
       return { messageId: message.id, channelId: channel.id, url: message.url };
     });
+  }
+  /** Transcript readers follow the saved log channel audience, independently of dashboard editor roles. */
+  async readTranscript(guild: Guild, ticketId: string, userId: string): Promise<{html: Buffer; filename: string}> {
+    const lookup = () => {
+      const ticket = this.store.read(guild.id).tickets.find(item => item.id === ticketId);
+      const receipt = ticket?.transcript ?? (ticket?.operation?.transcriptMessageId ? ticket.operation.transcript : undefined);
+      const channelId = ticket?.transcript?.channelId ?? ticket?.operation?.transcriptChannelId;
+      if (!receipt || !channelId) throw new TranscriptAccessError(404, 'This saved transcript is unavailable.');
+      return {receipt,channelId};
+    };
+    const saved = lookup();
+    const authorize = async () => {
+      const current = lookup();
+      if (current.channelId !== saved.channelId || current.receipt.sha256 !== saved.receipt.sha256) throw new TranscriptAccessError(404, 'This saved transcript is unavailable.');
+      const member = await guild.members.fetch({user:userId,force:true}).catch(() => undefined);
+      if (!member) throw new TranscriptAccessError(403, 'You need access to the transcript channel to read this conversation.');
+      await guild.roles.fetch();
+      const channel = await guild.channels.fetch(saved.channelId,{force:true});
+      if (!channel || channel.guild.id !== guild.id || !channel.permissionsFor(member)?.has([PermissionFlagsBits.ViewChannel,PermissionFlagsBits.ReadMessageHistory]))
+        throw new TranscriptAccessError(403, 'You need access to the transcript channel to read this conversation.');
+    };
+    await authorize();
+    let html: Buffer;
+    try { html = await this.transcripts.read(guild.id,saved.receipt); }
+    catch { throw new TranscriptAccessError(404, 'This saved transcript is unavailable.'); }
+    await authorize();
+    return {html,filename:saved.receipt.filename.replace(/\.gz$/, '')};
   }
   async snapshot(guildId: string) {
     const state = this.store.read(guildId);
@@ -500,7 +528,8 @@ export class ModerationService {
     return null;
   }
   private matchesTranscript(message: Message, operation: SupportOperation): boolean {
-    return message.content.startsWith(exportMarker(operation.id) + '\n') && (!operation.transcript || [...message.attachments.values()].some(attachment => attachment.name === operation.transcript!.filename && attachment.size > 0));
+    const marker = message.content?.startsWith(exportMarker(operation.id) + '\n') || message.embeds?.some(embed => embed.footer?.text === exportMarker(operation.id));
+    return Boolean(marker) && (!operation.transcript || [...message.attachments.values()].some(attachment => attachment.name === (operation.transcript!.attachmentFilename ?? operation.transcript!.filename) && attachment.size > 0));
   }
   private async closeTicket(interaction: TicketInteraction, record: Ticket, actor: GuildMember, staff: boolean, keepChannel = false): Promise<void> {
     const t = (source: string, params = {}) => botText(interaction.guildId, source, params, interaction.locale);
@@ -537,11 +566,13 @@ export class ModerationService {
       } else {
         const snapshot = await collectTicketTranscript(channel);
         if (op.closeAction === 'delete' && snapshot.unsupportedContent?.length) throw new BotMessageError('This ticket contains content that cannot be fully exported. The channel was retained. Staff can use /ticket close keep_channel:true to save a text transcript and retain the original content.');
-        const archived = await this.transcripts.save(interaction.guildId, op.id, g('Ticket {id}', { id: record.id }), snapshot, undefined, interaction.guild.preferredLocale);
+        const archived = await this.transcripts.save(interaction.guildId, op.id, g('Ticket {id}', { id: channel.name || record.id }), snapshot, undefined, interaction.guild.preferredLocale);
+        const download = transcriptDownload(archived.data, archived.receipt);
+        archived.receipt.attachmentFilename = download.filename;
         op.transcript = archived.receipt;
         await this.store.update(interaction.guildId, data => { const saved = data.tickets.find(ticket => ticket.id === record.id)!.operation!; saved.transcript = archived.receipt; saved.stage = 'sending'; saved.externalAttempted = true; });
         op.externalAttempted = true;
-        const message = await log.send({ content: `${exportMarker(op.id)}\n${g('Ticket {id} · owner {owner} · closed by {actor}\n{count} channel messages saved automatically. Download the transcript to retain it; original attachment links may expire.', { id: record.id, owner: record.ownerId, actor: op.actorId, count: snapshot.entries.length })}${archived.receipt.filename.endsWith('.gz') ? g(' Extract the .gz file to open its HTML transcript.') : ''}`, files: [new AttachmentBuilder(archived.data, { name: archived.receipt.filename })], allowedMentions: NONE });
+        const message = await log.send(transcriptPost(interaction.guildId, record, op, download, this.dashboardUrl, interaction.guild.preferredLocale));
         if (!this.matchesTranscript(message, op)) throw new Error('Discord did not confirm the transcript attachment. The channel was retained; inspect the support log before retrying.');
         op.transcriptMessageId = message.id;
       }

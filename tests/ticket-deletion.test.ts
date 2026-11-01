@@ -21,7 +21,7 @@ async function fixture() {
     permissionOverwrites:{cache:new Collection([[ownerId,{id:ownerId,type:1,allow:new PermissionsBitField([P.ViewChannel,P.SendMessages]),deny:new PermissionsBitField()}]]),set:vi.fn(async()=>{events.push('freeze');})},
     threads:{fetchActive:vi.fn(async()=>({threads:new Collection()})),fetchArchived:vi.fn(async(options:{limit:number})=>{if(options.limit<2)throw new Error('Discord requires an archived-thread limit of at least 2');return {threads:new Collection()};})},fetchWebhooks:vi.fn(async()=>new Collection()),setName:vi.fn(),delete:vi.fn()};
   const log:any={id:logId,guild,type:0,permissionsFor:()=>({has:()=>true}),permissionOverwrites:{cache:new Collection()},
-    send:vi.fn(async(payload:any)=>{events.push('send'); const message={id:'623456789012345678',author:{id:botId},content:payload.content,attachments:new Collection([['file',{name:payload.files[0].name,size:payload.files[0].attachment.length}]])};logMessages.set(message.id,message);return message;}),
+    send:vi.fn(async(payload:any)=>{events.push('send'); const message={id:'623456789012345678',author:{id:botId},content:payload.content??'',embeds:payload.embeds?.map((embed:any)=>embed.toJSON())??[],attachments:new Collection([['file',{name:payload.files[0].name,size:payload.files[0].attachment.length}]])};logMessages.set(message.id,message);return message;}),
     messages:{fetch:vi.fn(async(query:any)=>query.message ? logMessages.get(query.message)??null : logMessages)}};
   const channels=new Map([[channelId,channel],[logId,log]]);
   guild.channels={fetch:vi.fn(async(id?:string)=>id?channels.get(id)??null:channels)};

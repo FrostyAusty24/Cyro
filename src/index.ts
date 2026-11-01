@@ -94,7 +94,7 @@ async function main(): Promise<void> {
   const commands = new CommandHandler(client, store, providers, alerts, monitor, logger, creatorStats,
     { dashboardEnabled: config.dashboardEnabled, dashboardUrl: config.dashboardUrl, getFallbackUrl: () => dashboard?.fallbackUrl }, access);
   const community = new CommunityService(client, config.dataDir, logger, access);
-  const moderation = new ModerationService(client, config.dataDir, logger, access);
+  const moderation = new ModerationService(client, config.dataDir, logger, access, config.dashboardEnabled ? config.dashboardUrl : undefined);
   const suggestions = new SuggestionsService(client, config.dataDir, logger, access);
   const statusRoles = new StatusRoleService(client, config.dataDir, logger, access, presenceAvailable);
   const voice = new VoiceService(client, config.dataDir, logger, access);

@@ -1,3 +1,4 @@
+import { TRANSCRIPT_MESSAGE_ROWS } from './transcripts.js';
 import { RAFFLE_MESSAGE_ROWS } from './raffles.js';
 import { CUSTOM_COMMAND_MESSAGE_ROWS } from './custom-commands.js';
 import { ADDITIONAL_TRANSLATIONS } from './messages-de-pt.js';
@@ -189,7 +190,7 @@ export const MESSAGE_ROWS: ReadonlyArray<readonly [string, string, string]> = [
 const rows = [
   ['Backup dashboard', 'Tableau de bord de secours', 'Panel de respaldo', 'Ersatz-Dashboard', 'Painel de reserva'] as const,
   ...MESSAGE_ROWS.map(([en,fr,es]) => [en,fr,es,ADDITIONAL_TRANSLATIONS[en]!.de,ADDITIONAL_TRANSLATIONS[en]!.pt] as const),
-  ...CORE_MESSAGE_ROWS, ...COMMUNITY_MESSAGE_ROWS, ...TOOLS_MESSAGE_ROWS, ...MODERATION_MESSAGE_ROWS, ...VOICE_ERROR_ROWS, ...TIME_CLOCK_MESSAGE_ROWS, ...CUSTOM_COMMAND_MESSAGE_ROWS, ...RAFFLE_MESSAGE_ROWS,
+  ...CORE_MESSAGE_ROWS, ...COMMUNITY_MESSAGE_ROWS, ...TOOLS_MESSAGE_ROWS, ...MODERATION_MESSAGE_ROWS, ...VOICE_ERROR_ROWS, ...TIME_CLOCK_MESSAGE_ROWS, ...CUSTOM_COMMAND_MESSAGE_ROWS, ...RAFFLE_MESSAGE_ROWS, ...TRANSCRIPT_MESSAGE_ROWS,
 ];
 /** Shared labels keep one canonical translation; all feature catalogs remain independently auditable. */
 export const ALL_MESSAGE_ROWS = [...new Map(rows.slice().reverse().map(row=>[row[0],row])).values()];

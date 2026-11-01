@@ -16,7 +16,7 @@ it('exports complete ticket history beyond the old 1,000-message cap before reta
     const overwrite={id:ownerId,type:1,allow:new PermissionsBitField([P.ViewChannel,P.SendMessages]),deny:new PermissionsBitField()};
     const history=Array.from({length:1105},(_,i)=>({id:String(1105-i),author:{tag:'Member',id:ownerId},createdAt:new Date(0),content:`Message ${1105-i}`,attachments:new Collection()}));
     const channel:any={id:channelId,guild,type:0,name:'ticket-member',permissionsFor:()=>({has:()=>true}),messages:{fetch:vi.fn(async({before,limit}:any)=>new Collection(history.filter(m=>!before||BigInt(m.id)<BigInt(before)).slice(0,limit).map(m=>[m.id,m])))},permissionOverwrites:{cache:new Collection([[ownerId,overwrite]]),set:vi.fn(async()=>undefined)},setName:vi.fn(async()=>undefined),delete:vi.fn()};
-    const log:any={id:logId,guild,type:0,permissionsFor:()=>({has:()=>true}),permissionOverwrites:{cache:new Collection()},send:vi.fn(async(payload:any)=>({id:'export',content:payload.content,attachments:new Collection([['file',{name:payload.files[0].name,size:payload.files[0].attachment.length}]])}))};
+    const log:any={id:logId,guild,type:0,permissionsFor:()=>({has:()=>true}),permissionOverwrites:{cache:new Collection()},send:vi.fn(async(payload:any)=>({id:'export',content:payload.content??'',embeds:payload.embeds?.map((embed:any)=>embed.toJSON())??[],attachments:new Collection([['file',{name:payload.files[0].name,size:payload.files[0].attachment.length}]])}))};
     guild.channels={fetch:async(id:string)=>id===channelId?channel:log};
     const service=new ModerationService({} as never,directory,new Logger('error'));
     await service.init();
