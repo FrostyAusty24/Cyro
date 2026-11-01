@@ -1,4 +1,4 @@
-# Cyro feature setup (2.27.0)
+# Cyro feature setup (2.32.0)
 
 Sign in to the dashboard with **Manage Server** permission and select the correct Discord server. Settings belong to that server. This guide describes setup; it does not confirm deployment or a live Discord test.
 
@@ -250,3 +250,19 @@ Settings, member totals, active-session start times and limited operation/panel 
 ## Custom commands
 
 Dashboard → Messages → Custom commands → New command. Enter a name without `/`, a menu description and a text or embed reply. Select channels if desired, choose whether the reply is private, then Save command. A green Ready in Discord badge means Discord accepted it. Type `/` in that server to use it. Edit changes its reply or name; Delete removes it from Discord. Templates support `{mention}`, `{user}`, `{server}` and `{channel}`.
+
+## Raffle wheels (2.32)
+
+Open **Community → Raffle wheels → New wheel**. Write the giveaway title and description, choose the channel and embed color, and enter names one per line. Staff can also use **Add members** on the Discord post to choose actual Discord accounts. Names typed in the dashboard are labels, not linked accounts. Keep each real participant to one entry; the bot rejects duplicate account IDs and matching names, but cannot identify aliases entered manually.
+
+Enable **Let members enter themselves** to allow current human members who completed screening to use **Enter** and **Leave**. The post includes an **Entrants** list and entry count. With self-entry disabled, staff manage the list. Entries are visible to the channel's audience and authorized dashboard staff.
+
+Choose an **Automatic spin time**, at least one minute and at most 30 days ahead, or leave it blank. The timer closes entries and draws automatically. Staff with current dashboard access can press **Spin** in Discord or the dashboard to start early; the dashboard asks for confirmation. Staff can add or remove entries while the wheel is open, or cancel it without a winner. Entries cannot change after the draw starts. A wheel selects one winner, without paid entries, weighting, or automatic prize/role awards.
+
+Cyro stores a cryptographically random, equal-probability result before animation. A worker renders a roughly six-second, single-play GIF with the actual entrant names and the saved winning slice. Cyro edits the same embed to show the animation, then the final wheel and written winner. Discord controls autoplay and caching, so playback is not synchronized between clients; the written result is authoritative. No screen share, browser canvas inside Discord, or Discord Activity is required. If animation rendering fails, the saved written result is still posted. A restart never rerolls a selected winner. If the bot was offline at the deadline, it completes the overdue draw when it reconnects.
+
+The channel needs **View Channel**, **Send Messages**, **Embed Links**, **Attach Files**, and **Read Message History** for Cyro. The warning lists only missing permissions. Wheel rendering uses the project's existing local Canvas and FFmpeg dependencies and the bundled Manrope font. Run `node scripts/check-raffle-render.mjs` after building for a credential-free animation and pointer check.
+
+Limits: **100 entries per wheel**, **five active or unfinished wheels per server**, and a bounded history of up to 105 records including active work. Publishing another wheel trims older completed, synchronized records; it does not delete the Discord messages. Data lives in `DATA_DIR/raffles.json` and follows the existing removed-server retention process. Back it up with the other server data. Drawing records intentionally hide their selected index from dashboard responses until completion.
+
+If a publish has an uncertain outcome, Cyro retains a pending record and checks for the original bot post instead of creating a duplicate. Use **Check post**, or **Link existing post** with the wheel's Discord message link. Only a post authored by Cyro in the correct server/channel with the matching controls can be linked. Message-update failures retain the draw and retry; changing permissions and choosing **Retry update** repairs the same post.

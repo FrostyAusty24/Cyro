@@ -2,7 +2,7 @@
 
 A Discord community bot with a web dashboard, creator alerts, moderation, tickets, applications and community activities. One running application can serve multiple Discord servers; settings, permissions and activity records stay separate for each server.
 
-**Version 2.30.2 · Node.js 22.12.0 or newer · TypeScript · discord.js**
+**Version 2.32.0 · Node.js 22.12.0 or newer · TypeScript · discord.js**
 
 [Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Headache Development support](https://discord.gg/dAZheerkkD)
 
@@ -16,6 +16,7 @@ A Discord community bot with a web dashboard, creator alerts, moderation, ticket
 - **Voice:** compatible direct audio/radio and supported public YouTube video links, plus 27 free local TTS voices across seven languages for messages from members in the current call.
 - **Management:** Discord sign-in, searchable server/channel/role pickers, per-server settings, owner-controlled dashboard/command access, server-specific bot appearance and staff leaderboards.
 - **Time clock:** optional clock-in/out buttons, private session and total-time checks, and member totals for authorized dashboard staff. Each server keeps its own records.
+- **Raffle wheels:** staff-added names or Discord member entries, optional self-entry buttons, timed or manual spins, and a single-play wheel animation in the Discord embed. The saved winner survives restarts; every entry has an equal chance.
 
 All current features of the official hosted Cyro service are free. Paid options would only be considered if its hosting costs became too expensive to sustain. Self-hosting requires your own infrastructure and platform credentials.
 
