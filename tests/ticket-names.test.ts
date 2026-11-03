@@ -58,7 +58,7 @@ it('creates the friendly label while retaining the UUID recovery marker and priv
     expect(options.permissionOverwrites.map((entry: any) => entry.id)).toEqual([guildId, 'bot', 'owner', 'staff']);
     return { id: 'new-channel', send: async () => {} };
   });
-  const guild = { id: guildId, members: { fetch: async () => actor, fetchMe: async () => ({ id: 'bot' }) }, roles: { fetch: async () => ({ id: 'staff', guild: { id: guildId }, managed: false }) }, channels: { fetch: async (id?: string) => id ? category : new Map([['other', { id: 'other', name: 'general-support-example' }]]), create } };
+  const guild = { id: guildId, members: { fetch: async () => actor, fetchMe: async () => ({ id: 'bot', permissions: { has: () => true } }) }, roles: { fetch: async () => ({ id: 'staff', guild: { id: guildId }, managed: false }) }, channels: { fetch: async (id?: string) => id ? category : new Map([['other', { id: 'other', name: 'general-support-example' }]]), create } };
   const service = new ModerationService({} as never, '.', { warn() {}, error() {} } as never);
   (service as any).store = store; (service as any).textChannel = async () => ({ id: 'log' });
   await (service as any).ticket({ guildId, guild, user: { id: actor.id }, editReply: async () => {} }, 'open');

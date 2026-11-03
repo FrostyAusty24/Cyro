@@ -1,8 +1,8 @@
 # Cyro
 
-A Discord community bot with a web dashboard, creator alerts, moderation, tickets, applications and community activities. One running application can serve multiple Discord servers; settings, permissions and activity records stay separate for each server.
+A Discord bot focused on creator profiles, stream announcements and streamer leaderboards, with a web dashboard, moderation, tickets, applications and community activities. One running application can serve multiple Discord servers; settings, permissions and activity records stay separate for each server.
 
-**Version 2.33.1 · Node.js 22.12.0 or newer · TypeScript · discord.js**
+**Version 2.33.2 · Node.js 22.12.0 or newer · TypeScript · discord.js**
 
 [Official Cyro website](https://cyrobot.ca/?home=1) · [Add the hosted bot](https://cyrobot.ca/invite) · [Headache Development support](https://discord.gg/dAZheerkkD)
 

@@ -1,5 +1,6 @@
 import { assertNotAccessRole } from '../control/access.js';
-import { PermissionFlagsBits, type CategoryChannel, type GuildMember, type OverwriteData, type Role } from 'discord.js';
+import { PermissionFlagsBits, PermissionsBitField, type CategoryChannel, type GuildMember, type OverwriteData, type Role } from 'discord.js';
+import { BotMessageError } from '../i18n/index.js';
 import type { TicketVisibility } from './core.js';
 export function assertCanModerate(actor: GuildMember, target: GuildMember, bot: GuildMember, permission: bigint, ownerId: string): void {
   if (!actor.permissions.has(permission)) throw new Error('You do not have permission for this action.');
@@ -22,7 +23,9 @@ export function ticketPermissionOverwrites(category: CategoryChannel, botId: str
   // Discord restricts MANAGE_ROLES overwrites on channel creation to guild
   // administrators. Use the bot's existing role permission instead of adding
   // a redundant override that makes ordinary bot installations fail with 50013.
-  const botAccess = memberAccess | PermissionFlagsBits.ManageChannels | PermissionFlagsBits.ManageMessages;
+  // Manage Messages is not needed to create, claim, export or archive tickets.
+  // Adding it here makes Discord reject creation on a minimum-permission install.
+  const botAccess = memberAccess | PermissionFlagsBits.ManageChannels;
   if (visibility === 'private') return [
     { id: category.guild.id, type: 0, deny: PermissionFlagsBits.ViewChannel },
     { id: botId, type: 1, allow: botAccess },
@@ -40,5 +43,22 @@ export function ticketPermissionOverwrites(category: CategoryChannel, botId: str
     else overwrites.push({ id, type: 1, allow: permissions, deny: 0n });
   }
   return overwrites;
+}
+
+const permissionName = (name: string) => name.replace(/([a-z])([A-Z])/g, '$1 $2').replace('Guild', 'Server');
+
+export function assertTicketCategoryPermissions(category: CategoryChannel, bot: GuildMember): void {
+  const permissions = category.permissionsFor(bot);
+  const missing = (['ManageChannels', 'ManageRoles'] as const).filter(name => !permissions?.has(PermissionFlagsBits[name]));
+  if (missing.length) throw new BotMessageError('Cyro is missing these permissions in the ticket category: {permissions}.', { permissions: missing.map(permissionName).join(', ') });
+}
+
+/** Validate every allow AND deny before journaling a create; never weaken inherited rules. */
+export function assertTicketCreationPermissions(bot: GuildMember, overwrites: OverwriteData[]): void {
+  if (bot.permissions.has(PermissionFlagsBits.Administrator)) return;
+  const requested = overwrites.reduce((bits, row) => bits | new PermissionsBitField(row.allow).bitfield | new PermissionsBitField(row.deny).bitfield, 0n);
+  if (requested & PermissionFlagsBits.ManageRoles) throw new BotMessageError('Discord cannot copy a Manage Roles overwrite into this ticket. Ask staff to adjust that category rule or choose Private ticket visibility.');
+  const missing = new PermissionsBitField(requested).toArray().filter(name => !bot.permissions.has(PermissionFlagsBits[name]));
+  if (missing.length) throw new BotMessageError('Cyro cannot create this ticket because its server permissions are missing: {permissions}. Ask staff to check Cyro’s server role and the ticket category rules.', { permissions: missing.map(permissionName).join(', ') });
 }
 

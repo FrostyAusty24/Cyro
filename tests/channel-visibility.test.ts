@@ -18,7 +18,7 @@ const ticketType = (visibility: TicketVisibility) => ({ id: 'support', name: 'Su
 function fixture() {
   const store = new ModerationStore('unused.json', async () => {});
   const actor = { id: ownerId, user: { username: 'member' }, roles: { cache: new Map() }, permissions: new PermissionsBitField() };
-  const bot = { id: botId };
+  const bot = { id: botId, permissions: new PermissionsBitField(PermissionsBitField.All) };
   const category: any = { id: categoryId, name: 'Support', type: 4, guild: { id: guildId }, permissionsFor: () => ({ has: () => true }), permissionOverwrites: { cache: new Collection([
     [guildId, overwrite(guildId, 0, P.ViewChannel | P.SendMessages)],
     [viewerId, overwrite(viewerId, 0, P.EmbedLinks, P.AttachFiles)],

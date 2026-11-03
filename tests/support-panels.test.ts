@@ -109,7 +109,7 @@ describe('application and ticket record snapshots', () => {
     const actor = { id: 'member', user: { username: 'member' } };
     const created: any[] = [];
     const guild = {
-      id: guildId, members: { fetch: async () => actor, fetchMe: async () => ({ id: 'bot' }) },
+      id: guildId, members: { fetch: async () => actor, fetchMe: async () => ({ id: 'bot', permissions: { has: () => true } }) },
       roles: { fetch: async (id: string) => ({ id, guild: { id: guildId }, managed: false }) },
       channels: {
         fetch: async (id?: string) => id ? { id, guild: { id: guildId }, type: 4, permissionsFor: () => ({ has: () => true }) } : new Map(),

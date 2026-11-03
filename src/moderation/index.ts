@@ -4,7 +4,7 @@ import type { AccessService } from '../control/access.js';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, Events,
+  ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, DiscordAPIError, EmbedBuilder, Events,
   MessageFlags, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder,
   type Client, type Guild, type GuildMember, type Interaction, type Message, type PartialMessage,
   type ChatInputCommandInteraction, type ButtonInteraction, type StringSelectMenuInteraction, type ModalSubmitInteraction, type TextChannel,
@@ -12,7 +12,7 @@ import {
 import type { Logger } from '../logger.js';
 import { mergeConfig, ticketTypes, applicationForms, isSnowflake, type ModerationConfig } from './core.js';
 import { panelPayload, selectedPanelOption } from './panels.js';
-import { assertCanModerate, assertSafeRole, isStaff, ticketPermissionOverwrites } from './permissions.js';
+import { assertCanModerate, assertSafeRole, isStaff, ticketPermissionOverwrites, assertTicketCategoryPermissions, assertTicketCreationPermissions } from './permissions.js';
 import { ModerationStore, ModerationPersistenceError, type ModCase, type Ticket, type Application, type SupportOperation } from './store.js';
 import { assertCategoryCapacity, archiveTicketChannel, isTicketArchived, freezeTicketChannel, assertTicketCanBeDeleted, ticketTopic, exportMarker } from './recovery.js';
 import { staffStats } from './stats.js';
@@ -470,18 +470,32 @@ export class ModerationService {
         const bot = await interaction.guild.members.fetchMe({ force: true });
         const category = await interaction.guild.channels.fetch(config.categoryId);
         if (!category || category.guild.id !== interaction.guildId || category.type !== ChannelType.GuildCategory) throw new Error('The configured ticket category is missing from this server.');
-        if (!category.permissionsFor(bot).has([PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles])) throw new Error('The bot needs Manage Channels and Manage Roles in the ticket category.');
+        assertTicketCategoryPermissions(category, bot);
         await assertCategoryCapacity(interaction.guild, category.id);
         for (const id of config.staffRoleIds) { const role = await interaction.guild.roles.fetch(id); if (!role || role.guild.id !== interaction.guildId || role.id === interaction.guildId || role.managed) throw new Error('A configured support staff role is no longer available.'); }
         await this.textChannel(interaction.guild, config.logChannelId);
         const channels = await interaction.guild.channels.fetch();
         const name = ticketChannelName(config.name, actor, [...channels.values()].filter(channel => channel !== null).map(channel => channel.name));
         const permissionOverwrites = ticketPermissionOverwrites(category, bot.id, actor.id, config.staffRoleIds, config.visibility ?? 'private');
+        assertTicketCreationPermissions(bot, permissionOverwrites);
         const record: Ticket = { id: randomUUID(), channelId: '', ownerId: actor.id, status: 'open', createdAt: new Date().toISOString(), claimedBy: null, claimedAt: null, closedBy: null, closedAt: null, ticketType: structuredClone(config), operation: { id: randomUUID(), kind: 'ticket-create', stage: 'sending', actorId: actor.id, startedAt: new Date().toISOString() } };
         await this.store.update(interaction.guildId, data => { data.tickets.push(record); });
         let channel: TextChannel;
         try {
           channel = await interaction.guild.channels.create({ name, topic: ticketTopic(record.id), type: ChannelType.GuildText, parent: config.categoryId, permissionOverwrites, reason: g('Support ticket {id} opened by {actor}', { id: record.id, actor: actor.id }) });
+        } catch (error) {
+          // A confirmed 403 from this exact POST did not create a channel. Remove
+          // only its newly prepared journal entry so fixing permissions permits retry.
+          // Timeouts, server errors and failures AFTER creation remain uncertain.
+          if (error instanceof DiscordAPIError && error.status === 403 && (error.code === 50013 || error.code === 50001)) {
+            await this.store.update(interaction.guildId, data => { data.tickets = data.tickets.filter(ticket => ticket.id !== record.id); });
+            this.logger.warn('Discord rejected ticket creation without creating a channel.', { guildId: interaction.guildId, categoryId: config.categoryId, code: error.code, operationId: record.operation?.id });
+            throw new BotMessageError('Discord denied permission to create this ticket. No channel was created. Ask staff to check Cyro’s server role and category permissions, then try again.');
+          }
+          await this.markIssue(interaction.guildId, 'ticket', record.id, 'Ticket creation was interrupted. Its channel may exist; an administrator must run /support-recovery list and inspect it before retrying.');
+          throw error;
+        }
+        try {
           await this.store.update(interaction.guildId, data => { const saved = data.tickets.find(ticket => ticket.id === record.id)!; saved.channelId = channel.id; delete saved.operation; });
         } catch (error) { await this.markIssue(interaction.guildId, 'ticket', record.id, 'Ticket creation was interrupted. Its channel may exist; an administrator must run /support-recovery list and inspect it before retrying.'); throw error; }
         try { await channel.send({ content: g('**{category}** · ticket for <@{owner}>. {visibility} Describe what you need help with. Staff can claim the ticket; staff or the ticket owner can close it. Closing automatically saves a transcript to the configured transcript channel.{closure}', { category: supportName(shared, config), owner: actor.id, visibility: g(config.visibility === 'inherit' ? 'This ticket copied the category permissions when it opened.' : 'Visible to you and the configured support team.'), closure: g(config.closeAction === 'delete' ? ' This category then deletes the ticket channel. Download any original attachments you want to keep before closing; the transcript stores links that can expire.' : ' The channel remains as a read-only archive.') }), components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('mod:ticket:claim').setLabel(g('Claim ticket')).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('mod:ticket:close').setLabel(g(config.closeAction === 'delete' ? 'Close, save & delete' : 'Close & save transcript')).setStyle(ButtonStyle.Secondary))], allowedMentions: NONE }); }
